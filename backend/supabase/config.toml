@@ -1,0 +1,11 @@
+# Supabase project configuration
+# Projeto: iqcupswgotsuncysagmj
+# Referência canônica: .temp/project-ref
+#
+# Este é o projeto Supabase CLI canônico para Meu Financeiro.
+# Migrations e email-templates são gerenciados a partir daqui.
+# Edge functions equivalentes estão implementadas em src/ (Express.js).
+
+[functions.google-calendar]
+# GET /callback — redirect do Google OAuth (sem Authorization header)
+verify_jwt = false

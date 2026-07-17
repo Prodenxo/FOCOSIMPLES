@@ -1,0 +1,33 @@
+{
+  "name": "financas-pessoais-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "predev": "node scripts/free-dev-port.mjs",
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "lint": "node --check src/server.js",
+    "typecheck": "node --check src/server.js",
+    "test": "node --test \"tests/**/*.test.js\"",
+    "test:activation": "node --test tests/activation.service.test.js tests/users-activation-routes.contract.test.js",
+    "test:openclaw:salario": "node scripts/test-openclaw-transaction.mjs",
+    "test:openclaw:nfse": "node scripts/test-openclaw-nfse.mjs",
+    "test:openclaw:nfse:local": "node scripts/test-openclaw-nfse.mjs --local"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.7",
+    "@xmldom/xmldom": "^0.8.11",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1",
+    "node-forge": "^1.3.3",
+    "pg": "^8.18.0",
+    "stripe": "^22.1.0",
+    "ws": "^8.20.0",
+    "xlsx": "^0.18.5",
+    "xml-crypto": "^6.1.2"
+  }
+}

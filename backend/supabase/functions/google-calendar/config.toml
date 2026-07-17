@@ -1,0 +1,3 @@
+# OAuth: o Google redireciona o browser para GET /callback sem JWT do Supabase.
+# A função valida JWT manualmente nas rotas protegidas (/auth, /events, etc.).
+verify_jwt = false
