@@ -1,0 +1,40 @@
+{
+  "cli": {
+    "version": ">= 16.28.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "node": "20.19.4",
+      "environment": "development",
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "node": "20.19.4",
+      "environment": "preview",
+      "distribution": "internal"
+    },
+    "production": {
+      "node": "20.19.4",
+      "environment": "production",
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://iqcupswgotsuncysagmj.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlxY3Vwc3dnb3RzdW5jeXNhZ21qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMDk3ODMsImV4cCI6MjA1ODU4NTc4M30.WhgoqHW8xCx_JW-ZVe4tlxOJ04wPeZ30hituFR-frPA",
+        "EXPO_PUBLIC_MEI_API_URL": "https://auto-back-meufinanceiro-site.4tnf3f.easypanel.host"
+      },
+      "android": {
+        "buildType": "app-bundle"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleTeamId": "T6ZKDA7DPX",
+        "ascAppId": "6756184473"
+      }
+    }
+  }
+}

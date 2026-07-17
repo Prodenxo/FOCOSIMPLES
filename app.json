@@ -1,0 +1,63 @@
+{
+  "expo": {
+    "name": "FocoSimples",
+    "slug": "focosimples",
+    "version": "2.2.7",
+    "orientation": "portrait",
+    "icon": "./assets/brand-mark.jpg",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/brand-mark.jpg",
+      "resizeMode": "contain",
+      "backgroundColor": "#0D2B5E"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "financasPessoaisIOS",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "versionCode": 73,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/brand-mark.jpg",
+        "backgroundColor": "#0D2B5E"
+      },
+      "package": "com.leonardo25.financaspessoaismobile"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "scheme": "financas-pessoais",
+    "extra": {
+      "supabaseUrl": "",
+      "supabaseAnonKey": "",
+      "meiApiUrl": "",
+      "eas": {
+        "projectId": "4479cb0b-2661-4ff1-a9ee-b623193aa503"
+      }
+    },
+    "owner": "contabhub",
+    "plugins": [
+      "expo-web-browser",
+      [
+        "expo-router",
+        {
+          "asyncRoutes": {
+            "web": "production",
+            "default": false
+          }
+        }
+      ],
+      "expo-font",
+      "expo-sharing"
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}

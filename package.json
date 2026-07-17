@@ -1,0 +1,93 @@
+{
+  "name": "financas-pessoais-mobile",
+  "version": "2.2.7",
+  "main": "expo-router/entry",
+  "scripts": {
+    "eas-build-pre-install": "chmod -R u+w . || true",
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "test": "jest",
+    "test:watch": "jest --watchAll",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "build:eas": "eas build --platform all",
+    "build:eas:android": "eas build --platform android",
+    "build:eas:ios": "eas build --platform ios",
+    "changelog": "git-cliff -o CHANGELOG.md",
+    "changelog:unreleased": "git-cliff --unreleased"
+  },
+  "jest": {
+    "preset": "jest-expo",
+    "transformIgnorePatterns": [
+      "node_modules/(?!((jest-)?react-native|@react-native(-community)?)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg)"
+    ],
+    "testMatch": [
+      "**/__tests__/**/*.(test|spec).(ts|tsx)",
+      "**/*.(test|spec).(ts|tsx)"
+    ],
+    "moduleFileExtensions": [
+      "ts",
+      "tsx",
+      "js",
+      "jsx"
+    ]
+  },
+  "overrides": {
+    "react-native-safe-area-context": "~5.6.2"
+  },
+  "dependencies": {
+    "@edusites/bancos-brasil": "^1.2.0",
+    "@expo/vector-icons": "^15.0.3",
+    "@react-native-async-storage/async-storage": "^2.2.0",
+    "@react-navigation/bottom-tabs": "^7.8.8",
+    "@react-navigation/native": "^7.1.22",
+    "@react-navigation/native-stack": "^7.8.2",
+    "@supabase/supabase-js": "^2.86.0",
+    "babel-preset-expo": "~55.0.8",
+    "date-fns": "^4.1.0",
+    "eslint-config-expo": "~55.0.1",
+    "expo": "~55.0.26",
+    "expo-auth-session": "~55.0.16",
+    "expo-blur": "~55.0.14",
+    "expo-clipboard": "~55.0.13",
+    "expo-constants": "~55.0.16",
+    "expo-document-picker": "~55.0.13",
+    "expo-file-system": "~55.0.22",
+    "expo-font": "~55.0.8",
+    "expo-linking": "~55.0.0",
+    "expo-router": "~55.0.16",
+    "expo-sharing": "~55.0.20",
+    "expo-status-bar": "~55.0.6",
+    "expo-web-browser": "~55.0.16",
+    "jest-expo": "~55.0.18",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-native": "0.83.6",
+    "react-native-calendars": "^1.1313.0",
+    "react-native-chart-kit": "^6.12.0",
+    "react-native-safe-area-context": "~5.6.2",
+    "react-native-screens": "~4.23.0",
+    "react-native-svg": "15.15.3",
+    "react-native-web": "^0.21.0",
+    "react-phone-input-2": "^2.15.1",
+    "xlsx": "^0.18.5",
+    "zustand": "^5.0.8"
+  },
+  "engines": {
+    "node": ">=20.19.4"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "@types/react": "~19.2.10",
+    "@types/react-test-renderer": "^19.1.0",
+    "eslint": "^9.39.4",
+    "eslint-config-expo": "~55.0.0",
+    "git-cliff": "^2.6.1",
+    "jest": "^29.7.0",
+    "jest-expo": "~55.0.17",
+    "typescript": "~5.9.2"
+  },
+  "private": true
+}
