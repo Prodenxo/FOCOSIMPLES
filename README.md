@@ -1,46 +1,32 @@
 # FocoSimples
 
-Produto irmão do FocoMEI: **mesmo layout** (financeiro + emissão de notas), cliente/domínio/base **separados**, foco em **Simples Nacional**.
+Produto irmão do FocoMEI: **mesmo layout** (financeiro + emissão de notas), cliente/domínio/base **separados**.
 
-Este pacote é uma cópia do `frontend/` do FocoMEI com brand `FocoSimples`.
+**Repo próprio:** `Documents/Dev/FOCOSIMPLES` — **não** fica dentro do monorepo FOCOMEI.
 
-## O que já vem
+## Banco sem pagar +US$ 10 agora
 
-- Financeiro (visão geral, transações, contas, etc.)
-- Fluxo de certificado + notas (base PlugNotas do FocoMEI — validar no Simples)
-- Shell/layout iguais ao FocoMEI
-- `EXPO_PUBLIC_APP_PRODUCT=focosimples`
+Na org Pro, projeto novo = compute pago. Enquanto isso:
 
-## O que você precisa criar (fora do código)
+1. Reuse um projeto Supabase **já existente** e pouco usado, **ou**
+2. Pause/apague um Micro/Nano ocioso e só então crie o novo, **ou**
+3. Rode Supabase **local** (`supabase start`) só pra desenvolver
 
-1. **Projeto Supabase novo** (schema do FocoMEI, **sem** dados de usuário)
-2. **Backend** apontando para esse Supabase (pode ser cópia do `site/backend` / `backend` com outro `.env`)
-3. **Domínio** + serviço no Easypanel (`Dockerfile` deste pasta)
-4. Credenciais PlugNotas / certificado para teste de nota
-5. **DAS Serpro** — se não der hoje, fica para outro dia (não bloqueia nota + financeiro)
+Depois clona só o **schema** do FocoMEI (sem dados de usuário) para essa base.
 
 ## Subir local
 
 ```bash
-cd apps/focosimples
 cp .env.example .env
-# preencher Supabase + API
 npm install --legacy-peer-deps
 npx expo start --web
 ```
 
-## Deploy
+## Escopo
 
-Mesmo padrão do FocoMEI: Easypanel → Dockerfile nesta pasta → vars `EXPO_PUBLIC_*` → Redeploy.
+| Hoje | Depois |
+|------|--------|
+| Nota + financeiro | DAS Serpro |
+| Brand FocoSimples | Domínio + Easypanel |
 
-Ver também `DEPLOY.md`.
-
-## Escopo honesto do dia 1
-
-| Must | Nice / depois |
-|------|----------------|
-| App no ar com brand FocoSimples | DAS Serpro completo |
-| Login + financeiro | Limpeza de todos os textos “MEI” |
-| Tentar emitir nota | Domínio definitivo + loja |
-
-Não misturar `.env` / Supabase com o FocoMEI de produção.
+Não misturar `.env` / Supabase de produção do FocoMEI.
