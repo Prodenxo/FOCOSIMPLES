@@ -34,8 +34,10 @@ export const gerar = async (req, res, next) => {
 export const download = async (req, res, next) => {
   try {
     const regenerate = String(req.query.regenerate || '') === 'true'
+    const preferExistingPdf = String(req.query.preferExisting || req.query.preferExistingPdf || '') === 'true'
     const data = await simplesDasService.downloadSimplesDas(req.user.id, req.params.id, {
       regenerate,
+      preferExistingPdf,
     })
     return sendSuccess(res, data)
   } catch (error) {

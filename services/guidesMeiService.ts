@@ -27,6 +27,11 @@ export interface MeiPeriod {
   vencida?: boolean;
   /** Ex.: 20/07/2026 */
   vencimento?: string | null;
+  /** Valor do DAS (quando conhecido via Receita/cache). */
+  valorTotal?: number | null;
+  periodoApuracao?: string | null;
+  numeroDocumento?: string | null;
+  hasLocalPdf?: boolean;
 }
 
 /** Competências indisponíveis (antes da abertura MEI, futuro, etc.) não entram na lista da UI. */

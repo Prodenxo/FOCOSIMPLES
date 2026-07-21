@@ -100,6 +100,45 @@ test('agregarLimiteMeiDasLinhas: ignora NFE e NFCE mesmo com valor alto (FR-GUIA
   assert.equal(r.notasConsideradas, 1);
 });
 
+test('agregarLimiteMeiDasLinhas regime simples: soma NFSE + NFE + NFCE', () => {
+  const rows = [
+    {
+      document_type: 'NFSE',
+      status: 'Concluída',
+      created_at: '2026-06-01T10:00:00.000Z',
+      payload_json: { servico: [{ valor: { servico: 100 } }] }
+    },
+    {
+      document_type: 'NFE',
+      status: 'concluido',
+      created_at: '2026-06-02T10:00:00.000Z',
+      payload_json: {
+        itens: [{
+          codigo: 'A1',
+          valor: 250,
+          quantidade: { comercial: 1 },
+          valorUnitario: { comercial: 250 }
+        }]
+      }
+    },
+    {
+      document_type: 'NFCE',
+      status: 'concluido',
+      created_at: '2026-06-03T10:00:00.000Z',
+      payload_json: {
+        itens: [{
+          codigo: 'B1',
+          quantidade: { comercial: 2 },
+          valorUnitario: { comercial: 50 }
+        }]
+      }
+    }
+  ];
+  const r = agregarLimiteMeiDasLinhas(rows, 2026, { regime: 'simples' });
+  assert.equal(r.total, 450);
+  assert.equal(r.notasConsideradas, 3);
+});
+
 test('agregarLimiteMeiDasLinhas: inclui NFSE arquivada (arquivar ≠ cancelar)', () => {
   const rows = [
     {

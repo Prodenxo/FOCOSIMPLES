@@ -12,6 +12,7 @@ import { getTechTokens } from '../../lib/techDesign'
 import { mfRadius, mfSpacing } from '../../lib/theme'
 import { formatCurrencyBR } from '../../lib/numberFormat'
 import type { MeiLimiteBandaOuIndeterminado, MeiLimiteProgresso } from '../../lib/meiLimiteFaturamento'
+import type { LimiteFaturamentoRegime } from '../../lib/meiLimiteFaturamentoConfig'
 
 export interface MeiLimiteFaturamentoCardProps {
   anoCivil: number
@@ -19,6 +20,8 @@ export interface MeiLimiteFaturamentoCardProps {
   vigenciaLabel: string | null
   loading?: boolean
   onIrParaNotas?: () => void
+  /** `mei` (padrão) ou `simples` — altera título, copy e marca do sublimite. */
+  variant?: LimiteFaturamentoRegime
 }
 
 function labelForBanda(b: MeiLimiteBandaOuIndeterminado): string {
@@ -34,7 +37,22 @@ function labelForBanda(b: MeiLimiteBandaOuIndeterminado): string {
   }
 }
 
-function messageForBanda(b: MeiLimiteBandaOuIndeterminado): string {
+function messageForBanda(
+  b: MeiLimiteBandaOuIndeterminado,
+  variant: LimiteFaturamentoRegime,
+): string {
+  if (variant === 'simples') {
+    switch (b) {
+      case 'seguro':
+        return 'Receita bruta confortável face ao limite anual do Simples Nacional.'
+      case 'atencao':
+        return 'Você já utilizou grande parte do limite anual de R$ 4,8 milhões.'
+      case 'critico':
+        return 'Próximo do teto do Simples — planeje o enquadramento e consulte um contador.'
+      default:
+        return 'Limite de referência ou percentual não disponível para este período.'
+    }
+  }
   switch (b) {
     case 'seguro':
       return 'Situação confortável face ao limite de referência do ano.'
@@ -74,18 +92,33 @@ export function MeiLimiteFaturamentoCard({
   vigenciaLabel,
   loading = false,
   onIrParaNotas,
+  variant = 'mei',
 }: MeiLimiteFaturamentoCardProps) {
   const { theme, isDarkMode } = useMfTheme()
   const tokens = useMemo(() => getTechTokens(isDarkMode), [isDarkMode])
   const styles = useMemo(() => createStyles(theme, tokens), [theme, tokens])
   const [baseOpen, setBaseOpen] = useState(false)
 
+  const regime = progresso.regime ?? variant
+  const isSimples = regime === 'simples' || variant === 'simples'
   const colors = bandaColors(progresso.banda, theme)
   const barPercent = progresso.percentualUtilizadoParaBarra
   const showBar =
     progresso.limiteReferenciaReais != null
     && progresso.limiteReferenciaReais > 0
     && barPercent != null
+
+  const sublimite = progresso.sublimiteReais
+  const showSublimiteMarker =
+    isSimples
+    && showBar
+    && sublimite != null
+    && sublimite > 0
+    && progresso.limiteReferenciaReais != null
+    && progresso.limiteReferenciaReais > 0
+  const sublimiteMarkerLeftPct = showSublimiteMarker
+    ? Math.min(100, Math.max(0, (sublimite! / progresso.limiteReferenciaReais!) * 100))
+    : null
 
   const isEmpty =
     !loading
@@ -98,17 +131,24 @@ export function MeiLimiteFaturamentoCard({
     && progresso.limiteReferenciaReais != null
     && progresso.limiteReferenciaReais > 0
 
+  const title = isSimples
+    ? 'Limite de faturamento (Simples)'
+    : 'Limite de faturamento (MEI)'
+  const a11yLabel = isSimples
+    ? `Limite de faturamento Simples Nacional. Ano civil ${anoCivil}.`
+    : `Limite de faturamento MEI. Ano civil ${anoCivil}.`
+
   return (
     <View
       style={styles.card}
       accessibilityRole="summary"
-      accessibilityLabel={`Limite de faturamento MEI. Ano civil ${anoCivil}.`}
+      accessibilityLabel={a11yLabel}
     >
       <View style={styles.header}>
         <View style={styles.headerCopy}>
           <View style={styles.titleRow}>
             <Ionicons name="speedometer-outline" size={20} color={theme.primary} />
-            <Text style={styles.title}>Limite de faturamento (MEI)</Text>
+            <Text style={styles.title}>{title}</Text>
           </View>
           <Text style={styles.subtitle}>
             Ano civil {anoCivil}
@@ -137,7 +177,9 @@ export function MeiLimiteFaturamentoCard({
         <>
           {isEmpty ? (
             <Text style={styles.emptyText}>
-              Ainda não há NFS-e autorizadas neste ano para calcular o progresso. Quando emitir, o total aparece aqui.
+              {isSimples
+                ? 'Ainda não há notas autorizadas neste ano para calcular o progresso. Quando emitir NFS-e, NF-e ou NFC-e, o total aparece aqui.'
+                : 'Ainda não há NFS-e autorizadas neste ano para calcular o progresso. Quando emitir, o total aparece aqui.'}
             </Text>
           ) : null}
 
@@ -159,6 +201,15 @@ export function MeiLimiteFaturamentoCard({
                     { width: `${barPercent}%`, backgroundColor: colors.bar },
                   ]}
                 />
+                {showSublimiteMarker && sublimiteMarkerLeftPct != null ? (
+                  <View
+                    style={[
+                      styles.sublimiteMarker,
+                      { left: `${sublimiteMarkerLeftPct}%`, backgroundColor: theme.warning },
+                    ]}
+                    accessibilityLabel={`Sublimite ICMS/ISS em ${formatCurrencyBR(sublimite!)}`}
+                  />
+                ) : null}
               </View>
               <View style={styles.barMeta}>
                 <Text style={styles.percentText}>
@@ -169,6 +220,18 @@ export function MeiLimiteFaturamentoCard({
                   {formatCurrencyBR(progresso.limiteReferenciaReais ?? 0)}
                 </Text>
               </View>
+              {showSublimiteMarker ? (
+                <Text
+                  style={[
+                    styles.sublimiteHint,
+                    progresso.atingiuSublimite && { color: theme.warning, fontWeight: '600' },
+                  ]}
+                >
+                  {progresso.atingiuSublimite
+                    ? `Sublimite ICMS/ISS atingido (${formatCurrencyBR(sublimite!)}) — ${formatPercentDisplay(progresso.percentualSublimite)} do sublimite.`
+                    : `Marca: sublimite ICMS/ISS ${formatCurrencyBR(sublimite!)} (${formatPercentDisplay(progresso.percentualSublimite)} do sublimite).`}
+                </Text>
+              ) : null}
               {aboveLimit ? (
                 <Text style={styles.aboveLimitText}>
                   Acima do limite de referência — o percentual pode ultrapassar 100%.
@@ -181,12 +244,14 @@ export function MeiLimiteFaturamentoCard({
             </Text>
           )}
 
-          <Text style={styles.bandaMessage}>{messageForBanda(progresso.banda)}</Text>
+          <Text style={styles.bandaMessage}>{messageForBanda(progresso.banda, isSimples ? 'simples' : 'mei')}</Text>
 
           <View style={styles.baseSection}>
             <Text style={styles.baseLine}>
               <Text style={styles.baseLabel}>Base (MVP): </Text>
-              soma das NFS-e com emissão concluída nesta conta no ano civil {anoCivil}. NF-e e NFC-e não entram neste total.
+              {isSimples
+                ? `soma das NFS-e, NF-e e NFC-e com emissão concluída nesta conta no ano civil ${anoCivil}.`
+                : `soma das NFS-e com emissão concluída nesta conta no ano civil ${anoCivil}. NF-e e NFC-e não entram neste total.`}
             </Text>
             <Pressable
               onPress={() => setBaseOpen((o) => !o)}
@@ -201,11 +266,14 @@ export function MeiLimiteFaturamentoCard({
             {baseOpen ? (
               <View style={styles.basePanel}>
                 <Text style={styles.basePanelText}>
-                  Total das NFS-e autorizadas por esta conta no ano civil, comparado ao limite de referência configurado.
-                  Notas arquivadas entram no total. Só notas em processamento ou canceladas ficam de fora.
+                  {isSimples
+                    ? 'Total das notas autorizadas (NFS-e, NF-e e NFC-e) por esta conta no ano civil, comparado ao limite anual do Simples Nacional (R$ 4,8 milhões). A marca amarela indica o sublimite de ICMS/ISS (R$ 3,6 milhões).'
+                    : 'Total das NFS-e autorizadas por esta conta no ano civil, comparado ao limite de referência configurado. Notas arquivadas entram no total. Só notas em processamento ou canceladas ficam de fora.'}
                 </Text>
                 <Text style={[styles.basePanelText, styles.basePanelTextSpaced]}>
-                  NF-e e NFC-e seguem regras de ICMS/SEFAZ e não são somadas neste indicador.
+                  {isSimples
+                    ? 'Indicador aproximado a partir das notas emitidas pelo app. Não inclui receitas fora deste sistema nem substitui a apuração do PGDAS-D.'
+                    : 'NF-e e NFC-e seguem regras de ICMS/SEFAZ e não são somadas neste indicador.'}
                 </Text>
               </View>
             ) : null}
@@ -304,10 +372,25 @@ function createStyles(
       borderWidth: 1,
       borderColor: tokens.insetBorder,
       overflow: 'hidden',
+      position: 'relative',
     },
     barFill: {
       height: '100%',
       borderRadius: 999,
+    },
+    sublimiteMarker: {
+      position: 'absolute',
+      top: -2,
+      bottom: -2,
+      width: 2,
+      marginLeft: -1,
+      borderRadius: 1,
+      zIndex: 2,
+    },
+    sublimiteHint: {
+      fontSize: 12,
+      color: theme.textSecondary,
+      lineHeight: 17,
     },
     barMeta: {
       flexDirection: 'row',

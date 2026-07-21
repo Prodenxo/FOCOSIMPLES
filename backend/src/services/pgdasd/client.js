@@ -153,7 +153,7 @@ export const extractPdfBase64FromPgdasdResponse = (response) => {
       return null
     }
     if (typeof value === 'object') {
-      for (const key of ['pdf', 'PDF', 'pdfBase64', 'arquivo', 'das', 'documento']) {
+      for (const key of ['pdf', 'PDF', 'pdfBase64', 'arquivo', 'das', 'documento', 'extrato', 'recibo', 'declaracao']) {
         const found = find(value[key], depth + 1)
         if (found) return found
       }

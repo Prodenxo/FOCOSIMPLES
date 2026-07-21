@@ -60,6 +60,33 @@ describe('pgdasd consultar map', () => {
       ],
     })
     assert.equal(periods[0].status, 'pago')
+    assert.equal(periods[0].numeroDas, '1')
+  })
+
+  it('escolhe numeroDas pago mais recente', () => {
+    const periods = mapDeclaracoesToPeriods({
+      periodos: [
+        {
+          periodoApuracao: '202605',
+          operacoes: [
+            {
+              tipoOperacao: 'Geração de DAS',
+              indiceDas: { numeroDas: '111', dasPago: false, dataHoraEmissaoDas: 20260501120000 },
+            },
+            {
+              tipoOperacao: 'Geração de DAS',
+              indiceDas: { numeroDas: '222', dasPago: true, dataHoraEmissaoDas: 20260510120000 },
+            },
+            {
+              tipoOperacao: 'Geração de DAS',
+              indiceDas: { numeroDas: '333', dasPago: true, dataHoraEmissaoDas: 20260505120000 },
+            },
+          ],
+        },
+      ],
+    })
+    assert.equal(periods[0].numeroDas, '222')
+    assert.equal(periods[0].status, 'pago')
   })
 
   it('marca a_pagar quando houve Geração de DAS não pago', () => {

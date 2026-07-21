@@ -15,6 +15,7 @@ import { getTechTokens, mfTechInsetSurface, mfTechPanelChrome } from '../../lib/
 import { mfRadius, mfSpacing } from '../../lib/theme'
 import { toMeiUserErrorMessage } from '../../utils/meiUserFacingMessage'
 import { filterMeiPeriodsForDisplay, isMeiPeriodVencida, type MeiPeriod } from '../../services/guidesMeiService'
+import { formatCurrencyBR } from '../../lib/numberFormat'
 
 const MONTH_PT = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -285,8 +286,10 @@ export function MeiMobileDasPanel ({
                 selectedYear,
               )
               const vencida = isMeiPeriodVencida(p)
+              // Pago também pode baixar (reimpressão / PDF já quitado na Receita).
               const canDownload =
-                p.status === 'a_pagar' && Boolean(onDownloadPeriod)
+                (p.status === 'a_pagar' || p.status === 'pago')
+                && Boolean(onDownloadPeriod)
               const statusColor =
                 p.status === 'pago'
                   ? theme.success
@@ -315,7 +318,7 @@ export function MeiMobileDasPanel ({
                     ]}
                     accessibilityRole="button"
                     accessibilityState={{ selected }}
-                    accessibilityLabel={`${formatCompetenciaLabel(p.competencia)}, ${statusLabel(p.status, vencida)}`}
+                    accessibilityLabel={`${formatCompetenciaLabel(p.competencia)}, ${statusLabel(p.status, vencida)}${p.valorTotal != null ? `, ${formatCurrencyBR(p.valorTotal)}` : ''}`}
                   >
                     <View
                       style={[
@@ -329,6 +332,9 @@ export function MeiMobileDasPanel ({
                       </Text>
                       <Text style={[styles.ledgerStatus, { color: statusColor }]}>
                         {statusLabel(p.status, vencida)}
+                        {p.valorTotal != null && Number.isFinite(p.valorTotal)
+                          ? ` · ${formatCurrencyBR(p.valorTotal)}`
+                          : ''}
                         {vencida && p.vencimento ? ` · ${p.vencimento}` : ''}
                       </Text>
                     </View>
@@ -345,7 +351,7 @@ export function MeiMobileDasPanel ({
                       disabled={downloadLoading && selected}
                       accessibilityRole="button"
                       accessibilityLabel={
-                        vencida
+                        vencida && p.status === 'a_pagar'
                           ? `Atualizar valor e baixar PDF de ${formatCompetenciaLabel(p.competencia)}`
                           : `Baixar PDF de ${formatCompetenciaLabel(p.competencia)}`
                       }
@@ -355,12 +361,12 @@ export function MeiMobileDasPanel ({
                       ) : (
                         <>
                           <Ionicons
-                            name={vencida ? 'refresh-outline' : 'download-outline'}
+                            name={vencida && p.status === 'a_pagar' ? 'refresh-outline' : 'download-outline'}
                             size={16}
                             color={isDarkMode ? '#030508' : '#fff'}
                           />
                           <Text style={styles.ledgerDownloadText}>
-                            {vencida ? 'Atualizar' : 'Baixar'}
+                            {vencida && p.status === 'a_pagar' ? 'Atualizar' : 'Baixar'}
                           </Text>
                         </>
                       )}

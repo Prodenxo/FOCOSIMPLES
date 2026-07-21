@@ -82,6 +82,7 @@ import {
 } from './plugnotas/nfce.service.js';
 import { isPlugnotasDebugExplicitlyEnabled } from './plugnotas/plugnotas-debug-env.js';
 import { agregarLimiteMeiDasLinhas } from '../utils/meiLimitePayloadSum.js';
+import { env } from '../config/env.js';
 import {
   logMeiEmitOutcome,
   extractMeiEmitHttpMeta,
@@ -2124,19 +2125,24 @@ const clampAnoCivilLimite = (value) => {
 };
 
 /**
- * Agrega faturamento MEI no ano civil a partir de `payload_json` na tabela `mei_nfse`
+ * Agrega faturamento no ano civil a partir de `payload_json` / `response_json` em `mei_nfse`
  * (paridade com o cliente em `meiLimiteFaturamento.ts`).
- * FR-GUIA-FISC-17: consulta só linhas `document_type` NFSE ou legado `null`; NFE/NFCE não entram no somatório.
+ * - MEI: só NFS-e (FR-GUIA-FISC-17).
+ * - Foco Simples: NFS-e + NF-e + NFC-e (receita bruta aproximada).
  * Notas arquivadas na UI entram no total (arquivar ≠ cancelar); só status cancelado/rejeitado fica de fora.
  * @param {string} userId
  * @param {number} anoCivil
- * @returns {Promise<{ anoCivil: number, totalUtilizadoReais: number, notasConsideradas: number }>}
+ * @returns {Promise<{ anoCivil: number, totalUtilizadoReais: number, notasConsideradas: number, regime: string }>}
  */
 export const agregarLimiteFaturamento = async (userId, anoCivil) => {
   const safeYear = clampAnoCivilLimite(anoCivil);
   if (safeYear === null) {
     throw badRequest('Ano civil inválido para o limite de faturamento');
   }
+  const regime =
+    String(env.APP_PRODUCT || '').trim().toLowerCase() === 'focosimples'
+      ? 'simples'
+      : 'mei';
   const dbClient = getDb();
   const { startIso, endExclusiveIso } = civilYearCreatedAtBoundsUtcIso(safeYear);
   let query = dbClient
@@ -2147,14 +2153,26 @@ export const agregarLimiteFaturamento = async (userId, anoCivil) => {
     .lt('created_at', endExclusiveIso)
     .order('created_at', { ascending: false })
     .limit(MEI_LIMITE_AGG_QUERY_LIMIT);
-  query = query.or(`document_type.eq.${DOCUMENT_TYPE_NFSE},document_type.is.null`);
+  if (regime === 'mei') {
+    query = query.or(`document_type.eq.${DOCUMENT_TYPE_NFSE},document_type.is.null`);
+  } else {
+    query = query.or(
+      [
+        `document_type.eq.${DOCUMENT_TYPE_NFSE}`,
+        `document_type.eq.${DOCUMENT_TYPE_NFE}`,
+        `document_type.eq.${DOCUMENT_TYPE_NFCE}`,
+        'document_type.is.null',
+      ].join(','),
+    );
+  }
   const { data, error } = await query;
   if (error) throw badRequest(error.message);
-  const { total, notasConsideradas } = agregarLimiteMeiDasLinhas(data || [], safeYear);
+  const { total, notasConsideradas } = agregarLimiteMeiDasLinhas(data || [], safeYear, { regime });
   return {
     anoCivil: safeYear,
     totalUtilizadoReais: total,
-    notasConsideradas
+    notasConsideradas,
+    regime,
   };
 };
 

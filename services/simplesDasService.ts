@@ -26,6 +26,7 @@ export interface SimplesDasGuideResponse {
   filename?: string | null
   numeroDocumento?: string | null
   valorTotal?: number | null
+  fonte?: string | null
 }
 
 export async function fetchSimplesDasStatus (): Promise<SimplesDasIntegrationStatus> {
@@ -49,15 +50,19 @@ export async function gerarSimplesDas (input: {
   cnpj?: string
   periodoApuracao: string
   dataConsolidacao?: string
+  preferExistingPdf?: boolean
 }): Promise<SimplesDasGuideResponse> {
   return apiClient.post('/simples-das/gerar', input)
 }
 
 export async function downloadSimplesDas (
   idOrPeriodo: string,
-  options?: { regenerate?: boolean },
+  options?: { regenerate?: boolean; preferExistingPdf?: boolean },
 ): Promise<SimplesDasGuideResponse> {
-  const qs = options?.regenerate ? '?regenerate=true' : ''
+  const params = new URLSearchParams()
+  if (options?.regenerate) params.set('regenerate', 'true')
+  if (options?.preferExistingPdf) params.set('preferExisting', 'true')
+  const qs = params.toString() ? `?${params.toString()}` : ''
   return apiClient.get(`/simples-das/${encodeURIComponent(idOrPeriodo)}/download${qs}`)
 }
 

@@ -54,6 +54,58 @@ export const consultarDeclaracoesPorAno = async ({
   }
 }
 
+/**
+ * Consulta operações de um único período (AAAAMM).
+ * @param {{ contribuinteCnpj: string, periodoApuracao: string, userId?: string|null }} opts
+ */
+export const consultarDeclaracoesPorPeriodo = async ({
+  contribuinteCnpj,
+  periodoApuracao,
+  userId = null,
+}) => {
+  const periodo = normalizePeriodo(periodoApuracao)
+  if (!periodo) {
+    throw new Error('Período de apuração inválido')
+  }
+
+  const response = await callPgdasdServico({
+    idServico: PGDASD_SERVICOS.CONSDECLARACAO,
+    dados: { periodoApuracao: periodo },
+    modo: 'consultar',
+    contribuinteCnpj,
+    userId,
+  })
+
+  return {
+    response,
+    dados: parseDados(response),
+    periodo,
+  }
+}
+
+/**
+ * Resolve numeroDas (e numeroDeclaracao) para um período via CONSDECLARACAO.
+ * @returns {Promise<{ numeroDas: string|null, numeroDeclaracao: string|null, status: string }>}
+ */
+export const resolveDasIdsDoPeriodo = async ({
+  contribuinteCnpj,
+  periodoApuracao,
+  userId = null,
+}) => {
+  const { dados, periodo } = await consultarDeclaracoesPorPeriodo({
+    contribuinteCnpj,
+    periodoApuracao,
+    userId,
+  })
+  const mapped = mapDeclaracoesToPeriods(dados)
+  const row = mapped.find((p) => p.periodoApuracao === periodo) || mapped[0] || null
+  return {
+    numeroDas: row?.numeroDas || null,
+    numeroDeclaracao: row?.numeroDeclaracao || null,
+    status: row?.status || 'a_pagar',
+  }
+}
+
 const isDasGenerationTipo = (tipo) =>
   /gera[cç][aã]o\s+de\s+das|das\s+avulso|das\s+medida|das\s+cobran[cç]a/i.test(String(tipo || ''))
 
@@ -62,6 +114,33 @@ const isPaymentTipo = (tipo) =>
 
 const isDeclaracaoTipo = (tipo) =>
   /declara[cç][aã]o\s+(original|retificadora)/i.test(String(tipo || ''))
+
+/**
+ * Escolhe o melhor numeroDas das operações do período.
+ * Prefere DAS pago; senão o de emissão mais recente.
+ * @param {object[]} operacoes
+ * @returns {string|null}
+ */
+export const pickNumeroDasFromOperacoes = (operacoes = []) => {
+  let bestPaid = null
+  let bestAny = null
+  for (const op of Array.isArray(operacoes) ? operacoes : []) {
+    if (!op || typeof op !== 'object') continue
+    const indiceDas = op.indiceDas || op.IndiceDas || null
+    if (!indiceDas || typeof indiceDas !== 'object') continue
+    const raw = indiceDas.numeroDas ?? indiceDas.NumeroDas ?? null
+    if (raw == null || String(raw).trim() === '') continue
+    const numeroDas = String(raw).replace(/\D/g, '') || String(raw).trim()
+    const dataHora = Number(indiceDas.dataHoraEmissaoDas || indiceDas.DataHoraEmissaoDas || 0) || 0
+    const pago = indiceDas.dasPago === true || indiceDas.DasPago === true
+    const entry = { numeroDas, dataHora }
+    if (pago) {
+      if (!bestPaid || entry.dataHora >= bestPaid.dataHora) bestPaid = entry
+    }
+    if (!bestAny || entry.dataHora >= bestAny.dataHora) bestAny = entry
+  }
+  return bestPaid?.numeroDas || bestAny?.numeroDas || null
+}
 
 /**
  * Status a partir do índice oficial CONSDECLARACAO13 (sem gravar no banco):
@@ -180,6 +259,7 @@ export const mapDeclaracoesToPeriods = (dados) => {
       status: resolved.status,
       tipoOperacao: resolved.tipoOperacao,
       numeroDeclaracao: bag.numeroDeclaracao,
+      numeroDas: pickNumeroDasFromOperacoes(bag.ops),
       guideId: `pgdasd-${periodo}`,
     })
   }

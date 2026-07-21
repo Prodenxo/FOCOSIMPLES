@@ -1,8 +1,9 @@
 import type { NfseRecord } from '../services/meiNotasService'
-import type { MeiLimiteThresholds } from './meiLimiteFaturamentoConfig'
+import type { LimiteFaturamentoRegime, MeiLimiteThresholds } from './meiLimiteFaturamentoConfig'
 import {
   DEFAULT_MEI_LIMITE_THRESHOLDS,
   getLimiteReferenciaReaisParaAno,
+  getSublimiteIcmsIssReaisParaAno,
 } from './meiLimiteFaturamentoConfig'
 
 export type MeiLimiteBanda = 'seguro' | 'atencao' | 'critico'
@@ -16,13 +17,22 @@ export interface MeiLimiteProgresso {
   percentualUtilizadoParaBarra: number | null
   banda: MeiLimiteBandaOuIndeterminado
   notasConsideradas: number
+  /** Só no regime Simples: sublimite ICMS/ISS (quando configurado). */
+  sublimiteReais: number | null
+  percentualSublimite: number | null
+  percentualSublimiteParaBarra: number | null
+  atingiuSublimite: boolean
+  regime: LimiteFaturamentoRegime
 }
 
 export const MEI_LIMITE_ANO_CIVIL_TZ = 'America/Sao_Paulo'
 
 export interface ComputeMeiLimiteProgressoOptions {
   anoCivil: number
+  /** `mei` = só NFS-e / R$ 81 mil; `simples` = NFS-e+NF-e+NFC-e / R$ 4,8 mi. */
+  regime?: LimiteFaturamentoRegime
   limiteReferenciaReaisOverride?: number | null
+  sublimiteReaisOverride?: number | null
   thresholds?: MeiLimiteThresholds
   agregadoServidor?: { totalUtilizadoReais: number; notasConsideradas: number }
 }
@@ -122,6 +132,17 @@ export function isDocumentTypeMeiLimiteRelevante(documentType: string | null | u
   return dt === 'NFSE'
 }
 
+export function isDocumentTypeSimplesLimiteRelevante(
+  documentType: string | null | undefined,
+): boolean {
+  const dt = String(documentType ?? '').trim().toUpperCase()
+  return dt === 'NFSE' || dt === 'NFE' || dt === 'NFCE'
+}
+
+function hasItensArrayInObj(obj: Record<string, unknown>): boolean {
+  return Array.isArray(obj.itens) || Array.isArray(obj.items)
+}
+
 export function isNfseDocumento(record: NfseRecord): boolean {
   const dt = String(record.document_type ?? '').trim().toUpperCase()
   if (dt !== '') {
@@ -131,6 +152,18 @@ export function isNfseDocumento(record: NfseRecord): boolean {
   if (p && hasServicoArrayInObj(p)) return true
   const resp = resolverResponseJsonDaNota(record)
   return Boolean(resp && hasServicoArrayInObj(resp))
+}
+
+/** Documento que entra no somatório do Simples (NFS-e, NF-e ou NFC-e). */
+export function isDocumentoLimiteSimples(record: NfseRecord): boolean {
+  const dt = String(record.document_type ?? '').trim().toUpperCase()
+  if (dt !== '') {
+    return isDocumentTypeSimplesLimiteRelevante(record.document_type)
+  }
+  const p = resolverPayloadJsonDaNota(record)
+  if (p && (hasServicoArrayInObj(p) || hasItensArrayInObj(p))) return true
+  const resp = resolverResponseJsonDaNota(record)
+  return Boolean(resp && (hasServicoArrayInObj(resp) || hasItensArrayInObj(resp)))
 }
 
 function valorLimiteDeItemServico(item: Record<string, unknown>): number | null {
@@ -181,6 +214,83 @@ export function extrairValorLimiteMeiDaNota(record: NfseRecord): number | null {
   return extrairValorTotalServicosDeObjeto(payload)
 }
 
+function valorUnitarioDeItemNfe(item: Record<string, unknown>): number | null {
+  const vu = item.valorUnitario
+  if (vu && typeof vu === 'object' && !Array.isArray(vu)) {
+    const o = vu as { comercial?: unknown; tributavel?: unknown }
+    const c = parseValorMonetarioBr(o.comercial)
+    if (c !== null && c >= 0) return c
+    const t = parseValorMonetarioBr(o.tributavel)
+    if (t !== null && t >= 0) return t
+  }
+  return parseValorMonetarioBr(vu)
+}
+
+function quantidadeDeItemNfe(item: Record<string, unknown>): number | null {
+  const q = item.quantidade
+  if (q && typeof q === 'object' && !Array.isArray(q)) {
+    const o = q as { comercial?: unknown; tributavel?: unknown }
+    const c = parseValorMonetarioBr(o.comercial)
+    if (c !== null && c >= 0) return c
+    const t = parseValorMonetarioBr(o.tributavel)
+    if (t !== null && t >= 0) return t
+  }
+  return parseValorMonetarioBr(q)
+}
+
+function valorLimiteDeItemProduto(item: Record<string, unknown>): number | null {
+  const direct = parseValorMonetarioBr(item.valor)
+  if (direct !== null && direct >= 0) return direct
+  const q = quantidadeDeItemNfe(item)
+  const vu = valorUnitarioDeItemNfe(item)
+  if (q !== null && vu !== null) {
+    const total = q * vu
+    return Number.isFinite(total) && total >= 0 ? total : null
+  }
+  return null
+}
+
+export function extrairValorTotalItensDeObjeto(raw: Record<string, unknown> | null): number | null {
+  if (!raw) return null
+  let itens = raw.itens ?? raw.items
+  if (itens && !Array.isArray(itens)) {
+    itens = [itens]
+  }
+  if (!Array.isArray(itens)) return null
+  let sum = 0
+  let any = false
+  for (const item of itens) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue
+    const n = valorLimiteDeItemProduto(item as Record<string, unknown>)
+    if (n !== null) {
+      sum += n
+      any = true
+    }
+  }
+  return any ? sum : null
+}
+
+/** Valor da nota para o somatório do Simples (serviços e/ou produtos). */
+export function extrairValorLimiteSimplesDaNota(record: NfseRecord): number | null {
+  const dt = String(record.document_type ?? '').trim().toUpperCase()
+  const tryObj = (obj: Record<string, unknown> | null): number | null => {
+    if (!obj) return null
+    if (dt === 'NFE' || dt === 'NFCE') {
+      return extrairValorTotalItensDeObjeto(obj)
+    }
+    if (dt === 'NFSE') {
+      return extrairValorTotalServicosDeObjeto(obj)
+    }
+    const serv = extrairValorTotalServicosDeObjeto(obj)
+    if (serv !== null) return serv
+    return extrairValorTotalItensDeObjeto(obj)
+  }
+  const resp = resolverResponseJsonDaNota(record)
+  const fromResp = tryObj(resp)
+  if (fromResp !== null) return fromResp
+  return tryObj(resolverPayloadJsonDaNota(record))
+}
+
 export function anoCivilFromIsoCreatedAt(createdAt: string | undefined | null): number | null {
   if (!createdAt) return null
   const parsed = new Date(createdAt)
@@ -197,17 +307,25 @@ export function anoCivilFromIsoCreatedAt(createdAt: string | undefined | null): 
 
 export function somarNfseAutorizadasNoAnoCivil(
   records: NfseRecord[],
-  options: { anoCivil: number },
+  options: { anoCivil: number; regime?: LimiteFaturamentoRegime },
 ): { total: number; notasConsideradas: number } {
   const { anoCivil } = options
+  const regime = options.regime ?? 'mei'
   let total = 0
   let notasConsideradas = 0
   for (const record of records) {
-    if (!isNfseDocumento(record)) continue
+    if (regime === 'simples') {
+      if (!isDocumentoLimiteSimples(record)) continue
+    } else if (!isNfseDocumento(record)) {
+      continue
+    }
     if (!nfseDeveEntrarNoSomatórioLimite(record.status)) continue
     const y = anoCivilFromIsoCreatedAt(record.created_at)
     if (y !== anoCivil) continue
-    const valor = extrairValorLimiteMeiDaNota(record)
+    const valor =
+      regime === 'simples'
+        ? extrairValorLimiteSimplesDaNota(record)
+        : extrairValorLimiteMeiDaNota(record)
     if (valor === null) continue
     total += valor
     notasConsideradas += 1
@@ -234,6 +352,7 @@ export function computeMeiLimiteProgresso(
   records: NfseRecord[],
   options: ComputeMeiLimiteProgressoOptions,
 ): MeiLimiteProgresso {
+  const regime = options.regime ?? 'mei'
   const thresholds = options.thresholds ?? DEFAULT_MEI_LIMITE_THRESHOLDS
   let total: number
   let notasConsideradas: number
@@ -241,7 +360,10 @@ export function computeMeiLimiteProgresso(
     total = options.agregadoServidor.totalUtilizadoReais
     notasConsideradas = options.agregadoServidor.notasConsideradas
   } else {
-    const s = somarNfseAutorizadasNoAnoCivil(records, { anoCivil: options.anoCivil })
+    const s = somarNfseAutorizadasNoAnoCivil(records, {
+      anoCivil: options.anoCivil,
+      regime,
+    })
     total = s.total
     notasConsideradas = s.notasConsideradas
   }
@@ -250,7 +372,7 @@ export function computeMeiLimiteProgresso(
   if (options.limiteReferenciaReaisOverride !== undefined) {
     limite = options.limiteReferenciaReaisOverride
   } else {
-    limite = getLimiteReferenciaReaisParaAno(options.anoCivil)
+    limite = getLimiteReferenciaReaisParaAno(options.anoCivil, regime)
   }
 
   let percentual: number | null = null
@@ -261,6 +383,23 @@ export function computeMeiLimiteProgresso(
   } else if (limite === 0) {
     percentual = null
     paraBarra = null
+  }
+
+  let sublimite: number | null = null
+  let percentualSublimite: number | null = null
+  let percentualSublimiteParaBarra: number | null = null
+  let atingiuSublimite = false
+  if (regime === 'simples') {
+    if (options.sublimiteReaisOverride !== undefined) {
+      sublimite = options.sublimiteReaisOverride
+    } else {
+      sublimite = getSublimiteIcmsIssReaisParaAno(options.anoCivil)
+    }
+    if (sublimite !== null && sublimite > 0) {
+      percentualSublimite = (total / sublimite) * 100
+      percentualSublimiteParaBarra = clampBarPercent(percentualSublimite)
+      atingiuSublimite = total >= sublimite
+    }
   }
 
   const banda =
@@ -276,5 +415,10 @@ export function computeMeiLimiteProgresso(
     percentualUtilizadoParaBarra: paraBarra,
     banda,
     notasConsideradas,
+    sublimiteReais: sublimite,
+    percentualSublimite,
+    percentualSublimiteParaBarra,
+    atingiuSublimite,
+    regime,
   }
 }

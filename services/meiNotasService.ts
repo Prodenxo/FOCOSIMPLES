@@ -480,6 +480,7 @@ export interface LimiteFaturamentoMeiResponse {
   anoCivil: number;
   totalUtilizadoReais: number;
   notasConsideradas: number;
+  regime?: 'mei' | 'simples';
 }
 
 export async function fetchLimiteFaturamentoMei(options?: {

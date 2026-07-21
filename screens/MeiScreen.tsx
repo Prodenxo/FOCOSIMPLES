@@ -1023,9 +1023,17 @@ function MeiScreenContent() {
       if (isFocoSimplesUi) {
         // Sempre período AAAAMM — guideId UUID do cache local quebrava o download.
         const downloadKey = `pgdasd-${periodoApuracao}`;
-        let guide = await downloadSimplesDas(downloadKey, { regenerate: Boolean(vencida) });
+        const preferExistingPdf = period?.status === 'pago';
+        let guide = await downloadSimplesDas(downloadKey, {
+          regenerate: Boolean(vencida && period?.status === 'a_pagar'),
+          preferExistingPdf,
+        });
         if (!guide?.pdfBase64) {
-          guide = await gerarSimplesDas({ cnpj: normalizedCnpj, periodoApuracao });
+          guide = await gerarSimplesDas({
+            cnpj: normalizedCnpj,
+            periodoApuracao,
+            preferExistingPdf,
+          });
         }
         if (!guide?.pdfBase64) {
           Alert.alert(
@@ -1039,11 +1047,22 @@ function MeiScreenContent() {
           guide.pdfBase64,
           guide.filename || `DAS-SN-${periodoApuracao}.pdf`,
         );
+        if (guide.valorTotal != null && Number.isFinite(Number(guide.valorTotal)) && period?.competencia) {
+          const valor = Number(guide.valorTotal);
+          setMeiPeriods((prev) => prev.map((row) => (
+            row.competencia === period.competencia
+              ? { ...row, valorTotal: valor }
+              : row
+          )));
+        }
         await presentDownloadedFile(saved, {
           mimeType: 'application/pdf',
           dialogTitle: 'DAS Simples Nacional',
           successMessage: saved.localUri ? `Guia salva em: ${saved.localUri}` : undefined,
         });
+        if (guide.valorTotal != null && Number.isFinite(Number(guide.valorTotal))) {
+          showToast(`DAS ${period?.competencia || ''}: ${formatCurrencyBR(Number(guide.valorTotal))}`, 'success');
+        }
         void loadMeiPeriods({ silent: true, refresh: true });
         return;
       }
@@ -1115,10 +1134,10 @@ function MeiScreenContent() {
         }
         void loadMeiPeriods({ silent: true, refresh: true });
         alertDialog(
-          'Período sem valor devido',
-          'A Receita informou que não há DAS a pagar neste período. A lista será atualizada com o status da consulta.',
+          'PDF não disponível neste período',
+          'A Receita não devolveu guia nem extrato/recibo para esta competência. Confira no PGDAS-D se há DAS gerado ou declaração transmitida.',
         );
-        showToast('Sem valor devido — status vem da Receita na próxima consulta.', 'info');
+        showToast('Sem PDF na Receita para este período.', 'info');
       } else if (code === 'PGDASD_DAS_NO_PDF') {
         alertDialog(
           'PDF não disponível',
@@ -1676,13 +1695,16 @@ function MeiScreenContent() {
 
   const meiLimiteBundle = useMemo(() => {
     const anoCivil = new Date().getFullYear();
+    const regime = isFocoSimplesUi ? 'simples' : 'mei';
     const agregadoServidor =
       meiLimiteServidorReady && meiLimiteServidor !== null ? meiLimiteServidor : undefined;
     return {
       anoCivil,
-      vigenciaLabel: getVigenciaLabelParaAno(anoCivil),
+      regime,
+      vigenciaLabel: getVigenciaLabelParaAno(anoCivil, regime),
       progresso: computeMeiLimiteProgresso(notas, {
         anoCivil,
+        regime,
         agregadoServidor,
       }),
     };
@@ -2923,6 +2945,7 @@ function MeiScreenContent() {
               progresso={meiLimiteBundle.progresso}
               vigenciaLabel={meiLimiteBundle.vigenciaLabel}
               loading={overviewLimiteCardLoading}
+              variant={meiLimiteBundle.regime}
               onIrParaNotas={() => handleTabChange('notas')}
             />
             {isDesktop ? (
@@ -3257,6 +3280,7 @@ function MeiScreenContent() {
                   <View style={styles.dasTableHeader}>
                     <Text style={[styles.dasTableHeaderCell, { flex: 1 }]}>Competência</Text>
                     <Text style={[styles.dasTableHeaderCell, { flex: 1 }]}>Status</Text>
+                    <Text style={[styles.dasTableHeaderCell, { width: 100, textAlign: 'right' }]}>Valor</Text>
                     <Text style={[styles.dasTableHeaderCell, { width: 70, textAlign: 'center' }]}>Ação</Text>
                   </View>
                   {meiPeriods.slice(0, 24).map((p, idx) => {
@@ -3297,21 +3321,30 @@ function MeiScreenContent() {
                           </Text>
                         ) : null}
                       </View>
+                      <Text style={[styles.dasTableCell, { width: 100, textAlign: 'right', fontVariant: ['tabular-nums'] }]}>
+                        {p.valorTotal != null && Number.isFinite(p.valorTotal)
+                          ? formatCurrencyBR(p.valorTotal)
+                          : '—'}
+                      </Text>
                       <View style={{ width: 70, alignItems: 'center' }}>
                         <TouchableOpacity
                           style={styles.dasTableAction}
                           onPress={() => void handleDownloadGuide(p)}
-                          disabled={downloadLoading || p.status === 'indisponivel' || p.status === 'pago' || p.status === 'erro'}
+                          disabled={downloadLoading || p.status === 'indisponivel' || p.status === 'erro'}
                           accessibilityLabel={
-                            vencida
+                            vencida && p.status === 'a_pagar'
                               ? `Atualizar valor e baixar guia de ${p.competencia}`
                               : `Baixar guia de ${p.competencia}`
                           }
                         >
                           <Ionicons
-                            name={vencida ? 'refresh-outline' : 'download-outline'}
+                            name={vencida && p.status === 'a_pagar' ? 'refresh-outline' : 'download-outline'}
                             size={15}
-                            color={theme.primary}
+                            color={
+                              downloadLoading || p.status === 'indisponivel' || p.status === 'erro'
+                                ? theme.textTertiary
+                                : theme.primary
+                            }
                           />
                         </TouchableOpacity>
                       </View>
