@@ -133,7 +133,8 @@ export function getDefaultPlugNotasCompanyForm(): PlugNotasCompanyForm {
     estado: '',
     nfseAtivo: true,
     nfeAtivo: resolveAppOrigin() === 'focosimples',
-    nfceAtivo: resolveAppOrigin() === 'focosimples',
+    // NFC-e exige CSC/SEFAZ — fora do MVP (Foco Simples e FocoMEI).
+    nfceAtivo: false,
     rpsLote: 1,
     rpsNumero: 1,
     rpsSerie: '1',

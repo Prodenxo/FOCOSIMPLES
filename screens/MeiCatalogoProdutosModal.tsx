@@ -25,6 +25,7 @@ import {
   type NfeCatalogProdutoFormFields,
 } from '../lib/nfeCatalogProdutoMetadata'
 import { parseDecimalInput } from '../lib/meiNfseForms'
+import { resolveAppOrigin } from '../lib/appOrigin'
 import type { DocumentType, NfseCatalogProduto } from '../services/meiNotasService'
 import {
   atualizarCatalogoNfseProduto,
@@ -495,7 +496,7 @@ export default function MeiCatalogoProdutosModal ({
               onChangeText={(t) => setForm((f) => ({ ...f, nfe: { ...f.nfe, unidade: t } }))}
             />
             <MeiFormField
-              label="CSOSN ICMS (MEI)"
+              label={resolveAppOrigin() === 'focosimples' ? 'CSOSN ICMS (Simples)' : 'CSOSN ICMS (MEI)'}
               required
               placeholder="102"
               value={form.nfe.icmsCsosn}
@@ -575,7 +576,11 @@ export default function MeiCatalogoProdutosModal ({
         />
         <MeiFormField
           label="Alíquota (%) — opcional"
-          placeholder="MEI/Simples: deixe em branco"
+          placeholder={
+            resolveAppOrigin() === 'focosimples'
+              ? 'Simples Nacional: deixe em branco se ISS no DAS'
+              : 'MEI/Simples: deixe em branco'
+          }
           value={form.aliquota}
           onChangeText={(t) => setForm((f) => ({ ...f, aliquota: t }))}
           keyboardType="decimal-pad"

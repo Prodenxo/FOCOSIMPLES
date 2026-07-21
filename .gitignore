@@ -10,6 +10,11 @@ backend/.env
 backend/.env.*
 !backend/.env.example
 
+# Pacotes de migração MEI (dados + segredos — não versionar)
+mei-empresas-full-*/
+**/secrets/certificates.json
+**/.import-temp-password.txt
+
 # Expo / Metro
 .expo/
 dist/

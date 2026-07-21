@@ -431,7 +431,7 @@ export function getNfeLikeValidationMessage(form: NfeLikeForm, documentType: Not
     const icmsCst = normalizeDoc(item.tributos.icms.cst);
     if (icmsCsosn) {
       if (icmsCsosn.length !== 3) {
-        return `Item ${linha}: CSOSN do ICMS deve ter 3 dígitos (ex.: 102 para MEI).`;
+        return `Item ${linha}: CSOSN do ICMS deve ter 3 dígitos (ex.: 102 no Simples Nacional).`;
       }
     } else if (icmsCst.length >= 2 && icmsCst.length <= 3) {
       /* CST válido */
@@ -450,10 +450,10 @@ export function getNfeLikeValidationMessage(form: NfeLikeForm, documentType: Not
   return null;
 }
 
-/** CSOSN típico para venda de mercadoria MEI no Simples Nacional (editável por item). */
+/** CSOSN típico para venda de mercadoria no Simples Nacional (editável por item). */
 export const MEI_DEFAULT_NFE_CSOSN = '102';
 
-/** CST PIS/COFINS comum para MEI sem destaque (editável por item). */
+/** CST PIS/COFINS comum no SN sem destaque (editável por item). */
 export const MEI_DEFAULT_NFE_PIS_COFINS_CST = '49';
 
 function getDefaultNfeTributos(): NfeItemFormTributos {

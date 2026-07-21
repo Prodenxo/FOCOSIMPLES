@@ -5,16 +5,28 @@ import {
   formatNfseStatus,
   getNfseStatusBadgeBackground,
   getNfseStatusBadgeColor,
-  getNfseStatusKey,
   meiFiscalDocumentTypeShortLabel,
   resolveNfseDisplayStatus,
 } from '../lib/meiFormatters'
+import {
+  formatNotaValorLabel,
+  resolveNotaCardTitle,
+} from '../lib/notaFiscalDisplay'
 import type { NfseRecord } from '../services/meiNotasService'
 
 interface NotaFiscalListRowHeaderProps {
   nota: Pick<
     NfseRecord,
-    'id' | 'status' | 'response_json' | 'document_type' | 'created_at' | 'protocol' | 'plugnotas_id' | 'id_integracao'
+    | 'id'
+    | 'status'
+    | 'response_json'
+    | 'payload_json'
+    | 'document_type'
+    | 'created_at'
+    | 'protocol'
+    | 'plugnotas_id'
+    | 'id_integracao'
+    | 'cnpj_tomador'
   >
   textColor: string
   textSecondary: string
@@ -41,21 +53,20 @@ export function NotaFiscalListRowHeader ({ nota, textColor, textSecondary }: Not
   const statusLabel = formatNfseStatus(resolvedStatus)
   const statusColor = getNfseStatusBadgeColor(resolvedStatus)
   const statusBg = getNfseStatusBadgeBackground(resolvedStatus)
-  const isPending = nota.id === '__emit_pending__'
-  const title = isPending
-    ? 'Enviando nota…'
-    : (nota.id_integracao || nota.plugnotas_id || nota.protocol || nota.id)
+  const title = resolveNotaCardTitle(nota)
+  const valorLabel = formatNotaValorLabel(nota as NfseRecord)
   const docLabel = meiFiscalDocumentTypeShortLabel(nota.document_type)
 
   return (
     <View style={styles.row}>
       <View style={styles.left}>
-        <Text style={[styles.title, { color: textColor }]} numberOfLines={1}>
+        <Text style={[styles.title, { color: textColor }]} numberOfLines={2}>
           {title}
         </Text>
         <Text style={[styles.meta, { color: textSecondary }]}>
+          {valorLabel ? `${valorLabel} · ` : ''}
           Emitida em {formatDateTime(nota.created_at)}
-          {nota.protocol ? ` • Protocolo ${nota.protocol}` : ''}
+          {nota.protocol ? ` · Protocolo ${nota.protocol}` : ''}
         </Text>
       </View>
       <View style={styles.badges}>

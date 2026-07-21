@@ -494,7 +494,7 @@ const buildTomadorEnderecoFromInput = (input) => {
 };
 
 const buildPayloadFromInput = (input, userId) => {
-  const idIntegracao = input?.idIntegracao || `mei-${userId}-${Date.now()}`;
+  const idIntegracao = input?.idIntegracao || buildMeiIdIntegracao(userId);
   const prestadorDoc = normalizeDoc(
     input?.prestador?.cpfCnpj
       || input?.prestadorCpfCnpj
@@ -549,7 +549,7 @@ const buildPayloadFromInput = (input, userId) => {
 };
 
 const buildNfeLikePayloadFromInput = (input, userId, { defaultModel = '55' } = {}) => {
-  const idIntegracao = input?.idIntegracao || `mei-${userId}-${Date.now()}`;
+  const idIntegracao = input?.idIntegracao || buildMeiIdIntegracao(userId);
   const emitenteDoc = normalizeDoc(
     input?.emitente?.cpfCnpj
       || input?.emitenteCpfCnpj
@@ -1106,8 +1106,12 @@ export const __resetGetDbForTests = () => {
 
 const getDb = () => (getDbOverride ? getDbOverride() : defaultGetDb());
 
+const getIdIntegracaoPrefix = () => (
+  String(env.APP_PRODUCT || '').trim().toLowerCase() === 'focosimples' ? 'fs' : 'mei'
+);
+
 const buildMeiIdIntegracao = (userId) =>
-  `mei-${userId}-${Date.now()}-${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`;
+  `${getIdIntegracaoPrefix()}-${userId}-${Date.now()}-${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`;
 
 const resolveIdIntegracaoForEmit = async (userId, proposed) => {
   const trimmed = typeof proposed === 'string' ? proposed.trim() : '';

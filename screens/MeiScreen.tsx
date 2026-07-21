@@ -207,7 +207,7 @@ const DAS_PAGE_DESC = isFocoSimplesUi
   : 'Dois passos: escolha o mês e baixe o PDF.';
 const NOTAS_AREA_TITLE = isFocoSimplesUi ? 'Notas' : 'Meu MEI';
 const NOTAS_AREA_SUBTITLE = isFocoSimplesUi
-  ? 'Emissão fiscal — Simples Nacional (NFS-e, NF-e e NFC-e).'
+  ? 'Emissão fiscal — Simples Nacional (NFS-e e NF-e).'
   : 'Status rápido das áreas do Meu MEI.';
 const NOTAS_ACCESS_DENIED = isFocoSimplesUi
   ? 'A emissão de notas está disponível para administradores e utilizadores do Foco Simples.'
@@ -562,10 +562,12 @@ function MeiScreenContent() {
     return [pendente, ...notas];
   }, [emitirNotaPending, emitirNotaType, notas, userId]);
   const [documentosAtivosMirror, setDocumentosAtivosMirror] = useState<MeiDocumentosAtivosState | null>(null);
-  const documentosPermitidos = useMemo(
-    () => resolveMeiDocumentosPermitidos(documentosAtivosMirror, empresaFiscal),
-    [documentosAtivosMirror, empresaFiscal],
-  );
+  const documentosPermitidos = useMemo(() => {
+    const resolved = resolveMeiDocumentosPermitidos(documentosAtivosMirror, empresaFiscal);
+    // Foco Simples MVP: NFC-e fora (exige CSC/SEFAZ).
+    if (isFocoSimplesUi) return { ...resolved, nfce: false };
+    return resolved;
+  }, [documentosAtivosMirror, empresaFiscal]);
   const emitDocTypesAllowed = useMemo(
     () => meiDocTypesPermitidos(documentosPermitidos),
     [documentosPermitidos],
@@ -2532,6 +2534,10 @@ function MeiScreenContent() {
       reportEmitError(msg);
       return;
     }
+    if (docType === 'NFCE' && isFocoSimplesUi) {
+      reportEmitError('NFC-e ainda não está disponível no Foco Simples. Use NFS-e ou NF-e.');
+      return;
+    }
     if (docType === 'NFE' && empresaFiscal && !empresaFiscal.nfe?.ativo) {
       reportEmitError(
         'NF-e não está activa para sua empresa no Plugnotas. Active em Certificado → Empresa ou contacte o suporte Plugnotas.',
@@ -2926,7 +2932,9 @@ function MeiScreenContent() {
                     {activeTab === 'overview' && NOTAS_AREA_SUBTITLE}
                     {activeTab === 'parcelamentos' && 'Acompanhe parcelamentos ativos e baixe os PDFs.'}
                     {activeTab === 'notas' &&
-                      'Emita, consulte e sincronize NFSe, NFe e NFC-e com o emissor.'}
+                      (isFocoSimplesUi
+                        ? 'Emita, consulte e sincronize NFS-e e NF-e com o emissor.'
+                        : 'Emita, consulte e sincronize NFSe, NFe e NFC-e com o emissor.')}
                     {activeTab === 'certificado' && 'Certificado digital e dados da empresa emissora.'}
                   </Text>
                 </View>
@@ -3038,7 +3046,9 @@ function MeiScreenContent() {
                 </View>
                 <Text style={styles.overviewTitle}>Notas fiscais</Text>
                 <Text style={styles.overviewDesc}>
-                  NFSe, NFe e NFC-e emitidas. Tabela completa com filtros e ações por nota.
+                  {isFocoSimplesUi
+                    ? 'NFS-e e NF-e emitidas. Tabela completa com filtros e ações por nota.'
+                    : 'NFSe, NFe e NFC-e emitidas. Tabela completa com filtros e ações por nota.'}
                 </Text>
                 <View style={styles.overviewMetric}>
                   <Text style={styles.overviewMetricLabel}>Total emitidas</Text>
@@ -4074,7 +4084,11 @@ function MeiScreenContent() {
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <Ionicons name="checkmark-circle" size={18} color={theme.success} style={{ marginTop: 1 }} />
                   <Text style={{ flex: 1, fontSize: 13, color: theme.text, lineHeight: 20 }}>
-                    Emitir <Text style={{ fontWeight: '600' }}>notas fiscais</Text> (NFS-e, NF-e, NFC-e) em seu nome
+                    Emitir{' '}
+                    <Text style={{ fontWeight: '600' }}>notas fiscais</Text>
+                    {isFocoSimplesUi
+                      ? ' (NFS-e e NF-e) em nome da empresa'
+                      : ' (NFS-e, NF-e, NFC-e) em seu nome'}
                   </Text>
                 </View>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -4180,6 +4194,13 @@ function MeiScreenContent() {
       >
               {emitirNotaError ? (
                 <MeiFormBanner>{emitirNotaError}</MeiFormBanner>
+              ) : null}
+              {isFocoSimplesUi ? (
+                <MeiFormBanner>
+                  {emitirNotaType === 'NFSE'
+                    ? 'Checklist NFS-e: certificado e-CNPJ · empresa no emissor · IM e RPS · código de serviço/CNAE corretos.'
+                    : 'Checklist NF-e: certificado e-CNPJ · NF-e ativa na empresa · IE quando exigida · NCM, CFOP e CSOSN do item.'}
+                </MeiFormBanner>
               ) : null}
               {emitirNotaType === 'NFSE' && (
                 <>
@@ -4432,7 +4453,11 @@ function MeiScreenContent() {
                   />
                   <MeiFormField
                     label="Alíquota ISS (opcional)"
-                    placeholder="MEI/Simples: deixe em branco"
+                    placeholder={
+                      isFocoSimplesUi
+                        ? 'Simples Nacional: deixe em branco se ISS no DAS'
+                        : 'MEI/Simples: deixe em branco'
+                    }
                     value={String(nfseForm.servico?.aliquota ?? '')}
                     onChangeText={(t) => setNfseForm((f) => ({ ...f, servico: { ...f.servico, aliquota: t } }))}
                     keyboardType="decimal-pad"
@@ -4491,7 +4516,9 @@ function MeiScreenContent() {
                     keyboardType="default"
                   />
                   <Text style={{ fontSize: 12, color: theme.textSecondary, marginBottom: mfSpacing.sm, lineHeight: 16 }}>
-                    IE da sua empresa MEI no XML do emitente. Não confunda com a IE do cliente (destinatário).
+                    {isFocoSimplesUi
+                      ? 'IE da empresa emitente no XML. Não confunda com a IE do cliente (destinatário).'
+                      : 'IE da sua empresa MEI no XML do emitente. Não confunda com a IE do cliente (destinatário).'}
                   </Text>
                   <MeiLinkButton
                     label="Alterar no cadastro da empresa"
@@ -4581,7 +4608,11 @@ function MeiScreenContent() {
                     <MeiFormField
                       label="Inscrição Estadual do destinatário (cliente)"
                       required
-                      placeholder="Somente números — não use a IE do seu MEI"
+                      placeholder={
+                        isFocoSimplesUi
+                          ? 'Somente números — IE do cliente, não a da emitente'
+                          : 'Somente números — não use a IE do seu MEI'
+                      }
                       value={nfeLikeForm.destinatarioInscricaoEstadual}
                       onChangeText={(t) =>
                         setNfeLikeForm((f) => ({
@@ -4760,7 +4791,7 @@ function MeiScreenContent() {
                           Tributos vêm do cadastro do produto (catálogo). Use &quot;Selecionar produto&quot; ou edite aqui se necessário.
                         </Text>
                         <MeiFormField
-                          label="CSOSN ICMS (MEI)"
+                          label={isFocoSimplesUi ? 'CSOSN ICMS (Simples)' : 'CSOSN ICMS (MEI)'}
                           required
                           placeholder="102"
                           value={item.tributos.icms.csosn}
