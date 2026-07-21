@@ -40,6 +40,7 @@ type Props = {
   onCreateGuide: () => void
   onRefreshPeriods?: () => void
   onOpenPgmei: () => void
+  portalButtonLabel?: string
   selectedMonth: string
   selectedYear: number
   onSelectPeriod: (period: MeiPeriod) => void
@@ -109,6 +110,7 @@ export function MeiMobileDasPanel ({
   onCreateGuide,
   onRefreshPeriods,
   onOpenPgmei,
+  portalButtonLabel = 'PGMEI',
   selectedMonth,
   selectedYear,
   onSelectPeriod,
@@ -425,7 +427,9 @@ export function MeiMobileDasPanel ({
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.advancedBtn} onPress={onOpenPgmei}>
-            <Text style={[styles.advancedBtnText, { color: tokens.accent }]}>Abrir site PGMEI</Text>
+            <Text style={[styles.advancedBtnText, { color: tokens.accent }]}>
+              {`Abrir site ${portalButtonLabel}`}
+            </Text>
           </TouchableOpacity>
         </View>
       ) : null}

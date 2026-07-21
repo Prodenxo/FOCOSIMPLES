@@ -15,6 +15,13 @@ import {
   isFocoMeiApiDeploy,
   isMeiSlotUserLink,
 } from '../utils/product-line.js';
+import {
+  isLocalAuthMode,
+  resolveLocalRequesterContext,
+  verifyLocalAccessToken,
+  hashPassword,
+} from './local-auth.service.js';
+import { query } from '../config/pg.js';
 
 const ROLE_CREATE_ALLOWED = new Set(['superadmin', 'admin']);
 const ROLE_TARGET_ALLOWED = new Set(['admin', 'usuario', 'outsider']);
@@ -538,10 +545,20 @@ export const getRequesterContext = async (accessToken, preverifiedUser = null) =
 
   let user = preverifiedUser?.id ? preverifiedUser : null;
   if (!user?.id) {
-    const userClient = createSupabaseClient({ accessToken });
-    const { data: { user: fetched } = {}, error: userError } = await userClient.auth.getUser();
-    if (userError || !fetched) throw unauthorized();
-    user = fetched;
+    if (isLocalAuthMode()) {
+      const localUser = verifyLocalAccessToken(accessToken);
+      if (!localUser?.id) throw unauthorized();
+      user = localUser;
+    } else {
+      const userClient = createSupabaseClient({ accessToken });
+      const { data: { user: fetched } = {}, error: userError } = await userClient.auth.getUser();
+      if (userError || !fetched) throw unauthorized();
+      user = fetched;
+    }
+  }
+
+  if (isLocalAuthMode()) {
+    return resolveLocalRequesterContext(user);
   }
 
   const linkClient = createSupabaseClient({ useServiceRole: true });
@@ -720,10 +737,130 @@ const buildAuthUserMapForIds = async (adminClient, userIds, seedUsers = []) => {
   return userMap;
 };
 
+const listUsersPg = async ({ role, empresaId, search }) => {
+  const params = [];
+  const clauses = ['u.deleted_at IS NULL'];
+
+  if (role === 'admin') {
+    if (!empresaId) throw forbidden();
+    params.push(empresaId);
+    clauses.push(`link.empresas_id = $${params.length}`);
+  }
+
+  const searchTerm = String(search || '').trim().toLowerCase();
+  if (searchTerm) {
+    params.push(`%${searchTerm}%`);
+    const i = params.length;
+    clauses.push(`(
+      lower(coalesce(u.email, '')) LIKE $${i}
+      OR lower(coalesce(u.raw_user_meta_data->>'display_name', '')) LIKE $${i}
+      OR coalesce(u.phone, '') LIKE $${i}
+      OR lower(coalesce(e.empresa, '')) LIKE $${i}
+      OR lower(coalesce(e.nome_fantasia, '')) LIKE $${i}
+    )`);
+  }
+
+  const { rows } = await query(
+    `SELECT
+       u.id,
+       u.email,
+       u.phone,
+       u.raw_user_meta_data,
+       u.banned_until,
+       coalesce(p.role, 'usuario') AS profile_role,
+       link.empresas_id,
+       link.status AS link_status,
+       link.mei,
+       link.expires_at,
+       r.roles AS link_role,
+       e.empresa,
+       e.nome_fantasia,
+       e.max_mei
+     FROM public.users u
+     LEFT JOIN public.profiles p ON p.id = u.id
+     LEFT JOIN LATERAL (
+       SELECT empresas_id, roles_id, status, mei, expires_at
+       FROM public.role_x_user_x_empresa
+       WHERE user_id = u.id
+       ORDER BY created_at DESC
+       LIMIT 1
+     ) link ON true
+     LEFT JOIN public.roles r ON r.id = link.roles_id
+     LEFT JOIN public.empresas e ON e.id = link.empresas_id
+     WHERE ${clauses.join(' AND ')}
+     ORDER BY lower(coalesce(u.email, '')) ASC`,
+    params,
+  );
+
+  const users = (rows || []).map((row) => {
+    const meta = row.raw_user_meta_data || {};
+    const fromProfile = normalizeRoleValue(row.profile_role);
+    const fromLink = normalizeRoleValue(row.link_role);
+    const roleLabel =
+      fromProfile === 'superadmin'
+        ? 'superadmin'
+        : fromLink || fromProfile || 'usuario';
+    const empresaName = row.nome_fantasia || row.empresa || null;
+    const banned =
+      row.banned_until && new Date(row.banned_until).getTime() > Date.now();
+
+    return {
+      id: row.id,
+      email: row.email || null,
+      displayName: meta.display_name || null,
+      phone: row.phone || meta.phone || null,
+      role: roleLabel,
+      empresaId: row.empresas_id || null,
+      empresaName,
+      status: banned ? false : (row.link_status ?? true),
+      mei: typeof row.mei === 'boolean' ? row.mei : null,
+      expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+      productLine: deriveUserProductLine(row.mei),
+    };
+  });
+
+  return { users };
+};
+
+const listEmpresasPg = async ({ role, empresaId }) => {
+  if (role === 'admin') {
+    if (!empresaId) throw forbidden();
+    const { rows } = await query(
+      `SELECT id, empresa, nome_fantasia, max_mei, max_usuarios_nao_mei
+       FROM public.empresas
+       WHERE id = $1`,
+      [empresaId],
+    );
+    return {
+      empresas: (rows || []).map((empresa) => ({
+        ...empresa,
+        product_line: deriveEmpresaProductLine(empresa.max_mei),
+      })),
+    };
+  }
+
+  const { rows } = await query(
+    `SELECT id, empresa, nome_fantasia, max_mei, max_usuarios_nao_mei
+     FROM public.empresas
+     ORDER BY empresa ASC`,
+  );
+
+  return {
+    empresas: (rows || []).map((empresa) => ({
+      ...empresa,
+      product_line: deriveEmpresaProductLine(empresa.max_mei),
+    })),
+  };
+};
+
 export const listUsers = async (accessToken, queryParams = {}) => {
   const { search } = queryParams;
   const { role, empresaId } = await getRequesterContext(accessToken);
   if (!ROLE_CREATE_ALLOWED.has(role)) throw forbidden();
+
+  if (isLocalAuthMode()) {
+    return listUsersPg({ role, empresaId, search });
+  }
 
   const adminClient = createSupabaseClient({ useServiceRole: true });
   const searchTerm = search?.toLowerCase().trim();
@@ -901,6 +1038,10 @@ export const listEmpresas = async (accessToken) => {
   const { role, empresaId } = await getRequesterContext(accessToken);
   if (!ROLE_CREATE_ALLOWED.has(role)) throw forbidden();
 
+  if (isLocalAuthMode()) {
+    return listEmpresasPg({ role, empresaId });
+  }
+
   const adminClient = createSupabaseClient({ useServiceRole: true });
   let query = adminClient
     .from('empresas')
@@ -960,6 +1101,18 @@ export const getEmpresaById = async (accessToken, empresaId) => {
     throw forbidden('Usuário fora do escopo da empresa');
   }
 
+  if (isLocalAuthMode()) {
+    const { rows } = await query(
+      `SELECT ${EMPRESA_SELECT_FIELDS}
+       FROM public.empresas
+       WHERE id = $1
+       LIMIT 1`,
+      [normalizedEmpresaId],
+    );
+    if (!rows[0]) throw badRequest('Empresa não encontrada');
+    return { empresa: rows[0] };
+  }
+
   const adminClient = createSupabaseClient({ useServiceRole: true });
   const empresa = await getEmpresaRecordById(adminClient, normalizedEmpresaId);
   return { empresa };
@@ -969,6 +1122,39 @@ export const createEmpresa = async (accessToken, input) => {
   const { role } = await getRequesterContext(accessToken);
   if (role !== 'superadmin') throw forbidden();
   const payload = buildEmpresaPayload(input, { requireName: true });
+
+  if (isLocalAuthMode()) {
+    const { rows } = await query(
+      `INSERT INTO public.empresas (
+         empresa, max_mei, max_usuarios_nao_mei, cnpj, razao_social, nome_fantasia,
+         inscricao_estadual, regime_tributario, logradouro, numero, complemento,
+         bairro, cidade, estado, cep, telefone, email
+       ) VALUES (
+         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17
+       )
+       RETURNING ${EMPRESA_SELECT_FIELDS}`,
+      [
+        payload.empresa,
+        payload.max_mei ?? null,
+        payload.max_usuarios_nao_mei ?? null,
+        payload.cnpj ?? null,
+        payload.razao_social ?? null,
+        payload.nome_fantasia ?? null,
+        payload.inscricao_estadual ?? null,
+        payload.regime_tributario ?? null,
+        payload.logradouro ?? null,
+        payload.numero ?? null,
+        payload.complemento ?? null,
+        payload.bairro ?? null,
+        payload.cidade ?? null,
+        payload.estado ?? null,
+        payload.cep ?? null,
+        payload.telefone ?? null,
+        payload.email ?? null,
+      ],
+    );
+    return { empresa: rows[0] };
+  }
 
   const adminClient = createSupabaseClient({ useServiceRole: true });
   const { data, error } = await adminClient
@@ -1045,9 +1231,72 @@ export const createUser = async (accessToken, input, deps = {}) => {
     finalEmpresaId = requestedEmpresaId;
   }
 
+  const targetMei = resolveMeiValue(input?.mei, false);
+  const finalPassword = password || generateStrongRandomPassword();
+
+  if (isLocalAuthMode()) {
+    const emailNorm = email.toLowerCase();
+    const { rows: existing } = await query(
+      `SELECT id FROM public.users WHERE email = $1 AND deleted_at IS NULL LIMIT 1`,
+      [emailNorm],
+    );
+    if (existing[0]) throw badRequest('E-mail já cadastrado');
+
+    const roleDb =
+      finalRole === 'usuario' ? 'usuario' : finalRole;
+    const { rows: roleRows } = await query(
+      `SELECT id FROM public.roles
+       WHERE lower(roles) IN ($1, $2)
+       ORDER BY CASE WHEN lower(roles) = $1 THEN 0 ELSE 1 END
+       LIMIT 1`,
+      [roleDb, roleDb === 'usuario' ? 'user' : roleDb],
+    );
+    if (!roleRows[0]) throw badRequest('Role não encontrada');
+
+    const passwordHash = hashPassword(finalPassword);
+    const { rows: created } = await query(
+      `INSERT INTO public.users (email, password_hash, phone, email_confirmed_at, raw_user_meta_data)
+       VALUES ($1, $2, $3, now(), $4::jsonb)
+       RETURNING id, email`,
+      [
+        emailNorm,
+        passwordHash,
+        phone || null,
+        JSON.stringify({
+          display_name: displayName,
+          phone: phone || null,
+        }),
+      ],
+    );
+    const userId = created[0].id;
+    await query(
+      `INSERT INTO public.profiles (id, role) VALUES ($1, $2)
+       ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role`,
+      [userId, finalRole === 'admin' ? 'admin' : 'usuario'],
+    );
+
+    const expiresAtInsert =
+      finalRole === 'usuario' && input?.expiresAt
+        ? new Date(input.expiresAt).toISOString()
+        : null;
+    await query(
+      `INSERT INTO public.role_x_user_x_empresa
+         (user_id, roles_id, empresas_id, status, mei, expires_at)
+       VALUES ($1, $2, $3, true, $4, $5)`,
+      [userId, roleRows[0].id, finalEmpresaId, targetMei, expiresAtInsert],
+    );
+
+    return {
+      userId,
+      email: created[0].email,
+      role: finalRole,
+      empresaId: finalEmpresaId,
+      generatedPassword: password ? null : finalPassword,
+    };
+  }
+
   const adminClient = createSupabaseClientFn({ useServiceRole: true });
 
-  const targetMei = resolveMeiValue(input?.mei, false);
   await ensureEmpresaCapacity(adminClient, { empresaId: finalEmpresaId, mei: targetMei });
 
   const { roleId, role: resolvedRole } = await ensureRoleId(adminClient, finalRole);
@@ -1056,7 +1305,6 @@ export const createUser = async (accessToken, input, deps = {}) => {
     finalRole = resolvedRole;
   }
 
-  const finalPassword = password || generateStrongRandomPassword();
   const { data: createdUser, error: createError } = await adminClient.auth.admin.createUser({
     email,
     password: finalPassword,
@@ -1319,6 +1567,76 @@ export const updateUser = async (accessToken, userId, input) => {
 
   if (updateError) throw badRequest(updateError.message);
 
+  if (isLocalAuthMode()) {
+    const metaPatch = {};
+    if (requestedDisplayName) {
+      metaPatch.display_name = requestedDisplayName;
+      metaPatch.name = requestedDisplayName;
+      metaPatch.full_name = requestedDisplayName;
+    }
+    if (requestedPhone) metaPatch.phone = requestedPhone;
+
+    if (Object.keys(metaPatch).length > 0 || requestedEmail || requestedPhone) {
+      const { rows: userRows } = await query(
+        `SELECT email, phone, raw_user_meta_data
+         FROM public.users
+         WHERE id = $1 AND deleted_at IS NULL
+         LIMIT 1`,
+        [userId],
+      );
+      const current = userRows[0];
+      if (!current) throw badRequest('Usuário não encontrado');
+
+      let nextEmail = current.email;
+      if (requestedEmail && requestedEmail !== String(current.email || '').toLowerCase()) {
+        const { rows: taken } = await query(
+          `SELECT id FROM public.users
+           WHERE email = $1 AND id <> $2 AND deleted_at IS NULL
+           LIMIT 1`,
+          [requestedEmail, userId],
+        );
+        if (taken[0]) throw badRequest('E-mail já cadastrado');
+        nextEmail = requestedEmail;
+      }
+
+      const nextPhone = requestedPhone || current.phone || null;
+      const nextMeta = {
+        ...(current.raw_user_meta_data && typeof current.raw_user_meta_data === 'object'
+          ? current.raw_user_meta_data
+          : {}),
+        ...metaPatch,
+      };
+
+      await query(
+        `UPDATE public.users
+         SET email = $1,
+             phone = $2,
+             raw_user_meta_data = $3::jsonb,
+             updated_at = now()
+         WHERE id = $4`,
+        [nextEmail, nextPhone, JSON.stringify(nextMeta), userId],
+      );
+    }
+
+    if (requestedPhone) {
+      await assignN8nPhoneToUser(adminClient, userId, requestedPhone);
+    }
+
+    // Schema local: profiles só tem role (display_name fica em users.raw_user_meta_data)
+    await query(
+      `INSERT INTO public.profiles (id, role)
+       VALUES ($1, $2)
+       ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role`,
+      [userId, finalRole === 'usuario' ? 'usuario' : finalRole],
+    );
+
+    return {
+      userId,
+      role: finalRole,
+      empresaId: finalEmpresaId
+    };
+  }
+
   if (requestedDisplayName || requestedPhone) {
     const metadata = {};
     if (requestedDisplayName) {
@@ -1382,6 +1700,47 @@ export const banUser = async (accessToken, userId, status = false) => {
   if (!ROLE_CREATE_ALLOWED.has(requester.role)) throw forbidden();
   if (requester.userId === userId) {
     throw badRequest('Não é possível bloquear a sua própria conta por aqui.');
+  }
+
+  if (isLocalAuthMode()) {
+    const { rows: linkRows } = await query(
+      `SELECT id, empresas_id, roles_id
+       FROM public.role_x_user_x_empresa
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [userId],
+    );
+    const linkData = linkRows[0];
+    if (!linkData?.roles_id) throw badRequest('Vínculo de role não encontrado');
+
+    const { rows: roleRows } = await query(
+      `SELECT roles FROM public.roles WHERE id = $1 LIMIT 1`,
+      [linkData.roles_id],
+    );
+    const targetRole = normalizeRoleValue(roleRows[0]?.roles) || 'usuario';
+
+    if (requester.role === 'admin') {
+      if (targetRole !== 'usuario') throw forbidden();
+      if (!requester.empresaId || requester.empresaId !== linkData.empresas_id) throw forbidden();
+    }
+    if (requester.role === 'superadmin') {
+      if (!ROLE_UPDATE_ALLOWED_SUPERADMIN.has(targetRole)) throw forbidden();
+    }
+
+    // Atualiza todos os vínculos do usuário (lista e login usam o mais recente)
+    await query(
+      `UPDATE public.role_x_user_x_empresa SET status = $1 WHERE user_id = $2`,
+      [status, userId],
+    );
+    // Espelha em users.banned_until (login local também consulta esse campo)
+    await query(
+      `UPDATE public.users
+       SET banned_until = $1, updated_at = NOW()
+       WHERE id = $2`,
+      [status ? null : new Date('2099-12-31T23:59:59.000Z').toISOString(), userId],
+    );
+    return { userId, status };
   }
 
   const adminClient = createSupabaseClient({ useServiceRole: true });
@@ -1459,6 +1818,46 @@ export const deleteUser = async (accessToken, userId) => {
     throw badRequest('Não é possível excluir a sua própria conta por aqui.');
   }
 
+  if (isLocalAuthMode()) {
+    const { rows: linkRows } = await query(
+      `SELECT empresas_id, roles_id
+       FROM public.role_x_user_x_empresa
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [userId],
+    );
+    const linkData = linkRows[0];
+    const isOrphanAccount = !linkData?.roles_id;
+
+    if (!isOrphanAccount) {
+      const { rows: roleRows } = await query(
+        `SELECT roles FROM public.roles WHERE id = $1 LIMIT 1`,
+        [linkData.roles_id],
+      );
+      const targetRole = normalizeRoleValue(roleRows[0]?.roles) || 'usuario';
+      if (requester.role === 'admin') {
+        if (targetRole !== 'usuario') throw forbidden();
+        if (!requester.empresaId || requester.empresaId !== linkData.empresas_id) throw forbidden();
+      }
+      if (requester.role === 'superadmin' && targetRole === 'superadmin') {
+        throw forbidden();
+      }
+    } else if (requester.role !== 'superadmin') {
+      throw forbidden();
+    }
+
+    await query(`DELETE FROM public.role_x_user_x_empresa WHERE user_id = $1`, [userId]);
+    await query(`DELETE FROM public.profiles WHERE id = $1`, [userId]);
+    await query(
+      `UPDATE public.users
+       SET deleted_at = now(), email = email || '.deleted.' || id::text
+       WHERE id = $1 AND deleted_at IS NULL`,
+      [userId],
+    );
+    return { userId, deleted: true };
+  }
+
   const adminClient = createSupabaseClient({ useServiceRole: true });
   const { data: linkData, error: linkError } = await adminClient
     .from('role_x_user_x_empresa')
@@ -1513,6 +1912,13 @@ export const deleteEmpresa = async (accessToken, empresaId) => {
   const requester = await getRequesterContext(accessToken);
   if (requester.role !== 'superadmin') throw forbidden();
 
+  if (isLocalAuthMode()) {
+    await query(`DELETE FROM public.role_x_user_x_empresa WHERE empresas_id = $1`, [empresaId]);
+    const { rowCount } = await query(`DELETE FROM public.empresas WHERE id = $1`, [empresaId]);
+    if (!rowCount) throw badRequest('Empresa não encontrada');
+    return { empresaId };
+  }
+
   const adminClient = createSupabaseClient({ useServiceRole: true });
 
   // 1. Remover todos os vínculos de usuários com esta empresa
@@ -1540,6 +1946,34 @@ const getPasswordResetAuthorization = async (accessToken, userId) => {
 
   const requester = await getRequesterContext(accessToken);
   if (!ROLE_CREATE_ALLOWED.has(requester.role)) throw forbidden();
+
+  if (isLocalAuthMode()) {
+    const { rows: linkRows } = await query(
+      `SELECT empresas_id, roles_id
+       FROM public.role_x_user_x_empresa
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [userId],
+    );
+    const linkData = linkRows[0];
+    if (!linkData?.roles_id) throw badRequest('Vínculo de role não encontrado');
+
+    const { rows: roleRows } = await query(
+      `SELECT roles FROM public.roles WHERE id = $1 LIMIT 1`,
+      [linkData.roles_id],
+    );
+    const targetRole = normalizeRoleValue(roleRows[0]?.roles) || 'usuario';
+
+    if (requester.role === 'admin') {
+      if (targetRole !== 'usuario') throw forbidden();
+      if (!requester.empresaId || requester.empresaId !== linkData.empresas_id) throw forbidden();
+    }
+    if (requester.role === 'superadmin') {
+      if (!ROLE_UPDATE_ALLOWED_SUPERADMIN.has(targetRole)) throw forbidden();
+    }
+    return { adminClient: null };
+  }
 
   const adminClient = createSupabaseClient({ useServiceRole: true });
   const { data: linkData, error: linkError } = await adminClient
@@ -1575,6 +2009,23 @@ const getPasswordResetAuthorization = async (accessToken, userId) => {
 };
 
 export const resetUserPassword = async (accessToken, userId, input) => {
+  if (isLocalAuthMode()) {
+    await getPasswordResetAuthorization(accessToken, userId);
+    const trimmedProvided = input?.password?.trim();
+    if (trimmedProvided) {
+      assertStrongPassword(trimmedProvided);
+    }
+    const newPassword = trimmedProvided || generateStrongRandomPassword();
+    const passwordHash = hashPassword(newPassword);
+    const { rowCount } = await query(
+      `UPDATE public.users SET password_hash = $1, updated_at = now()
+       WHERE id = $2 AND deleted_at IS NULL`,
+      [passwordHash, userId],
+    );
+    if (!rowCount) throw badRequest('Usuário não encontrado');
+    return { userId, password: newPassword };
+  }
+
   const { adminClient } = await getPasswordResetAuthorization(accessToken, userId);
 
   const trimmedProvided = input?.password?.trim();

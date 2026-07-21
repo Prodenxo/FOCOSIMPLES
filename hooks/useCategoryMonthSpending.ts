@@ -5,6 +5,8 @@ import {
   type CategoryBudgetSummary,
 } from '../lib/categoryService';
 import { normalizarTipo, normalizeCategoryKey } from '../lib/dashboardUtils';
+import { apiClient } from '../lib/apiClient';
+import { isLocalApiAuthMode } from '../lib/authMode';
 
 export type MonthRef = { year: number; month: number };
 
@@ -35,6 +37,18 @@ function getMonthRange({ year, month }: MonthRef) {
   };
 }
 
+function mapTxRows(rows: Record<string, unknown>[]): CategoryTransactionLine[] {
+  return rows.map((row) => ({
+    id: String(row.id ?? ''),
+    data: String(row.data ?? ''),
+    valor: Number(row.valor ?? 0),
+    tipo: String(row.tipo ?? ''),
+    classificacao: String(row.classificacao ?? ''),
+    status: String(row.status ?? ''),
+    obs: row.obs != null ? String(row.obs) : null,
+  }));
+}
+
 export function useCategoryMonthSpending(
   userId: string | null,
   monthRef: MonthRef
@@ -54,8 +68,29 @@ export function useCategoryMonthSpending(
 
     const { startOfMonth, endOfMonth } = getMonthRange(monthRef);
 
+    const summaryPromise = fetchCategoryBudgetsSummary(userId, monthRef).catch(() => []);
+
+    let txRows: CategoryTransactionLine[] = [];
+    if (isLocalApiAuthMode()) {
+      try {
+        const all = await apiClient.get<Record<string, unknown>[]>('/transactions');
+        txRows = mapTxRows(
+          (all || []).filter((row) => {
+            const d = String(row.data ?? '');
+            return d >= startOfMonth && d <= endOfMonth;
+          }),
+        );
+      } catch {
+        txRows = [];
+      }
+      const summary = await summaryPromise;
+      setBudgetSummary(summary);
+      setMonthTransactions(txRows);
+      return;
+    }
+
     const [summary, txResult] = await Promise.all([
-      fetchCategoryBudgetsSummary(userId, monthRef),
+      summaryPromise,
       supabase
         .from('lancamentos_id')
         .select('id, classificacao, valor, tipo, data, status, obs')
@@ -70,17 +105,7 @@ export function useCategoryMonthSpending(
     if (txResult.error || !txResult.data) {
       setMonthTransactions([]);
     } else {
-      setMonthTransactions(
-        txResult.data.map((row: Record<string, unknown>) => ({
-          id: String(row.id ?? ''),
-          data: String(row.data ?? ''),
-          valor: Number(row.valor ?? 0),
-          tipo: String(row.tipo ?? ''),
-          classificacao: String(row.classificacao ?? ''),
-          status: String(row.status ?? ''),
-          obs: row.obs != null ? String(row.obs) : null,
-        }))
-      );
+      setMonthTransactions(mapTxRows(txResult.data as Record<string, unknown>[]));
     }
   }, [userId, monthRef.year, monthRef.month]);
 

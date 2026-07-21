@@ -61,6 +61,10 @@ export const decryptPassphrase = (passphraseEnc, passphraseIv) => {
 };
 
 const getSupabase = () => {
+  // AUTH local: cliente Postgres compatível (sem SUPABASE_URL).
+  if (String(env.AUTH_MODE || '').trim().toLowerCase() === 'local') {
+    return createSupabaseClient({ useServiceRole: true });
+  }
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
     throw badRequest('Supabase não configurado para persistência de certificado');
   }
@@ -395,6 +399,92 @@ export const getEmitenteNfseSnapshot = async (userId) => {
   if (error || !data) return null;
   if (!emitenteDbRowHasNfseData(data)) return null;
   return emitenteRowToApiShape(data);
+};
+
+const emptyNfsePrestadorPrefill = () => ({
+  prestadorCpfCnpj: null,
+  prestadorRazaoSocial: null,
+  prestadorEmail: null,
+  prestadorInscricaoMunicipal: null,
+  prestadorEndereco: null,
+  sourceRowId: null,
+});
+
+/**
+ * Prefill do prestador NFSe a partir de `user_mei_certificates` (substitui Edge `mei-prestador-prefill`).
+ * @param {string} userId
+ * @returns {Promise<{
+ *   prestadorCpfCnpj: string|null,
+ *   prestadorRazaoSocial: string|null,
+ *   prestadorEmail: string|null,
+ *   prestadorInscricaoMunicipal: string|null,
+ *   prestadorEndereco: object|null,
+ *   sourceRowId: string|null,
+ * }>}
+ */
+export const getNfsePrestadorPrefill = async (userId) => {
+  if (!userId) return emptyNfsePrestadorPrefill();
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select(`
+      id,
+      cert_document,
+      razao_social,
+      fiscal_email,
+      inscricao_municipal,
+      logradouro,
+      numero,
+      complemento,
+      bairro,
+      ibge_municipio,
+      cep,
+      cidade,
+      uf
+    `)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error || !data) return emptyNfsePrestadorPrefill();
+
+  const cnpj = digitsOnly(data.cert_document) || null;
+  const hasAnyAddress = Boolean(
+    data.logradouro
+    || data.numero
+    || data.ibge_municipio
+    || data.cep
+    || data.complemento
+    || data.bairro
+    || data.cidade
+    || data.uf,
+  );
+  const cepDigits = digitsOnly(data.cep).slice(0, 8);
+  const uf = data.uf != null ? String(data.uf).trim().toUpperCase().slice(0, 2) : '';
+  const codigoCidade = (() => {
+    const raw = data.ibge_municipio != null ? String(data.ibge_municipio) : '';
+    return digitsOnly(raw) || raw.trim() || null;
+  })();
+
+  return {
+    prestadorCpfCnpj: cnpj && cnpj.length >= 11 ? cnpj.slice(0, 14) : null,
+    prestadorRazaoSocial: data.razao_social != null ? String(data.razao_social) : null,
+    prestadorEmail: data.fiscal_email != null ? String(data.fiscal_email) : null,
+    prestadorInscricaoMunicipal:
+      data.inscricao_municipal != null ? String(data.inscricao_municipal) : null,
+    prestadorEndereco: hasAnyAddress
+      ? {
+          logradouro: data.logradouro != null ? String(data.logradouro) : null,
+          numero: data.numero != null ? String(data.numero) : null,
+          codigoCidade,
+          cep: cepDigits || null,
+          complemento: data.complemento != null ? String(data.complemento) : null,
+          bairro: data.bairro != null ? String(data.bairro) : null,
+          estado: uf || null,
+          descricaoCidade: data.cidade != null ? String(data.cidade) : null,
+        }
+      : null,
+    sourceRowId: data.id != null ? String(data.id) : null,
+  };
 };
 
 /**

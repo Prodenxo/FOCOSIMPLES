@@ -6,6 +6,7 @@ import {
   lookupDefaultCodigoNbs,
   normalizeCodigoNbs,
   resolveCodigoNbsForServico,
+  resolveCodigoTributacaoForServico,
 } from '../src/services/nfse-codigo-nbs.js';
 
 test('normalizeCodigoNbs aceita 9 dígitos com ou sem máscara', () => {
@@ -38,4 +39,11 @@ test('enrichCodigosServicosComNbs adiciona codigo_nbs nas linhas', () => {
   ]);
   assert.equal(out[0].codigo_nbs, '114061100');
   assert.equal(out[1].codigo_nbs, null);
+});
+
+test('resolveCodigoTributacaoForServico usa 001 por padrão (ADN / RJ)', () => {
+  assert.equal(resolveCodigoTributacaoForServico({}), '001');
+  assert.equal(resolveCodigoTributacaoForServico({ codigoTributacao: '1' }), '001');
+  assert.equal(resolveCodigoTributacaoForServico({ codigoTributacao: '12' }), '012');
+  assert.equal(resolveCodigoTributacaoForServico({ cTribMun: '045' }), '045');
 });

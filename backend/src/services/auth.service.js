@@ -18,6 +18,13 @@ import {
   sendPasswordResetViaSupabase,
 } from './password-reset-email.service.js';
 import { buildSignupOriginMetadata, resolveAppOriginFromRequest } from '../utils/app-origin.js';
+import {
+  isLocalAuthMode,
+  localGetSession,
+  localSignIn,
+  localSignOut,
+  localSignUp,
+} from './local-auth.service.js';
 
 const assertValidWhatsappPhone = (phone) => {
   const digits = normalizeWhatsappPhoneDigits(phone);
@@ -258,6 +265,10 @@ const getResolvedRoleAndCompany = async ({ accessToken, userId }) => {
 };
 
 export const signUp = async ({ email, password, phone, displayName, inviteToken, appOrigin }, deps = {}) => {
+  if (isLocalAuthMode()) {
+    return localSignUp({ email, password, phone, displayName, inviteToken });
+  }
+
   if (!email || !password) {
     throw badRequest('Email e senha são obrigatórios');
   }
@@ -390,6 +401,10 @@ export const signUp = async ({ email, password, phone, displayName, inviteToken,
 const isHttpError = (err) => err && typeof err.status === 'number';
 
 export const signIn = async ({ email, password }) => {
+  if (isLocalAuthMode()) {
+    return localSignIn({ email, password });
+  }
+
   if (!email || !password) {
     throw badRequest('Email e senha são obrigatórios');
   }
@@ -433,6 +448,10 @@ export const signIn = async ({ email, password }) => {
 };
 
 export const signOut = async (accessToken) => {
+  if (isLocalAuthMode()) {
+    await localSignOut();
+    return;
+  }
   if (!accessToken) return;
   const { error } = await createSupabaseClient({ accessToken }).auth.signOut();
   if (error) {
@@ -441,6 +460,9 @@ export const signOut = async (accessToken) => {
 };
 
 export const getSession = async (accessToken) => {
+  if (isLocalAuthMode()) {
+    return localGetSession(accessToken);
+  }
   if (!accessToken) return null;
 
   const supabase = createSupabaseClient({ accessToken });
@@ -469,6 +491,12 @@ export const getSession = async (accessToken) => {
 };
 
 export const resetPasswordForEmail = async (email) => {
+  if (isLocalAuthMode()) {
+    throw badRequest(
+      'Recuperação de senha ainda não está disponível no Auth local. Em breve.',
+      { code: 'LOCAL_RESET_NOT_IMPLEMENTED' },
+    );
+  }
   const normalized = String(email || '').trim().toLowerCase();
   if (!normalized) throw badRequest('Email é obrigatório');
   const baseUrl = env.FRONTEND_URL ? env.FRONTEND_URL.replace(/\/$/, '') : '';

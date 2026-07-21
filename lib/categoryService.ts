@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, isSupabaseConfigured } from './supabase';
 import { apiClient } from './apiClient';
 import { getMeiApiBaseUrl } from './runtimeEnv';
 
@@ -161,6 +161,21 @@ export async function fetchCategoryBudgetsSummary(
   userId: string,
   monthParams: MonthParams
 ): Promise<CategoryBudgetSummary[]> {
+  if (getMeiApiBaseUrl()) {
+    try {
+      const { year, month } = monthParams;
+      const data = await apiClient.get<CategoryBudgetSummary[]>(
+        `/categories/budgets/summary?year=${year}&month=${month}`,
+      );
+      return data || [];
+    } catch (error) {
+      console.warn('budgets/summary via API falhou.', error);
+      return [];
+    }
+  }
+
+  if (!isSupabaseConfigured()) return [];
+
   await ensureMonthlyBudgets(userId, monthParams);
 
   const currentMonthStart = getMonthStart(monthParams);
@@ -354,13 +369,27 @@ export async function fetchCategoryBudgetsDreMatrix(userId: string, year: number
       const data = await apiClient.get<DreMatrixCell[]>(`/categories/budgets/dre-matrix?year=${year}`);
       return data || [];
     } catch (error) {
-      console.warn('dre-matrix via API falhou; usando Supabase.', error);
+      console.warn('dre-matrix via API falhou.', error);
+      return [];
     }
   }
+  if (!isSupabaseConfigured()) return [];
   return buildDreMatrixFromSupabase(userId, year);
 }
 
 export async function fetchCategoryBudgetsYearly(userId: string, year: number) {
+  if (getMeiApiBaseUrl()) {
+    try {
+      const data = await apiClient.get<unknown[]>(`/categories/budgets/yearly?year=${year}`);
+      return data || [];
+    } catch (error) {
+      console.warn('budgets/yearly via API falhou.', error);
+      return [];
+    }
+  }
+
+  if (!isSupabaseConfigured()) return [];
+
   const startOfYear = `${year}-01-01`;
   const endOfYear = `${year}-12-31`;
 
@@ -383,6 +412,24 @@ export async function saveCategoryBudget(
   valorOrcado: number | null,
   date: string
 ) {
+  if (getMeiApiBaseUrl()) {
+    try {
+      await apiClient.post('/categories/budgets', {
+        categorias_id: categoriasId,
+        valor_orcado: valorOrcado,
+        date,
+      });
+      return { error: null };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Falha ao salvar orçamento';
+      return { error: { message } };
+    }
+  }
+
+  if (!isSupabaseConfigured()) {
+    return { error: { message: 'API de orçamentos não configurada' } };
+  }
+
   const { data: existing } = await orcamentos()
     .select('id')
     .eq('categorias_id', categoriasId)
@@ -415,6 +462,13 @@ export async function deleteCategoryBudget(
 }
 
 export async function duplicateMonthlyBudgets(userId: string, year: number, month: number) {
+  if (getMeiApiBaseUrl()) {
+    await apiClient.post('/categories/budgets/duplicate', { year, month });
+    return;
+  }
+
+  if (!isSupabaseConfigured()) return;
+
   const monthParams = { year, month };
   await ensureMonthlyBudgets(userId, monthParams);
 

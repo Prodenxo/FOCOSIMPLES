@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from './authStore';
+import { apiClient } from '../lib/apiClient';
+import { isLocalApiAuthMode } from '../lib/authMode';
 
 export interface Recorrencia {
   id: string;
@@ -75,17 +77,25 @@ export const useRecorrenciaStore = create<RecorrenciaState>((set, get) => ({
     const userId = useAuthStore.getState().userId;
     if (!userId) return;
     try {
-      const { data, error } = await supabase
-        .from('recorrencia_skips')
-        .select('recorrencia_id, ano_mes')
-        .eq('user_id', userId);
-      if (error) throw error;
-      set({
-        skips: (data || []).map((row) => ({
+      let rows: RecorrenciaSkip[] = [];
+      if (isLocalApiAuthMode()) {
+        const data = await apiClient.get<RecorrenciaSkip[]>('/recorrencias/skips');
+        rows = (data || []).map((row) => ({
+          recorrencia_id: String(row.recorrencia_id ?? ''),
+          ano_mes: String(row.ano_mes ?? ''),
+        }));
+      } else {
+        const { data, error } = await supabase
+          .from('recorrencia_skips')
+          .select('recorrencia_id, ano_mes')
+          .eq('user_id', userId);
+        if (error) throw error;
+        rows = (data || []).map((row) => ({
           recorrencia_id: String((row as Record<string, unknown>).recorrencia_id ?? ''),
           ano_mes: String((row as Record<string, unknown>).ano_mes ?? ''),
-        })),
-      });
+        }));
+      }
+      set({ skips: rows });
     } catch (e: unknown) {
       // Skips são auxiliares — não bloqueamos UI se falhar. Apenas log.
       console.warn('[recorrenciaStore] fetchSkips error:', e);
@@ -96,12 +106,19 @@ export const useRecorrenciaStore = create<RecorrenciaState>((set, get) => ({
     const userId = useAuthStore.getState().userId;
     if (!userId) return false;
     try {
-      // INSERT idempotente: UNIQUE constraint cuida de duplicidade.
-      const { error } = await supabase
-        .from('recorrencia_skips')
-        .insert([{ user_id: userId, recorrencia_id: recorrenciaId, ano_mes: anoMes }]);
-      // Código 23505 (unique_violation) é OK — já estava skipado.
-      if (error && error.code !== '23505') throw error;
+      if (isLocalApiAuthMode()) {
+        await apiClient.post('/recorrencias/skips', {
+          recorrencia_id: recorrenciaId,
+          ano_mes: anoMes,
+        });
+      } else {
+        // INSERT idempotente: UNIQUE constraint cuida de duplicidade.
+        const { error } = await supabase
+          .from('recorrencia_skips')
+          .insert([{ user_id: userId, recorrencia_id: recorrenciaId, ano_mes: anoMes }]);
+        // Código 23505 (unique_violation) é OK — já estava skipado.
+        if (error && error.code !== '23505') throw error;
+      }
       // Atualiza o estado local imediatamente (sem refetch).
       const current = get().skips;
       const already = current.some(
@@ -125,6 +142,14 @@ export const useRecorrenciaStore = create<RecorrenciaState>((set, get) => ({
     }
     set({ loading: true, error: null });
     try {
+      if (isLocalApiAuthMode()) {
+        const data = await apiClient.get<Record<string, unknown>[]>('/recorrencias');
+        set({
+          recorrencias: (data || []).map((r) => normalizeRow(r)),
+          loading: false,
+        });
+        return;
+      }
       const { data, error } = await supabase
         .from('recorrencias')
         .select('*')
@@ -154,6 +179,11 @@ export const useRecorrenciaStore = create<RecorrenciaState>((set, get) => ({
         valor: typeof row.valor === 'number' ? row.valor : parseFloat(String(row.valor)),
         user_id: userId,
       };
+      if (isLocalApiAuthMode()) {
+        const data = await apiClient.post<Record<string, unknown>>('/recorrencias', payload);
+        await get().fetchRecorrencias();
+        return data ? normalizeRow(data) : null;
+      }
       const { data, error } = await supabase
         .from('recorrencias')
         .insert([payload])
@@ -182,6 +212,11 @@ export const useRecorrenciaStore = create<RecorrenciaState>((set, get) => ({
         data.valor =
           typeof patch.valor === 'number' ? patch.valor : parseFloat(String(patch.valor));
       }
+      if (isLocalApiAuthMode()) {
+        await apiClient.put(`/recorrencias/${encodeURIComponent(id)}`, data);
+        await get().fetchRecorrencias();
+        return;
+      }
       const { error } = await supabase
         .from('recorrencias')
         .update(data)
@@ -204,6 +239,13 @@ export const useRecorrenciaStore = create<RecorrenciaState>((set, get) => ({
     }
     set({ error: null });
     try {
+      if (isLocalApiAuthMode()) {
+        const result = await apiClient.delete<{ success?: boolean; mode?: 'hard' | 'soft' }>(
+          `/recorrencias/${encodeURIComponent(id)}`,
+        );
+        await get().fetchRecorrencias();
+        return { ok: true, mode: result?.mode === 'soft' ? 'soft' : 'hard' };
+      }
       const { error } = await supabase
         .from('recorrencias')
         .delete()

@@ -13,7 +13,7 @@ import {
   reconcileEmitenteMirrorFromEmpresaJson,
 } from './mei-emitente-empresa-sync.js';
 import { consultarEmpresaAndReconcileMirror } from './mei-notas-documentos-mirror.js';
-import { resolveCodigoNbsForServico } from './nfse-codigo-nbs.js';
+import { resolveCodigoNbsForServico, resolveCodigoTributacaoForServico } from './nfse-codigo-nbs.js';
 import {
   atualizarCatalogoCliente,
   baixarPdf,
@@ -566,11 +566,19 @@ const resolveServicoDefaults = async (userId, payload, emitente) => {
     codigo: codigoFinal,
     codigoNbs,
   });
+  const codigoTributacao = resolveCodigoTributacaoForServico({
+    codigoTributacao: firstNonEmpty(
+      payload?.codigoTributacao,
+      payload?.codigo_tributacao,
+      payload?.cTribMun,
+    ),
+  });
 
   const servico = {
     codigo: codigoFinal,
     discriminacao,
     cnae: cnaeNorm,
+    codigoTributacao,
     ...(codigoNbsResolved ? { codigoNbs: codigoNbsResolved } : {}),
   };
 

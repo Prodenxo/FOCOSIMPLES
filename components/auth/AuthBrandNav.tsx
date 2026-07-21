@@ -21,7 +21,7 @@ export function AuthBrandNav() {
           accessibilityRole="link"
           accessibilityLabel="FocoSimples — início"
         >
-          <AppBrandLogo variant="wordmark" onDarkBackground />
+          <AppBrandLogo variant="wordmark" onDarkBackground transparent />
         </Pressable>
         <AuthThemeToggle variant="inline" />
       </View>

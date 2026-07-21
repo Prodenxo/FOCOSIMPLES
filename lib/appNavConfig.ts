@@ -71,7 +71,7 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
   },
   {
     screen: 'MeuMei',
-    label: 'Área fiscal',
+    label: 'Notas',
     icon: 'briefcase-outline',
     activeIcon: 'briefcase',
     requiresMeiAccess: true,

@@ -239,16 +239,17 @@ export default function AccessApprovalsScreen({ onBack }: Props) {
           ) : null}
 
           {tab === 'history'
-            ? history.map((entry) => {
+            ? history.map((entry, index) => {
                 const badgeStyle =
                   entry.eventType === 'approved' ? styles.badgeApproved : styles.badgeSubmitted;
                 const badgeTextStyle =
                   entry.eventType === 'approved'
                     ? styles.badgeTextApproved
                     : styles.badgeTextSubmitted;
+                const historyKey = String(entry.id || `${entry.eventType}-${entry.occurredAt}-${index}`);
 
                 return (
-                  <View key={entry.id} style={styles.card}>
+                  <View key={historyKey} style={styles.card}>
                     <View style={styles.historyTopRow}>
                       <View style={[styles.badge, badgeStyle]}>
                         <Text style={[styles.badgeText, badgeTextStyle]}>
@@ -284,10 +285,12 @@ export default function AccessApprovalsScreen({ onBack }: Props) {
             : null}
 
           {tab === 'pending'
-            ? requests.map((req) => {
+            ? requests
+                .filter((req) => Boolean(req?.userId))
+                .map((req) => {
             const acting = actingId === req.userId;
             return (
-              <View key={req.userId} style={styles.card}>
+              <View key={String(req.userId)} style={styles.card}>
                 <View style={styles.cardTopRow}>
                   <View style={styles.avatar}>
                     <Ionicons name="person-outline" size={20} color={theme.primary} />

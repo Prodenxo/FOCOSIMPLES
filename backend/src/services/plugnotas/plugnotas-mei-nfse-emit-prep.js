@@ -21,7 +21,6 @@ import { resolvePrestadorEmitEmail } from './plugnotas-nfse-email-resolve.js';
 import { PLUGNOTAS_EMPRESA_NAO_CADASTRADA_CODE } from './empresa-cadastro-runtime-decision.js';
 import {
   PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA,
-  PLUGNOTAS_REGIME_ESPECIAL_MEI,
   applyNfseNationalContractPolicy,
   normalizeMeiEmpresaPayload,
 } from './plugnotas-mei-empresa-policy.js';
@@ -106,7 +105,6 @@ export const buildEmpresaPayloadFromEmitenteSnapshot = (
     nomeFantasia,
     regimeTributario: 1,
     simplesNacional: true,
-    regimeTributarioEspecial: PLUGNOTAS_REGIME_ESPECIAL_MEI,
     inscricaoEstadual: PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA,
     endereco,
     nfse: selection.nfse

@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { getMonthStart, normalizeCategoryKey } from '../lib/dashboardUtils';
+import { fetchCategoryBudgetsSummary as fetchBudgetsSummaryApi } from '../lib/categoryService';
+import { isLocalApiAuthMode } from '../lib/authMode';
+import { getMeiApiBaseUrl } from '../lib/runtimeEnv';
 
 export type BudgetSummaryItem = {
   categorias_id: number;
@@ -21,7 +24,19 @@ export function useDashboardBudgetSummary(
       setBudgetSummary([]);
       return;
     }
+
     const { year, month } = selectedYearMonth;
+
+    if (isLocalApiAuthMode() || getMeiApiBaseUrl()) {
+      try {
+        const data = await fetchBudgetsSummaryApi(userId, { year, month });
+        setBudgetSummary(data || []);
+      } catch {
+        setBudgetSummary([]);
+      }
+      return;
+    }
+
     const monthDate = new Date(year, month - 1, 1);
     const currentMonthStart = getMonthStart(monthDate);
     const startOfMonth = new Date(year, month - 1, 1).toISOString().split('T')[0];

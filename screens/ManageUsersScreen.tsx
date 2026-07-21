@@ -24,6 +24,7 @@ import { getTechTokens, mfTechInsetSurface } from '../lib/techDesign';
 import { cleanPhone, hasRole } from '../lib/auth-roles';
 import { getMeiUserStatusShort, getMeiUserTypeLabel, isMeiSlotUser } from '../lib/meiUserSlot';
 import { filterFocoMeiAdminEmpresas, filterFocoMeiAdminUsers, listEmpresaMembersForMeiAdmin } from '../lib/focomeiAdminFilters';
+import { resolveAppOrigin } from '../lib/appOrigin';
 import { isFocoMeiProductLine, productLineLabel, resolveEmpresaProductLine, resolveUserProductLine } from '../lib/productLine';
 import { getManagedUserActions } from '../lib/managedUserActions';
 import { formatPhoneBrCell } from '../lib/numberFormat';
@@ -81,7 +82,7 @@ const ROLE_LABEL: Record<string, string> = {
 
 const ROLE_DESCRIPTION: Record<RoleOption, string> = {
   admin: 'Acesso total ao painel administrativo da empresa.',
-  usuario: 'Acesso padrão ao FocoMEI.',
+  usuario: 'Acesso padrão ao Foco Simples.',
   outsider: 'Acesso temporário ou externo, com escopo restrito.',
 };
 
@@ -863,7 +864,7 @@ function Field({ label, required, helper, children, styles }: FieldProps) {
 // =======================================================================
 
 export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Props) {
-  const { role, sessionRestored, impersonate, userId: currentUserId } = useAuthStore();
+  const { role, sessionRestored, impersonate, userId: currentUserId, refreshAccessContext } = useAuthStore();
   const canManage = hasRole(role, ['admin']);
   const { isDarkMode } = useThemeStore();
   const theme = useMemo(() => getTheme(isDarkMode), [isDarkMode]);
@@ -923,6 +924,12 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
   // Excluir (Alert.alert com 2 botões não funciona na web)
   const [deleteUserModalOpen, setDeleteUserModalOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<ManagedUser | null>(null);
+
+  // Bloquear / desbloquear (Alert.alert com 2 botões não funciona na web)
+  const [banUserModalOpen, setBanUserModalOpen] = useState(false);
+  const [unbanUserModalOpen, setUnbanUserModalOpen] = useState(false);
+  const [userToBan, setUserToBan] = useState<ManagedUser | null>(null);
+  const [userToUnban, setUserToUnban] = useState<ManagedUser | null>(null);
 
   // Excluir empresa (Alert.alert com 2 botões não funciona na web)
   const [deleteEmpresaModalOpen, setDeleteEmpresaModalOpen] = useState(false);
@@ -1138,8 +1145,15 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
     }
   };
 
-  const focomeiUsers = useMemo(() => filterFocoMeiAdminUsers(users), [users]);
-  const focomeiEmpresas = useMemo(() => filterFocoMeiAdminEmpresas(empresas), [empresas]);
+  const focomeiUsers = useMemo(() => {
+    // Foco Simples: lista todos. FocoMEI: só vagas MEI.
+    if (resolveAppOrigin() === 'focomei') return filterFocoMeiAdminUsers(users);
+    return users;
+  }, [users]);
+  const focomeiEmpresas = useMemo(() => {
+    if (resolveAppOrigin() === 'focomei') return filterFocoMeiAdminEmpresas(empresas);
+    return empresas;
+  }, [empresas]);
 
   const empresaMembersList = useMemo(() => {
     if (!membersEmpresa) return [];
@@ -1291,6 +1305,11 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
           nfce: editDocNfce,
         });
       }
+      // Aba Notas depende do mei na sessão — atualiza sem forçar novo login
+      if (isEditingSelf) {
+        useAuthStore.setState({ mei: editMei });
+        await refreshAccessContext();
+      }
       setSuccess(
         emailChanged
           ? `Usuário atualizado. Link de confirmação enviado para ${trimmedEditEmail}.`
@@ -1305,51 +1324,64 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
     }
   };
 
-  const handleBanUser = async (user: ManagedUser) => {
-    Alert.alert('Bloquear usuário', 'Tem certeza que deseja bloquear este usuário?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Bloquear',
-        style: 'destructive',
-        onPress: async () => {
-          setLoading(true);
-          setError('');
-          setSuccess('');
-          try {
-            await banUser(user.id);
-            setSuccess('Usuário bloqueado com sucesso.');
-            await fetchUsers();
-          } catch (err: any) {
-            setError(err.message || 'Erro ao bloquear usuário');
-          } finally {
-            setLoading(false);
-          }
-        },
-      },
-    ]);
+  const openBanUserModal = (user: ManagedUser) => {
+    setUserToBan(user);
+    setBanUserModalOpen(true);
   };
 
-  const handleUnbanUser = async (user: ManagedUser) => {
-    Alert.alert('Desbloquear usuário', 'Tem certeza que deseja desbloquear este usuário?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Desbloquear',
-        onPress: async () => {
-          setLoading(true);
-          setError('');
-          setSuccess('');
-          try {
-            await unbanUser(user.id);
-            setSuccess('Usuário desbloqueado com sucesso.');
-            await fetchUsers();
-          } catch (err: any) {
-            setError(err.message || 'Erro ao desbloquear usuário');
-          } finally {
-            setLoading(false);
-          }
-        },
-      },
-    ]);
+  const closeBanUserModal = () => {
+    if (loading) return;
+    setBanUserModalOpen(false);
+    setUserToBan(null);
+  };
+
+  const confirmBanUser = async () => {
+    if (!userToBan?.id) return;
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      await banUser(userToBan.id);
+      setBanUserModalOpen(false);
+      setUserToBan(null);
+      setSuccess('Usuário bloqueado com sucesso.');
+      await fetchUsers();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro ao bloquear usuário';
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openUnbanUserModal = (user: ManagedUser) => {
+    setUserToUnban(user);
+    setUnbanUserModalOpen(true);
+  };
+
+  const closeUnbanUserModal = () => {
+    if (loading) return;
+    setUnbanUserModalOpen(false);
+    setUserToUnban(null);
+  };
+
+  const confirmUnbanUser = async () => {
+    if (!userToUnban?.id) return;
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      await unbanUser(userToUnban.id);
+      setUnbanUserModalOpen(false);
+      setUserToUnban(null);
+      setSuccess('Usuário desbloqueado com sucesso.');
+      await fetchUsers();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro ao desbloquear usuário';
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const openImpersonateModal = (user: ManagedUser) => {
@@ -1566,18 +1598,22 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
   const showEmpresasTab = role === 'superadmin';
 
   const pageStats = useMemo(() => {
+    const isMeiProduct = resolveAppOrigin() === 'focomei';
     const activeCount = focomeiUsers.filter((u) => u.status !== false).length;
     const adminCount = focomeiUsers.filter(
       (u) => u.role === 'admin' || u.role === 'superadmin',
     ).length;
     const items = [
-      { label: 'Usuários MEI', value: focomeiUsers.length },
+      { label: isMeiProduct ? 'Usuários MEI' : 'Usuários', value: focomeiUsers.length },
       { label: 'Ativos', value: activeCount },
       { label: 'Bloqueados', value: blockedCount },
       { label: 'Admins', value: adminCount },
     ];
     if (showEmpresasTab) {
-      items.splice(1, 0, { label: 'Empresas MEI', value: focomeiEmpresas.length });
+      items.splice(1, 0, {
+        label: isMeiProduct ? 'Empresas MEI' : 'Empresas',
+        value: focomeiEmpresas.length,
+      });
     }
     return items;
   }, [focomeiUsers, focomeiEmpresas, blockedCount, showEmpresasTab]);
@@ -1655,7 +1691,11 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
             isDesktop={isDesktop}
             role={role}
             stats={pageStats}
-            subtitle="Somente empresas e usuários com MEI ativo no FocoMEI."
+            subtitle={
+              resolveAppOrigin() === 'focomei'
+                ? 'Somente empresas e usuários com MEI ativo no FocoMEI.'
+                : 'Gerencie empresas, usuários e permissões do Foco Simples.'
+            }
             loading={initialUsersLoading || (showEmpresasTab && initialEmpresasLoading)}
             rightAction={
               isDesktop && activeTab !== 'invites'
@@ -1843,8 +1883,8 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
                       onEdit={startEditUser}
                       onImpersonate={openImpersonateModal}
                       onViewCompanyMembers={openCompanyMembersForUser}
-                      onBan={handleBanUser}
-                      onUnban={handleUnbanUser}
+                      onBan={openBanUserModal}
+                      onUnban={openUnbanUserModal}
                       onResetPassword={handleResetPassword}
                       onDelete={openDeleteUserModal}
                       onCopyPassword={handleCopyPassword}
@@ -2292,13 +2332,21 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
 
         <View style={styles.switchRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.switchLabel}>Habilitar MEI</Text>
+            <Text style={styles.switchLabel}>
+              {resolveAppOrigin() === 'focosimples' ? 'Habilitar Notas (emissão fiscal)' : 'Habilitar MEI'}
+            </Text>
             <Text style={styles.switchHelper}>
-              {editingUser?.id === currentUserId && editingUser?.mei === true && !editMei
-                ? 'Desligue para remover o módulo MEI da sua conta.'
-                : editingUser?.id === currentUserId && editMei
-                  ? 'Você pode desligar quando não precisar mais do módulo MEI.'
-                  : 'Permite uso dos recursos exclusivos para MEI.'}
+              {resolveAppOrigin() === 'focosimples'
+                ? editingUser?.id === currentUserId && editingUser?.mei === true && !editMei
+                  ? 'Desligue para esconder a aba Notas da sua conta.'
+                  : editingUser?.id === currentUserId && editMei
+                    ? 'Com isto ligado, a aba Notas aparece no menu.'
+                    : 'Libera a aba Notas e a emissão NFS-e / NF-e / NFC-e (Simples Nacional).'
+                : editingUser?.id === currentUserId && editingUser?.mei === true && !editMei
+                  ? 'Desligue para remover o módulo MEI da sua conta.'
+                  : editingUser?.id === currentUserId && editMei
+                    ? 'Você pode desligar quando não precisar mais do módulo MEI.'
+                    : 'Permite uso dos recursos exclusivos para MEI.'}
             </Text>
           </View>
           <ToggleSwitch
@@ -2697,6 +2745,114 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <Text style={styles.dangerBtnText}>Sim, excluir usuário</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ============================================================== */}
+      {/* Modal: Bloquear usuário (Alert.alert não funciona na web)        */}
+      {/* ============================================================== */}
+      <Modal
+        visible={banUserModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={closeBanUserModal}
+      >
+        <Pressable style={styles.deleteConfirmBackdrop} onPress={closeBanUserModal}>
+          <Pressable style={styles.deleteConfirmDialog} onPress={() => {}}>
+            <TouchableOpacity
+              style={styles.deleteConfirmClose}
+              onPress={closeBanUserModal}
+              disabled={loading}
+              accessibilityLabel="Fechar"
+            >
+              <Ionicons name="close" size={22} color={theme.textSecondary} />
+            </TouchableOpacity>
+            <View style={[styles.deleteConfirmIconBox, { backgroundColor: '#FEF3C7' }]}>
+              <Ionicons name="ban-outline" size={32} color={theme.warning} />
+            </View>
+            <Text style={styles.deleteConfirmTitle}>Bloquear usuário</Text>
+            <Text style={styles.deleteConfirmMessage}>
+              Tem certeza que deseja bloquear{' '}
+              <Text style={styles.deleteConfirmName}>
+                {userToBan?.displayName || userToBan?.email || 'este usuário'}
+              </Text>
+              ? Ele não poderá acessar o sistema até ser desbloqueado.
+            </Text>
+            <View style={styles.deleteConfirmActions}>
+              <TouchableOpacity
+                style={styles.secondaryBtn}
+                onPress={closeBanUserModal}
+                disabled={loading}
+              >
+                <Text style={styles.secondaryBtnText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.dangerBtn, loading && styles.primaryBtnDisabled]}
+                onPress={() => void confirmBanUser()}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.dangerBtnText}>Sim, bloquear</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ============================================================== */}
+      {/* Modal: Desbloquear usuário (Alert.alert não funciona na web)     */}
+      {/* ============================================================== */}
+      <Modal
+        visible={unbanUserModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={closeUnbanUserModal}
+      >
+        <Pressable style={styles.deleteConfirmBackdrop} onPress={closeUnbanUserModal}>
+          <Pressable style={styles.deleteConfirmDialog} onPress={() => {}}>
+            <TouchableOpacity
+              style={styles.deleteConfirmClose}
+              onPress={closeUnbanUserModal}
+              disabled={loading}
+              accessibilityLabel="Fechar"
+            >
+              <Ionicons name="close" size={22} color={theme.textSecondary} />
+            </TouchableOpacity>
+            <View style={[styles.deleteConfirmIconBox, { backgroundColor: theme.successLight }]}>
+              <Ionicons name="checkmark-circle-outline" size={32} color={theme.success} />
+            </View>
+            <Text style={styles.deleteConfirmTitle}>Desbloquear usuário</Text>
+            <Text style={styles.deleteConfirmMessage}>
+              Tem certeza que deseja desbloquear{' '}
+              <Text style={styles.deleteConfirmName}>
+                {userToUnban?.displayName || userToUnban?.email || 'este usuário'}
+              </Text>
+              ? O acesso ao sistema será restaurado.
+            </Text>
+            <View style={styles.deleteConfirmActions}>
+              <TouchableOpacity
+                style={styles.secondaryBtn}
+                onPress={closeUnbanUserModal}
+                disabled={loading}
+              >
+                <Text style={styles.secondaryBtnText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.primaryBtn, loading && styles.primaryBtnDisabled]}
+                onPress={() => void confirmUnbanUser()}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.primaryBtnText}>Sim, desbloquear</Text>
                 )}
               </TouchableOpacity>
             </View>

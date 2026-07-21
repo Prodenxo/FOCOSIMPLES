@@ -134,9 +134,7 @@ const applyEmpresaPlugnotasApenasNfseForPatch = (payload) => {
   if (hasOwn(payload, 'nfce')) {
     payload.nfce = { ...PLUGNOTAS_EMPRESA_APENAS_NFSE_NFCE };
   }
-  if (hasOwn(payload, 'inscricaoEstadual')) {
-    normalizeInscricaoEstadualApenasNfse(payload);
-  }
+  normalizeInscricaoEstadualApenasNfse(payload);
   applyNfseNationalContractPolicy(payload);
 };
 
@@ -338,11 +336,11 @@ const runEmpresaCadastroMunicipioPreflight = async (
 };
 
 const ensureConfigured = () => {
-  if (!env.PLUGNOTAS_API_BASE_URL) {
-    throw badRequest('Serviço de emissão fiscal não configurado');
-  }
-  if (!env.PLUGNOTAS_API_KEY) {
-    throw badRequest('Token do serviço de emissão fiscal não configurado');
+  if (!env.PLUGNOTAS_API_BASE_URL || !env.PLUGNOTAS_API_KEY) {
+    throw badRequest(
+      'PlugNotas não configurado. Defina PLUGNOTAS_API_BASE_URL e PLUGNOTAS_API_KEY no .env do backend, reinicie o servidor e reenvie o certificado .pfx.',
+      { plugnotasCode: 'plugnotas_nao_configurado' },
+    );
   }
 };
 
@@ -972,12 +970,11 @@ export const atualizarEmpresaPlugNotas = async (input) => {
       docPatch.selection,
       { nfseMode: attemptNfseMode }
     );
-    if (hasOwn(payload, 'inscricaoEstadual')) {
-      normalizeInscricaoEstadualApenasNfse(payload);
-    }
   } else {
     applyEmpresaPlugnotasApenasNfseForPatch(payload);
   }
+  // Sempre garante IE (ISENTO) — NF-e/NFC-e ativos rejeitam omissão do campo
+  normalizeInscricaoEstadualApenasNfse(payload);
 
   normalizePayloadEnderecoCodigoCidade(payload);
   if (!(docPatch.present && docPatch.selection)) {

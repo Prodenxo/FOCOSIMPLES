@@ -28,6 +28,9 @@ import { useThemeStore } from '../store/themeStore';
 import { getTheme } from '../lib/theme';
 import { supabase } from '../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
+import { fetchUserCategories } from '../lib/categoryService';
+import { apiClient } from '../lib/apiClient';
+import { isLocalApiAuthMode } from '../lib/authMode';
 import { promptGoogleAuth } from '../lib/google-auth-flow';
 import { formatNumberBR, parseNumberBR, formatCurrencyInput, formatCurrencyBR } from '../lib/numberFormat';
 import { useNavigationDrawer } from '../lib/navigationContext';
@@ -545,24 +548,16 @@ function TransactionModal({
 
       // Carregar categorias
       if (!userId) return;
-      supabase
-        .from('categorias_id')
-        .select('id, nome, tipo')
-        .eq('user_id', userId)
-        .order('nome')
-        .then(({ data, error }) => {
-          if (!error && data) {
-            // Normalizar dados do banco para garantir tipos corretos
-            const normalizedData = (data || []).map((cat: any) => ({
-              id: Number(cat.id) || 0,
-              nome: String(cat.nome || ''),
-              tipo: String(cat.tipo || ''),
-            }));
-            setCategorias(normalizedData);
-          } else {
-            setCategorias([]);
-          }
-        });
+      void fetchUserCategories(userId)
+        .then((data) => {
+          const normalizedData = (data || []).map((cat) => ({
+            id: Number(cat.id) || 0,
+            nome: String(cat.nome || ''),
+            tipo: String(cat.tipo || ''),
+          }));
+          setCategorias(normalizedData);
+        })
+        .catch(() => setCategorias([]));
     }
   }, [visible, transaction, userId]);
 
@@ -1596,22 +1591,17 @@ function InlineTransactionForm({
   // Carregar categorias
   useEffect(() => {
     if (!userId) return;
-    supabase
-      .from('categorias_id')
-      .select('id, nome, tipo')
-      .eq('user_id', userId)
-      .order('nome')
-      .then(({ data: rows, error }) => {
-        if (!error && rows) {
-          setCategorias(
-            (rows || []).map((cat: any) => ({
-              id: Number(cat.id) || 0,
-              nome: String(cat.nome || ''),
-              tipo: String(cat.tipo || ''),
-            })),
-          );
-        }
-      });
+    void fetchUserCategories(userId)
+      .then((rows) => {
+        setCategorias(
+          (rows || []).map((cat) => ({
+            id: Number(cat.id) || 0,
+            nome: String(cat.nome || ''),
+            tipo: String(cat.tipo || ''),
+          })),
+        );
+      })
+      .catch(() => setCategorias([]));
   }, [userId]);
 
   const categoriasFiltradas = categorias.filter((cat) => {
@@ -2742,7 +2732,8 @@ function SkeletonCard({ theme }: { theme: ReturnType<typeof getTheme> }) {
 export default function TransactionsScreen() {
   const { transactions, fetchTransactions, addTransaction, updateTransaction, deleteTransaction, loading, googleAuthRequired, clearGoogleAuthRequired } =
     useTransactionStore();
-  const { recorrencias, fetchRecorrencias, skips, fetchSkips } = useRecorrenciaStore();
+  const { recorrencias, fetchRecorrencias, skips, fetchSkips, updateRecorrencia, deleteRecorrencia } =
+    useRecorrenciaStore();
   const { userId } = useAuthStore();
   const {
     contasAtivas,
@@ -3000,19 +2991,32 @@ export default function TransactionsScreen() {
     }
     setDeletingScope(true);
     try {
-      const { error: delErr } = await supabase
-        .from('lancamentos_id')
-        .delete()
-        .eq('user_id', userId)
-        .eq('recorrencia_id', recId)
-        .gte('data', fromDate);
-      if (delErr) throw delErr;
-      const { error: updErr } = await supabase
-        .from('recorrencias')
-        .update({ ativo: false })
-        .eq('id', recId)
-        .eq('user_id', userId);
-      if (updErr) throw updErr;
+      if (isLocalApiAuthMode()) {
+        const toDelete = transactions.filter(
+          (t) =>
+            t.recorrencia_id === recId &&
+            String(t.data || '') >= String(fromDate) &&
+            !isProjecao(t),
+        );
+        for (const tx of toDelete) {
+          await apiClient.delete(`/transactions?id=${encodeURIComponent(tx.id)}`);
+        }
+        await updateRecorrencia(recId, { ativo: false });
+      } else {
+        const { error: delErr } = await supabase
+          .from('lancamentos_id')
+          .delete()
+          .eq('user_id', userId)
+          .eq('recorrencia_id', recId)
+          .gte('data', fromDate);
+        if (delErr) throw delErr;
+        const { error: updErr } = await supabase
+          .from('recorrencias')
+          .update({ ativo: false })
+          .eq('id', recId)
+          .eq('user_id', userId);
+        if (updErr) throw updErr;
+      }
       await Promise.all([fetchTransactions(), fetchRecorrencias(), fetchSkips()]);
       setDeleteScopeTx(null);
     } catch (error: any) {
@@ -3032,18 +3036,29 @@ export default function TransactionsScreen() {
     }
     setDeletingScope(true);
     try {
-      const { error: delErr } = await supabase
-        .from('lancamentos_id')
-        .delete()
-        .eq('user_id', userId)
-        .eq('recorrencia_id', recId);
-      if (delErr) throw delErr;
-      const { error: recErr } = await supabase
-        .from('recorrencias')
-        .delete()
-        .eq('id', recId)
-        .eq('user_id', userId);
-      if (recErr) throw recErr;
+      if (isLocalApiAuthMode()) {
+        const toDelete = transactions.filter(
+          (t) => t.recorrencia_id === recId && !isProjecao(t),
+        );
+        for (const tx of toDelete) {
+          await apiClient.delete(`/transactions?id=${encodeURIComponent(tx.id)}`);
+        }
+        const result = await deleteRecorrencia(recId);
+        if (!result.ok) throw new Error(result.error || 'Falha ao excluir a recorrência');
+      } else {
+        const { error: delErr } = await supabase
+          .from('lancamentos_id')
+          .delete()
+          .eq('user_id', userId)
+          .eq('recorrencia_id', recId);
+        if (delErr) throw delErr;
+        const { error: recErr } = await supabase
+          .from('recorrencias')
+          .delete()
+          .eq('id', recId)
+          .eq('user_id', userId);
+        if (recErr) throw recErr;
+      }
       await Promise.all([fetchTransactions(), fetchRecorrencias(), fetchSkips()]);
       setDeleteScopeTx(null);
     } catch (error: any) {

@@ -1,11 +1,15 @@
 import { applyEmpresaPlugnotasNfseConfigRps } from './plugnotas-empresa-rps-inicial.js';
+import { env } from '../../config/env.js';
 
 /**
- * Política MEI / Guia MEI — cadastro empresa Plugnotas (apenas NFS-e).
- * @see docs/adr/ADR-plugnotas-empresa-payload-apenas-nfse.md
- * @see docs/stories/epic-guia-mei-apenas-nfse-prd.md (US-MEI-NFS-01)
+ * Política empresa Plugnotas (NFS-e / NF-e / NFC-e).
+ * Foco Simples: Simples Nacional obrigatório; regime especial MEI (5) só se explícito.
+ * FocoMEI: mantém default MEI (1 + especial 5).
  */
 export const PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA = 'ISENTO';
+
+const isFocoSimplesProduct = () =>
+  String(env.APP_PRODUCT || '').trim().toLowerCase() === 'focosimples';
 
 /**
  * Contrato oficial NFS-e Nacional no `POST/PATCH` empresa.
@@ -76,7 +80,10 @@ export const applyNfseNationalContractPolicy = (payload) => {
 export const PLUGNOTAS_REGIME_ESPECIAL_MEI = 5;
 
 /**
- * Garante payload MEI na Plugnotas: regimeTributario 1 + regimeTributarioEspecial 5.
+ * Garante Simples Nacional na Plugnotas.
+ * - Sempre: regimeTributario 1 + simplesNacional true
+ * - FocoMEI: se especial vazio, assume MEI (5)
+ * - Foco Simples: não força especial 5
  * @param {Record<string, unknown>} payload
  */
 export const normalizeMeiEmpresaPayload = (payload) => {
@@ -86,41 +93,62 @@ export const normalizeMeiEmpresaPayload = (payload) => {
 
   if (regime === 4) {
     payload.regimeTributario = 1;
-    payload.regimeTributarioEspecial = PLUGNOTAS_REGIME_ESPECIAL_MEI;
     payload.simplesNacional = true;
+    if (!isFocoSimplesProduct()) {
+      payload.regimeTributarioEspecial = PLUGNOTAS_REGIME_ESPECIAL_MEI;
+    } else if (!Number.isFinite(especial) || especial === 0) {
+      delete payload.regimeTributarioEspecial;
+    }
     return payload;
   }
 
-  // Mei Infinito: cadastro sem regime explícito assume Simples Nacional (1).
   if (!Number.isFinite(regime) || regime <= 0) {
     payload.regimeTributario = 1;
     regime = 1;
   }
 
-  if (payload.simplesNacional !== false) {
-    payload.simplesNacional = true;
+  if (isFocoSimplesProduct() && regime !== 1) {
+    const err = new Error('Apenas empresas do Simples Nacional podem emitir notas neste produto.');
+    err.status = 400;
+    throw err;
   }
 
+  if (payload.simplesNacional === false && isFocoSimplesProduct()) {
+    const err = new Error('Optante pelo Simples Nacional é obrigatório.');
+    err.status = 400;
+    throw err;
+  }
+
+  payload.simplesNacional = true;
+
   if (regime === 1 && (Number.isNaN(especial) || especial === 0)) {
-    payload.regimeTributarioEspecial = PLUGNOTAS_REGIME_ESPECIAL_MEI;
+    if (isFocoSimplesProduct()) {
+      delete payload.regimeTributarioEspecial;
+    } else {
+      payload.regimeTributarioEspecial = PLUGNOTAS_REGIME_ESPECIAL_MEI;
+    }
   }
 
   return payload;
 };
 
 /**
- * Payload mínimo para PATCH do regime MEI (1 + especial 5) na Plugnotas.
+ * Payload mínimo para PATCH do regime na Plugnotas.
  * @param {string} cnpj14
  * @param {string} [certificadoId]
+ * @param {{ asMei?: boolean }} [options]
  */
-export const buildMeiRegimePatchPayload = (cnpj14, certificadoId) => {
+export const buildMeiRegimePatchPayload = (cnpj14, certificadoId, options = {}) => {
+  const asMei = options.asMei === true || !isFocoSimplesProduct();
   const payload = {
     cpfCnpj: cnpj14,
     regimeTributario: 1,
     simplesNacional: true,
-    regimeTributarioEspecial: PLUGNOTAS_REGIME_ESPECIAL_MEI,
     inscricaoEstadual: PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA
   };
+  if (asMei) {
+    payload.regimeTributarioEspecial = PLUGNOTAS_REGIME_ESPECIAL_MEI;
+  }
   const cert = certificadoId != null ? String(certificadoId).trim() : '';
   if (cert) payload.certificado = cert;
   normalizeMeiEmpresaPayload(payload);

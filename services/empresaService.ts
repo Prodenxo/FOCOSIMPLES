@@ -1,7 +1,6 @@
 import { apiClient } from '../lib/apiClient';
 import { isValidCnpjDigits } from '../lib/validateCnpj';
 import type { CnpjLookupData } from './meiNotasService';
-import { supabase } from '../lib/supabase';
 
 export interface EmpresaFullData {
   id?: string;
@@ -46,14 +45,8 @@ export interface EmpresaUpdatePayload {
 }
 
 export async function listEmpresas(): Promise<EmpresaOption[]> {
-  try {
-    const res = await apiClient.get<{ empresas?: EmpresaOption[] }>('/users/empresas');
-    return res?.empresas ?? [];
-  } catch (err) {
-    const { data, error } = await supabase.functions.invoke<{ empresas?: EmpresaOption[] }>('list-empresas');
-    if (error) throw error;
-    return data?.empresas ?? [];
-  }
+  const res = await apiClient.get<{ empresas?: EmpresaOption[] }>('/users/empresas');
+  return res?.empresas ?? [];
 }
 
 export async function getEmpresa(): Promise<EmpresaFullData | null> {

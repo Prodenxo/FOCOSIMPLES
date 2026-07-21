@@ -154,7 +154,7 @@ function WebLayoutContent ({
                 <RevealSoft delay={120} offset={16}>
                   <View style={styles.heroCopy}>
                     <AuthEyebrow
-                      label="PAINEL MEI"
+                      label="PAINEL FOCO SIMPLES"
                       dotColor={palette.eyebrowDot}
                       textColor={palette.eyebrowText}
                     />

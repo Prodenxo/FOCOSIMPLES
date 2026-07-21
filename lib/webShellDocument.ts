@@ -279,7 +279,7 @@ export const MF_WEB_BOOT_SCRIPT = `
     splash.setAttribute('aria-busy', 'false');
     splash.innerHTML =
       '<p style="margin:0 16px;text-align:center;max-width:400px;line-height:1.5;color:#e2e8f0">' +
-      'O FocoMEI demorou para iniciar. Pode ser rede, env do servidor ou erro no console (F12).</p>' +
+      'O FocoSimples demorou para iniciar. Pode ser rede, env do servidor ou erro no console (F12).</p>' +
       '<button type="button" id="mf-boot-continue" style="margin-top:12px;padding:10px 18px;border:0;border-radius:8px;background:#2563eb;color:#fff;font-weight:600;cursor:pointer">' +
       'Continuar mesmo assim</button>' +
       '<button type="button" id="mf-boot-reload" style="margin-top:10px;padding:10px 18px;border:1px solid rgba(255,255,255,0.35);border-radius:8px;background:transparent;color:#fff;font-weight:600;cursor:pointer">' +

@@ -127,7 +127,12 @@ const startServer = async () => {
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('[backend] falha no bootstrap do banco', error instanceof Error ? error.message : error);
-    process.exit(1);
+    // AUTH local: schema já vem dos SQLs easypanel — não derruba o servidor por DAS/agenda.
+    if (String(env.AUTH_MODE || '').trim().toLowerCase() !== 'local') {
+      process.exit(1);
+    }
+    // eslint-disable-next-line no-console
+    console.warn('[backend] AUTH_MODE=local — seguindo sem bootstrap DAS');
   }
 
   const server = app.listen(env.PORT, () => {

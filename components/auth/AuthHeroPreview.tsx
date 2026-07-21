@@ -99,36 +99,36 @@ export function AuthHeroPreview ({ compact = false }: { compact?: boolean }) {
             <View style={[stylesLocal.livePing, { backgroundColor: tokens.accent }]} />
           </View>
           <Text style={[stylesLocal.cardEyebrow, { color: theme.textSecondary }]}>
-            MEU MEI · RESUMO
+            FOCO SIMPLES · RESUMO
           </Text>
         </View>
 
         <View style={[stylesLocal.heroKpi, mfTechInsetSurface(isDarkMode, true)]}>
-          <Text style={[stylesLocal.heroKpiLabel, { color: theme.textTertiary }]}>FATURAMENTO</Text>
+          <Text style={[stylesLocal.heroKpiLabel, { color: theme.textTertiary }]}>SALDO DO MÊS</Text>
           <Text style={[stylesLocal.heroKpiValue, { color: theme.text, fontFamily: MONO }]}>
-            R$ 48.200,00
+            R$ 12.480,00
           </Text>
-          <Text style={[stylesLocal.heroKpiHint, { color: theme.success }]}>Dentro do limite MEI</Text>
+          <Text style={[stylesLocal.heroKpiHint, { color: theme.success }]}>Dentro do orçado</Text>
         </View>
 
         <View style={stylesLocal.kpiRow}>
-          <MiniKpi label="NOTAS" value="12" tone="success" />
-          <MiniKpi label="DAS" value="Em dia" tone="accent" />
+          <MiniKpi label="ENTRADAS" value="8" tone="success" />
+          <MiniKpi label="SAÍDAS" value="5" tone="expense" />
         </View>
 
         {!compact ? (
           <View style={[stylesLocal.chartWell, mfTechInsetSurface(isDarkMode)]}>
             <Text style={[stylesLocal.chartLabel, { color: theme.textTertiary }]}>
-              EMISSÕES DO MÊS
+              MOVIMENTOS DO MÊS
             </Text>
             <MiniBars />
           </View>
         ) : null}
 
         <View style={stylesLocal.pillRow}>
-          <FeaturePill icon="document-text-outline" label="NFSe" />
-          <FeaturePill icon="receipt-outline" label="DAS" />
-          <FeaturePill icon="shield-checkmark-outline" label="Certificado" />
+          <FeaturePill icon="swap-horizontal-outline" label="Lançamentos" />
+          <FeaturePill icon="pie-chart-outline" label="Orçamentos" />
+          <FeaturePill icon="card-outline" label="Contas" />
         </View>
       </MfGlassCard>
     </View>

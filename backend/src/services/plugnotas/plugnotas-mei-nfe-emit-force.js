@@ -7,6 +7,7 @@ import {
 import {
   PLUGNOTAS_REGIME_ESPECIAL_MEI,
 } from './plugnotas-mei-empresa-policy.js';
+import { env } from '../../config/env.js';
 
 /** CRT MEI na NF-e (NT 2024.001). */
 export const PLUGNOTAS_CRT_MEI = 4;
@@ -20,7 +21,11 @@ const toObject = (value) => (
 
 const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
 
+const isFocoSimplesProduct = () =>
+  String(env.APP_PRODUCT || '').trim().toLowerCase() === 'focosimples';
+
 export const isMeiNfeEmitForceEnabled = () => {
+  if (isFocoSimplesProduct()) return false;
   const raw = String(process.env.MEI_NFE_FORCE_CRT_EMIT ?? 'true').trim().toLowerCase();
   return ['1', 'true', 'yes', 'sim'].includes(raw);
 };

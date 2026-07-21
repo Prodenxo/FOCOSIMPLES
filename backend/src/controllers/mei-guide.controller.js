@@ -136,6 +136,15 @@ export const getCertificateStatus = async (req, res, next) => {
   }
 };
 
+export const getPrestadorPrefill = async (req, res, next) => {
+  try {
+    const prefill = await meiGuideService.getNfsePrestadorPrefill(req.user.id);
+    return sendSuccess(res, { prefill }, 'Prefill do prestador obtido');
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export const validateGuide = async (req, res, next) => {
   try {
     const data = await meiGuideService.validateGuide(req.user.id, {

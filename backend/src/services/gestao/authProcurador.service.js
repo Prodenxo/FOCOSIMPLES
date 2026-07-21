@@ -1,8 +1,13 @@
 import https from 'node:https';
 import { URL as NodeURL } from 'node:url';
+import { createRequire } from 'module';
+import { SignedXml } from 'xml-crypto';
 import { env } from '../../config/env.js';
 import { badRequest } from '../../utils/errors.js';
 import { requestWithMtls } from '../../utils/http-mtls.js';
+
+const require = createRequire(import.meta.url);
+const forge = require('node-forge');
 
 const procuradorTokenCache = new Map();
 const tokenCache = new Map();
@@ -26,6 +31,25 @@ const getDocTypeLabel = (numero) => {
   if (type === 1) return 'PF';
   if (type === 2) return 'PJ';
   return null;
+};
+
+const escapeXmlAttr = (value) => String(value || '')
+  .replace(/&/g, '&amp;')
+  .replace(/"/g, '&quot;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;');
+
+const formatDateYYYYMMDD = (date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}${m}${d}`;
+};
+
+const addDays = (date, days) => {
+  const next = new Date(date);
+  next.setDate(next.getDate() + Number(days || 0));
+  return next;
 };
 
 const isNoMtlsEnabled = () => {
@@ -261,6 +285,10 @@ const getAutenticaProcuradorUrl = () => {
   if (env.SERPRO_AUTENTICA_PROCURADOR_PATH && env.SERPRO_API_BASE_URL) {
     return `${String(env.SERPRO_API_BASE_URL).replace(/\/$/, '')}${env.SERPRO_AUTENTICA_PROCURADOR_PATH}`;
   }
+  // Autentica Procurador é serviço de apoio → /Apoiar (não /Emitir)
+  if (env.SERPRO_API_BASE_URL) {
+    return `${String(env.SERPRO_API_BASE_URL).replace(/\/$/, '')}/Apoiar`;
+  }
   return '';
 };
 
@@ -301,12 +329,84 @@ const extractTokenFromPayload = (payload) => {
 };
 
 const ensureAssinaturaConfigurada = () => {
-  if (!env.SERPRO_AUTENTICA_PROCURADOR_SIGN_URL) {
-    throw badRequest('Endpoint da API intermediária não configurado');
-  }
   if (!env.SERPRO_CERT_PFX_BASE64 || !env.SERPRO_CERT_PFX_PASS) {
     throw badRequest('Certificado Serpro não configurado');
   }
+};
+
+const AUTORIZACAO_TERMO = 'Autorizo a empresa CONTRATANTE, identificada neste termo de autorização como DESTINATÁRIO, a executar as requisições dos serviços web disponibilizados pela API INTEGRA CONTADOR, onde terei o papel de AUTOR PEDIDO DE DADOS no corpo da mensagem enviada na requisição do serviço web. Esse termo de autorização está assinado digitalmente com o certificado digital do PROCURADOR ou OUTORGADO DO CONTRIBUINTE responsável, identificado como AUTOR DO PEDIDO DE DADOS.';
+const AUTORIZACAO_AVISO = 'O acesso a estas informações foi autorizado pelo próprio PROCURADOR ou OUTORGADO DO CONTRIBUINTE, responsável pela informação, via assinatura digital. É dever do destinatário da autorização e consumidor deste acesso observar a adoção de base legal para o tratamento dos dados recebidos conforme artigos 7º ou 11º da LGPD (Lei n.º 13.709, de 14 de agosto de 2018), aos direitos do titular dos dados (art. 9º, 17 e 18, da LGPD) e aos princípios que norteiam todos os tratamentos de dados no Brasil (art. 6º, da LGPD).';
+const AUTORIZACAO_FINALIDADE = 'A finalidade única e exclusiva desse TERMO DE AUTORIZAÇÃO, é garantir que o CONTRATANTE apresente a API INTEGRA CONTADOR esse consentimento do PROCURADOR ou OUTORGADO DO CONTRIBUINTE assinado digitalmente, para que possa realizar as requisições dos serviços web da API INTEGRA CONTADOR em nome do AUTOR PEDIDO DE DADOS (PROCURADOR ou OUTORGADO DO CONTRIBUINTE).';
+
+const buildTermoAutorizacaoXml = (autorNumero, nomeAssinante) => {
+  const destinatarioNumero = normalizeDoc(env.SERPRO_CONTRATANTE_NUMERO || autorNumero);
+  const destinatarioNome = String(env.SERPRO_CONTRATANTE_NOME || '').trim();
+  const destinatarioTipo = getDocTypeLabel(env.SERPRO_CONTRATANTE_TIPO || destinatarioNumero) || 'PJ';
+  const autorTipo = getDocTypeLabel(autorNumero) || 'PJ';
+  if (!destinatarioNumero) {
+    throw badRequest('SERPRO_CONTRATANTE_NUMERO não configurado para o termo de autorização');
+  }
+  if (!destinatarioNome) {
+    throw badRequest('SERPRO_CONTRATANTE_NOME não configurado (razão social do CNPJ contratante no XML do termo)');
+  }
+  const dataAssinatura = formatDateYYYYMMDD(new Date());
+  const vigencia = env.SERPRO_AUTORIZACAO_VIGENCIA
+    ? String(env.SERPRO_AUTORIZACAO_VIGENCIA)
+    : formatDateYYYYMMDD(addDays(new Date(), Number(env.SERPRO_AUTORIZACAO_VIGENCIA_DIAS || 180)));
+
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<termoDeAutorizacao>',
+    '  <dados>',
+    '    <sistema id="API Integra Contador" />',
+    `    <termo texto="${escapeXmlAttr(AUTORIZACAO_TERMO)}" />`,
+    `    <avisoLegal texto="${escapeXmlAttr(AUTORIZACAO_AVISO)}" />`,
+    `    <finalidade texto="${escapeXmlAttr(AUTORIZACAO_FINALIDADE)}" />`,
+    `    <dataAssinatura data="${dataAssinatura}"/>`,
+    `    <vigencia data="${vigencia}"/>`,
+    `    <destinatario numero="${destinatarioNumero}" nome="${escapeXmlAttr(destinatarioNome)}" tipo="${destinatarioTipo}" papel="contratante"/>`,
+    `    <assinadoPor numero="${normalizeDoc(autorNumero)}" nome="${escapeXmlAttr(nomeAssinante)}" tipo="${autorTipo}" papel="autor pedido de dados"/>`,
+    '  </dados>',
+    '</termoDeAutorizacao>'
+  ].join('');
+};
+
+const signTermoXmlLocal = (xml, pfxBuffer, passphrase) => {
+  const pfxDer = forge.util.createBuffer(pfxBuffer.toString('binary'));
+  const pfxAsn1 = forge.asn1.fromDer(pfxDer);
+  const pfx = forge.pkcs12.pkcs12FromAsn1(pfxAsn1, passphrase || '');
+  const keyBags = pfx.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag });
+  const keyBagsPlain = pfx.getBags({ bagType: forge.pki.oids.keyBag });
+  const certBags = pfx.getBags({ bagType: forge.pki.oids.certBag });
+  const keyBag = keyBags[forge.pki.oids.pkcs8ShroudedKeyBag]?.[0]
+    || keyBagsPlain[forge.pki.oids.keyBag]?.[0];
+  const certBag = certBags[forge.pki.oids.certBag]?.[0];
+  if (!keyBag?.key || !certBag?.cert) {
+    throw badRequest('Não foi possível extrair chave/certificado do PFX Serpro');
+  }
+  const privateKeyPem = forge.pki.privateKeyToPem(keyBag.key);
+  const certificatePem = forge.pki.certificateToPem(certBag.cert);
+  const x509B64 = certificatePem.replace(/-----(BEGIN|END) CERTIFICATE-----|\s+/g, '');
+  const xmlCompact = String(xml || '').replace(/>\s+</g, '><').trim();
+  const sig = new SignedXml();
+  sig.signatureAlgorithm = 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256';
+  sig.canonicalizationAlgorithm = 'http://www.w3.org/TR/2001/REC-xml-c14n-20010315';
+  sig.addReference({
+    xpath: '/*',
+    transforms: [
+      'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
+      'http://www.w3.org/TR/2001/REC-xml-c14n-20010315'
+    ],
+    digestAlgorithm: 'http://www.w3.org/2001/04/xmlenc#sha256',
+    isEmptyUri: true
+  });
+  sig.privateKey = privateKeyPem;
+  sig.getKeyInfoContent = () =>
+    `<X509Data><X509Certificate>${x509B64}</X509Certificate></X509Data>`;
+  sig.computeSignature(xmlCompact, {
+    location: { reference: '/*', action: 'append' }
+  });
+  return sig.getSignedXml();
 };
 
 /**
@@ -405,6 +505,14 @@ const gerarCertificadoAssinado = async (cnpjAssinante, nomeAssinante) => {
   const tipo = getDocTypeLabel(numeroLimpo);
   if (!tipo) {
     throw badRequest('Documento do assinante inválido');
+  }
+
+  // Assinatura local com SERPRO_CERT_* (escritório). API PHP só se configurada.
+  if (!env.SERPRO_AUTENTICA_PROCURADOR_SIGN_URL) {
+    const pfx = Buffer.from(env.SERPRO_CERT_PFX_BASE64, 'base64');
+    const xml = buildTermoAutorizacaoXml(numeroLimpo, nomeAssinante);
+    const signed = signTermoXmlLocal(xml, pfx, env.SERPRO_CERT_PFX_PASS);
+    return Buffer.from(signed, 'utf-8').toString('base64');
   }
 
   const payload = {

@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import Constants from 'expo-constants';
-import { getPublicEnv } from './runtimeEnv';
+import { getMeiApiBaseUrl, getPublicEnv } from './runtimeEnv';
+import { isLocalApiAuthMode } from './authMode';
 import {
   forgetAppMeetEvent,
   getCachedMeetLinkSync,
@@ -8,7 +9,6 @@ import {
   rememberAppMeetEvent,
 } from './google-meet-events';
 
-// Obter URL base do Supabase
 const getSupabaseUrl = () =>
   getPublicEnv('EXPO_PUBLIC_SUPABASE_URL') ||
   Constants.expoConfig?.extra?.supabaseUrl ||
@@ -19,21 +19,47 @@ const getSupabaseAnonKey = () =>
   Constants.expoConfig?.extra?.supabaseAnonKey ||
   '';
 
-async function googleCalendarFetchHeaders(): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
+async function resolveAccessToken(): Promise<string> {
+  const { getLocalAccessToken } = await import('./localAuthSession');
+  const local = await getLocalAccessToken();
+  if (local) return local;
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session?.access_token) {
     throw new Error('Usuário não autenticado');
   }
+  return session.access_token;
+}
+
+async function googleCalendarFetchHeaders(): Promise<Record<string, string>> {
+  const accessToken = await resolveAccessToken();
   const anonKey = getSupabaseAnonKey();
+  const useBackend = Boolean(getMeiApiBaseUrl()) || isLocalApiAuthMode();
   return {
-    Authorization: `Bearer ${session.access_token}`,
+    Authorization: `Bearer ${accessToken}`,
     'Content-Type': 'application/json',
-    ...(anonKey ? { apikey: anonKey } : {}),
+    ...(!useBackend && anonKey ? { apikey: anonKey } : {}),
   };
 }
 
-// Obter URL base da API de Google Calendar
+/** API local (`/api/google-calendar`) ou Edge Function Supabase. */
 const getGoogleCalendarApiUrl = () => {
+  const apiBase = (
+    getMeiApiBaseUrl() ||
+    Constants.expoConfig?.extra?.meiApiUrl ||
+    ''
+  ).replace(/\/$/, '');
+  if (apiBase || isLocalApiAuthMode()) {
+    if (!apiBase) {
+      throw new Error(
+        'API não configurada. Defina EXPO_PUBLIC_MEI_API_URL_DEV=http://localhost:3333',
+      );
+    }
+    return `${apiBase}/api/google-calendar`;
+  }
+
   const supabaseUrl = getSupabaseUrl();
   if (!supabaseUrl) {
     throw new Error('Supabase URL não configurada');
@@ -41,6 +67,28 @@ const getGoogleCalendarApiUrl = () => {
   const baseUrl = supabaseUrl.replace(/\/rest\/v1$/, '').replace(/\/$/, '');
   return `${baseUrl}/functions/v1/google-calendar`;
 };
+
+function unwrapGooglePayload<T extends Record<string, unknown>>(payload: unknown): T {
+  if (payload && typeof payload === 'object' && 'data' in payload) {
+    const inner = (payload as { data: unknown }).data;
+    if (inner && typeof inner === 'object') return inner as T;
+  }
+  return (payload || {}) as T;
+}
+
+async function readGoogleErrorMessage(response: Response): Promise<string> {
+  const payload = await response.json().catch(() => ({} as Record<string, unknown>));
+  const nested = payload?.data && typeof payload.data === 'object'
+    ? (payload.data as Record<string, unknown>)
+    : null;
+  return String(
+    payload?.message
+      || payload?.error
+      || nested?.error
+      || nested?.message
+      || 'Erro na integração Google Calendar',
+  );
+}
 
 interface CreateEventResponse {
   success: boolean;
@@ -158,11 +206,7 @@ interface GoogleEventsParams {
 export async function checkGoogleAuth(): Promise<boolean> {
   console.log('[GOOGLE] checkGoogleAuth: Iniciando...');
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      console.log('[GOOGLE] checkGoogleAuth: Sem sessão do Supabase');
-      return false;
-    }
+    await resolveAccessToken();
 
     const edgeFunctionUrl = `${getGoogleCalendarApiUrl()}/check-auth`;
     console.log('[GOOGLE] checkGoogleAuth: Chamando:', edgeFunctionUrl);
@@ -177,11 +221,11 @@ export async function checkGoogleAuth(): Promise<boolean> {
       return false;
     }
 
-    const data: CheckAuthResponse = await response.json();
+    const data = unwrapGooglePayload<CheckAuthResponse>(await response.json());
     console.log('[GOOGLE] checkGoogleAuth: Resultado:', data.authenticated ? 'AUTENTICADO' : 'NÃO AUTENTICADO');
-    return data.authenticated;
+    return Boolean(data.authenticated);
   } catch (error) {
-    console.error('[GOOGLE] checkGoogleAuth: Erro:', error);
+    console.warn('[GOOGLE] checkGoogleAuth: Erro:', error);
     return false;
   }
 }
@@ -194,11 +238,7 @@ export async function getGoogleAuthUrl(
 ): Promise<{ authUrl: string; redirectUri: string }> {
   console.log('[GOOGLE] getGoogleAuthUrl: Iniciando...');
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      console.log('[GOOGLE] getGoogleAuthUrl: Sem sessão do Supabase');
-      throw new Error('Usuário não autenticado');
-    }
+    await resolveAccessToken();
 
     const returnQs =
       returnTo && returnTo.trim()
@@ -213,20 +253,25 @@ export async function getGoogleAuthUrl(
 
     console.log('[GOOGLE] getGoogleAuthUrl: Status:', response.status);
     if (!response.ok) {
-      const error = await response.json();
-      console.error('[GOOGLE] getGoogleAuthUrl: Erro na resposta:', error);
-      throw new Error(error.error || 'Erro ao obter URL de autorização');
+      const message = await readGoogleErrorMessage(response);
+      console.warn('[GOOGLE] getGoogleAuthUrl: Erro na resposta:', message);
+      throw new Error(message);
     }
 
-    const data = await response.json();
+    const data = unwrapGooglePayload<{ authUrl?: string; redirectUri?: string }>(
+      await response.json(),
+    );
     console.log('[GOOGLE] getGoogleAuthUrl: URL obtida:', data.authUrl ? 'SIM' : 'NÃO');
     console.log('[GOOGLE] getGoogleAuthUrl: Redirect URI:', data.redirectUri || 'NÃO DISPONÍVEL');
-    return { 
+    if (!data.authUrl) {
+      throw new Error('URL de autorização do Google não retornada pelo servidor');
+    }
+    return {
       authUrl: data.authUrl,
-      redirectUri: data.redirectUri || ''
+      redirectUri: data.redirectUri || '',
     };
   } catch (error: any) {
-    console.error('[GOOGLE] getGoogleAuthUrl: Erro:', error);
+    console.warn('[GOOGLE] getGoogleAuthUrl: Erro:', error?.message || error);
     throw error;
   }
 }
@@ -237,20 +282,16 @@ export async function getGoogleAuthUrl(
 export async function handleGoogleCallback(code: string, state?: string): Promise<void> {
   console.log('[GOOGLE] handleGoogleCallback: Iniciando com code:', code ? 'SIM' : 'NÃO', 'state:', state ? 'SIM' : 'NÃO');
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      console.log('[GOOGLE] handleGoogleCallback: Sem sessão do Supabase');
-      throw new Error('Usuário não autenticado');
-    }
+    await resolveAccessToken();
 
     const edgeFunctionUrl = `${getGoogleCalendarApiUrl()}/callback`;
     console.log('[GOOGLE] handleGoogleCallback: Chamando:', edgeFunctionUrl);
-    
+
     const body: { code: string; state?: string } = { code };
     if (state) {
       body.state = state;
     }
-    
+
     const response = await fetch(edgeFunctionUrl, {
       method: 'POST',
       headers: await googleCalendarFetchHeaders(),
@@ -259,13 +300,13 @@ export async function handleGoogleCallback(code: string, state?: string): Promis
 
     console.log('[GOOGLE] handleGoogleCallback: Status:', response.status);
     if (!response.ok) {
-      const error = await response.json();
-      console.error('[GOOGLE] handleGoogleCallback: Erro na resposta:', error);
-      throw new Error(error.error || 'Erro ao processar callback');
+      const message = await readGoogleErrorMessage(response);
+      console.warn('[GOOGLE] handleGoogleCallback: Erro na resposta:', message);
+      throw new Error(message);
     }
     console.log('[GOOGLE] handleGoogleCallback: Sucesso');
   } catch (error: any) {
-    console.error('[GOOGLE] handleGoogleCallback: Erro:', error);
+    console.warn('[GOOGLE] handleGoogleCallback: Erro:', error?.message || error);
     throw error;
   }
 }
@@ -281,10 +322,7 @@ async function requestDisconnect(method: 'DELETE' | 'POST'): Promise<Response> {
 }
 
 export async function disconnectGoogleAuth(): Promise<void> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
-    throw new Error('Usuário não autenticado');
-  }
+  await resolveAccessToken();
 
   let response = await requestDisconnect('DELETE');
   if (!response.ok && (response.status === 404 || response.status === 405)) {
@@ -292,10 +330,7 @@ export async function disconnectGoogleAuth(): Promise<void> {
   }
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(
-      (error as { error?: string }).error || 'Erro ao desconectar Google Calendar',
-    );
+    throw new Error(await readGoogleErrorMessage(response));
   }
 
   const stillConnected = await checkGoogleAuth();
@@ -324,10 +359,7 @@ export async function createCalendarEvent(transaction: {
       return { success: false, error: 'Status da transação não requer evento no calendário' };
     }
 
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      return { success: false, error: 'Usuário não autenticado' };
-    }
+    const accessToken = await resolveAccessToken();
 
     // Verificar se está autenticado no Google
     const isAuthenticated = await checkGoogleAuth();
@@ -342,18 +374,18 @@ export async function createCalendarEvent(transaction: {
     const response = await fetch(`${getGoogleCalendarApiUrl()}/create-event`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${session.access_token}`,
+        'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ transaction }),
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      return { success: false, error: error.error || 'Erro ao criar evento' };
+      const message = await readGoogleErrorMessage(response);
+      return { success: false, error: message };
     }
 
-    const data = await response.json();
+    const data = unwrapGooglePayload<{ eventId?: string }>(await response.json());
     return { success: true, eventId: data.eventId };
   } catch (error: any) {
     console.error('Erro ao criar evento no calendário:', error);
@@ -391,13 +423,12 @@ export interface CreateCustomGoogleEventResult {
 export async function createCustomGoogleEvent(
   payload: CustomEventPayload,
 ): Promise<CreateCustomGoogleEventResult> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Usuário não autenticado');
+  const accessToken = await resolveAccessToken();
 
   const response = await fetch(`${getGoogleCalendarApiUrl()}/create-custom-event`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${session.access_token}`,
+      'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -413,11 +444,12 @@ export async function createCustomGoogleEvent(
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || 'Erro ao criar evento');
+    throw new Error(await readGoogleErrorMessage(response));
   }
 
-  const data = await response.json().catch(() => ({}));
+  const data = unwrapGooglePayload<{ eventId?: string; hangoutLink?: string }>(
+    await response.json().catch(() => ({})),
+  );
   const eventId = String(data?.eventId || '');
   const hangoutLink =
     (typeof data?.hangoutLink === 'string' && data.hangoutLink) ||
@@ -484,14 +516,13 @@ export async function updateCustomGoogleEvent(
   eventId: string,
   payload: CustomEventPayload,
 ): Promise<CreateCustomGoogleEventResult> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Usuário não autenticado');
+  const accessToken = await resolveAccessToken();
   if (!eventId) throw new Error('Evento inválido');
 
   const response = await fetch(`${getGoogleCalendarApiUrl()}/update-custom-event`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${session.access_token}`,
+      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -508,11 +539,12 @@ export async function updateCustomGoogleEvent(
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || 'Erro ao atualizar evento');
+    throw new Error(await readGoogleErrorMessage(response));
   }
 
-  const data = await response.json().catch(() => ({}));
+  const data = unwrapGooglePayload<{ eventId?: string; hangoutLink?: string }>(
+    await response.json().catch(() => ({})),
+  );
   const id = String(data?.eventId || eventId);
   const hangoutLink =
     typeof data?.hangoutLink === 'string' ? data.hangoutLink : null;
@@ -528,22 +560,20 @@ export async function updateCustomGoogleEvent(
 }
 
 export async function deleteGoogleCalendarEvent(eventId: string): Promise<void> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Usuário não autenticado');
+  const accessToken = await resolveAccessToken();
   if (!eventId) throw new Error('Evento inválido');
 
   const response = await fetch(`${getGoogleCalendarApiUrl()}/delete-custom-event`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${session.access_token}`,
+      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ eventId }),
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || 'Erro ao excluir evento');
+    throw new Error(await readGoogleErrorMessage(response));
   }
 
   await forgetAppMeetEvent(eventId);
@@ -555,11 +585,7 @@ export async function deleteGoogleCalendarEvent(eventId: string): Promise<void> 
 export async function getGoogleEvents(params?: GoogleEventsParams): Promise<GoogleCalendarEvent[]> {
   console.log('[GOOGLE] getGoogleEvents: Iniciando...');
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      console.log('[GOOGLE] getGoogleEvents: Sem sessão do Supabase');
-      throw new Error('Usuário não autenticado');
-    }
+    const accessToken = await resolveAccessToken();
 
     const edgeFunctionBase = `${getGoogleCalendarApiUrl()}/events`;
     const queryParams = new URLSearchParams();
@@ -576,20 +602,22 @@ export async function getGoogleEvents(params?: GoogleEventsParams): Promise<Goog
     const response = await fetch(edgeFunctionUrl, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${session.access_token}`,
+        'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
     });
 
     console.log('[GOOGLE] getGoogleEvents: Status:', response.status);
     if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      console.error('[GOOGLE] getGoogleEvents: Erro na resposta:', error);
-      throw new Error(error.error || 'Erro ao listar eventos do Google Calendar');
+      const message = await readGoogleErrorMessage(response);
+      console.warn('[GOOGLE] getGoogleEvents: Erro na resposta:', message);
+      throw new Error(message);
     }
 
-    const data = await response.json();
-    const events = (data?.events || data?.items || data || []) as GoogleCalendarEvent[];
+    const data = unwrapGooglePayload<{ events?: GoogleCalendarEvent[]; items?: GoogleCalendarEvent[] }>(
+      await response.json(),
+    );
+    const events = (data?.events || data?.items || []) as GoogleCalendarEvent[];
     console.log('[GOOGLE] getGoogleEvents: Eventos recebidos:', Array.isArray(events) ? events.length : 0);
 
     if (Array.isArray(events)) {
@@ -605,7 +633,7 @@ export async function getGoogleEvents(params?: GoogleEventsParams): Promise<Goog
 
     return Array.isArray(events) ? events : [];
   } catch (error: any) {
-    console.error('[GOOGLE] getGoogleEvents: Erro:', error);
+    console.warn('[GOOGLE] getGoogleEvents: Erro:', error?.message || error);
     throw error;
   }
 }

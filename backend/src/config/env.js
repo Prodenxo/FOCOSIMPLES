@@ -67,15 +67,48 @@ const mergedCorsOrigin = [
   .filter(Boolean)
   .join(",");
 
+/** `local` = Auth + Postgres EasyPanel (sem Supabase). Default: `supabase`. */
+const AUTH_MODE = String(process.env.AUTH_MODE || "supabase")
+  .trim()
+  .toLowerCase();
+const isLocalAuth = AUTH_MODE === "local";
+
+if (isLocalAuth) {
+  required("DATABASE_URL");
+  if (
+    !normalizeEnvSecret(process.env.AUTH_JWT_SECRET) &&
+    !normalizeEnvSecret(process.env.JWT_SECRET)
+  ) {
+    throw new Error(
+      "Com AUTH_MODE=local defina AUTH_JWT_SECRET (ou JWT_SECRET)",
+    );
+  }
+}
+
 export const env = {
   NODE_ENV: process.env.NODE_ENV || "development",
   PORT: process.env.PORT || "3333",
   CORS_ORIGIN: mergedCorsOrigin,
-  SUPABASE_URL: required("SUPABASE_URL"),
-  SUPABASE_ANON_KEY: required("SUPABASE_ANON_KEY"),
+  AUTH_MODE: isLocalAuth ? "local" : "supabase",
+  /** Segredo JWT do Auth local (AUTH_MODE=local). */
+  AUTH_JWT_SECRET: normalizeEnvSecret(
+    process.env.AUTH_JWT_SECRET || process.env.JWT_SECRET || "",
+  ),
+  JWT_SECRET: normalizeEnvSecret(process.env.JWT_SECRET || ""),
+  DATABASE_URL: process.env.DATABASE_URL || "",
+  DB_SSL: process.env.DB_SSL || "",
+  SUPABASE_URL: isLocalAuth
+    ? process.env.SUPABASE_URL || ""
+    : required("SUPABASE_URL"),
+  SUPABASE_ANON_KEY: isLocalAuth
+    ? process.env.SUPABASE_ANON_KEY || ""
+    : required("SUPABASE_ANON_KEY"),
   /** JWT Secret do projeto Supabase (Settings → API). Evita round-trip Auth em cada request. */
   SUPABASE_JWT_SECRET: normalizeEnvSecret(
-    process.env.SUPABASE_JWT_SECRET || process.env.JWT_SECRET || "",
+    process.env.SUPABASE_JWT_SECRET ||
+      process.env.AUTH_JWT_SECRET ||
+      process.env.JWT_SECRET ||
+      "",
   ),
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
   SUPABASE_DB_URL:
@@ -87,6 +120,8 @@ export const env = {
   CALENDAR_CHECKLIST_SCHEMA_ENSURE:
     process.env.CALENDAR_CHECKLIST_SCHEMA_ENSURE || "",
   FRONTEND_URL: process.env.FRONTEND_URL || "https://focomei.com.br",
+  /** focosimples | focomei — política de produto (notas / gates). */
+  APP_PRODUCT: String(process.env.APP_PRODUCT || "focosimples").trim().toLowerCase(),
   /** Resend — envio de recuperação de senha (recomendado para Hotmail/Outlook). */
   RESEND_API_KEY: normalizeEnvSecret(process.env.RESEND_API_KEY || ""),
   RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL || "",

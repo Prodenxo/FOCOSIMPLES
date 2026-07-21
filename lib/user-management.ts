@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import { normalizeRoleValue, type UserRole } from './auth-roles';
 import { apiClient } from './apiClient';
 import { getMeiApiBaseUrl } from './runtimeEnv';
+import { isLocalApiAuthMode } from './authMode';
 
 export interface ManagedUser {
   id: string;
@@ -59,10 +60,10 @@ export const handleFunctionError = async (error: any, fallbackMessage: string) =
   throw new Error(msg);
 };
 
-export const listUsers = async (search?: string): Promise<ManagedUser[]> => {
-  const hasMeiApi = Boolean(getMeiApiBaseUrl());
+const useBackendApi = () => Boolean(getMeiApiBaseUrl()) || isLocalApiAuthMode();
 
-  if (hasMeiApi) {
+export const listUsers = async (search?: string): Promise<ManagedUser[]> => {
+  if (useBackendApi()) {
     const q = search?.trim() ? `?search=${encodeURIComponent(search.trim())}` : '';
     const result = await apiClient.get<{ users: ManagedUser[] }>(`/users${q}`);
     const users = (result?.users || []) as ManagedUser[];
@@ -84,6 +85,11 @@ export const listUsers = async (search?: string): Promise<ManagedUser[]> => {
 };
 
 export const listEmpresas = async (): Promise<EmpresaOption[]> => {
+  if (useBackendApi()) {
+    const result = await apiClient.get<{ empresas?: EmpresaOption[] }>('/users/empresas');
+    return (result?.empresas || []) as EmpresaOption[];
+  }
+
   const { data, error } = await supabase.functions.invoke('list-empresas');
   if (error) await handleFunctionError(error, 'Erro ao listar empresas');
   return (data?.empresas || []) as EmpresaOption[];
@@ -105,9 +111,7 @@ export const createUser = async (input: {
     mei: input.mei === true,
   };
 
-  const hasMeiApi = Boolean(getMeiApiBaseUrl());
-
-  if (hasMeiApi) {
+  if (useBackendApi()) {
     try {
       return await apiClient.post<{
         userId: string;
@@ -122,82 +126,8 @@ export const createUser = async (input: {
     }
   }
 
-  console.log('[user-management] Invocando create-user (edge) com input:', {
-    email: payload.email,
-    hasPassword: !!payload.password,
-    role: payload.role,
-    empresaId: payload.empresaId,
-    mei: payload.mei,
-  });
-
   const { data, error } = await supabase.functions.invoke('create-user', { body: payload });
-  
-  if (error) {
-    console.error('[user-management] Erro na edge function create-user:', {
-      message: error.message,
-      context: error.context,
-      error: error,
-      errorKeys: Object.keys(error || {}),
-    });
-    
-    // Tenta extrair a mensagem de erro do body da resposta
-    let errorMessage = 'Erro ao criar usuário';
-    try {
-      // Tenta acessar o context como Response
-      const ctx = error.context as Response | undefined;
-      if (ctx) {
-        // Tenta ler como JSON
-        try {
-          const body = await ctx.json();
-          console.log('[user-management] Body do erro (JSON):', body);
-          if (typeof body?.error === 'string') {
-            errorMessage = body.error;
-          }
-        } catch {
-          // Se não for JSON, tenta como texto
-          try {
-            const text = await ctx.text();
-            console.log('[user-management] Body do erro (text):', text);
-            // Tenta parsear como JSON manualmente
-            try {
-              const parsed = JSON.parse(text);
-              if (typeof parsed?.error === 'string') {
-                errorMessage = parsed.error;
-              }
-            } catch {
-              // Se não for JSON válido, usa o texto
-              if (text) {
-                errorMessage = text;
-              }
-            }
-          } catch (textError) {
-            console.warn('[user-management] Não foi possível ler como texto:', textError);
-          }
-        }
-      }
-      
-      // Fallback: verifica se há mensagem direta no erro
-      if (errorMessage === 'Erro ao criar usuário' && error?.message) {
-        errorMessage = error.message;
-      }
-    } catch (parseError) {
-      console.warn('[user-management] Erro ao processar erro:', parseError);
-      if (error?.message) {
-        errorMessage = error.message;
-      }
-    }
-    
-    console.error('[user-management] Mensagem de erro final:', errorMessage);
-    throw new Error(errorMessage);
-  }
-  
-  console.log('[user-management] Resposta da edge function:', {
-    hasData: !!data,
-    userId: data?.userId,
-    email: data?.email,
-    hasGeneratedPassword: !!data?.generatedPassword,
-  });
-  
+  if (error) await handleFunctionError(error, 'Erro ao criar usuário');
   return data;
 };
 
@@ -205,9 +135,7 @@ export const updateUser = async (
   userId: string,
   input: { role?: string; empresaId?: string; displayName?: string; phone?: string; email?: string; mei?: boolean; expiresAt?: string | null },
 ) => {
-  const hasMeiApi = Boolean(getMeiApiBaseUrl());
-
-  if (hasMeiApi) {
+  if (useBackendApi()) {
     try {
       return await apiClient.put<{ userId: string; role: string; empresaId: string }>(
         `/users/${encodeURIComponent(userId)}`,
@@ -219,63 +147,47 @@ export const updateUser = async (
     }
   }
 
-  console.log('[updateUser] payload (edge)', { userId, ...input });
   const { data, error } = await supabase.functions.invoke('update-user', {
     body: { userId, ...input },
   });
-  if (error) {
-    let msg = 'Erro ao atualizar usuário';
-    try {
-      const ctx = error.context as Response | undefined;
-      if (ctx) {
-        try {
-          const body = await ctx.json();
-          if (typeof body?.error === 'string') msg = body.error;
-          else if (typeof body?.message === 'string') msg = body.message;
-        } catch {
-          const text = await ctx.text();
-          if (text) {
-            try {
-              const parsed = JSON.parse(text);
-              if (typeof parsed?.error === 'string') msg = parsed.error;
-              else if (typeof parsed?.message === 'string') msg = parsed.message;
-            } catch {
-              msg = text;
-            }
-          }
-        }
-      } else if (error?.message) {
-        msg = error.message;
-      }
-    } catch {
-      if (error?.message) msg = error.message;
-    }
-    console.error('[updateUser] error', { message: error.message, extractedMessage: msg });
-    throw new Error(formatManageUserError(msg));
-  }
-  console.log('[updateUser] response (edge)', data);
+  if (error) await handleFunctionError(error, 'Erro ao atualizar usuário');
   return data;
 };
 
 export const banUser = async (userId: string) => {
+  if (useBackendApi()) {
+    return apiClient.post(`/users/${encodeURIComponent(userId)}/ban`, { status: false });
+  }
   const { data, error } = await supabase.functions.invoke('ban-user', { body: { userId } });
   if (error) await handleFunctionError(error, 'Erro ao bloquear usuário');
   return data;
 };
 
 export const unbanUser = async (userId: string) => {
+  if (useBackendApi()) {
+    return apiClient.post(`/users/${encodeURIComponent(userId)}/unban`, {});
+  }
   const { data, error } = await supabase.functions.invoke('unban-user', { body: { userId } });
   if (error) await handleFunctionError(error, 'Erro ao desbloquear usuário');
   return data;
 };
 
 export const deleteUser = async (userId: string) => {
+  if (useBackendApi()) {
+    return apiClient.delete(`/users/${encodeURIComponent(userId)}`);
+  }
   const { data, error } = await supabase.functions.invoke('delete-user', { body: { userId } });
   if (error) await handleFunctionError(error, 'Erro ao excluir usuário');
   return data;
 };
 
 export const resetUserPassword = async (userId: string, password?: string) => {
+  if (useBackendApi()) {
+    return apiClient.post<{ userId: string; password: string }>(
+      `/users/${encodeURIComponent(userId)}/reset-password`,
+      { password },
+    );
+  }
   const { data, error } = await supabase.functions.invoke('reset-user-password', {
     body: { userId, password },
   });

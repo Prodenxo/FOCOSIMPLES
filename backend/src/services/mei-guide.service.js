@@ -15,6 +15,7 @@ import {
   getCertificateValidity,
   patchEmitenteNfseFields,
   getEmitenteNfseSnapshot,
+  getNfsePrestadorPrefill,
   getDocumentosAtivosMirror,
   savePlugNotasCertId,
   hasCertificatePfx,
@@ -602,6 +603,10 @@ const getAutenticaProcuradorUrl = () => {
   if (env.SERPRO_AUTENTICA_PROCURADOR_URL) return env.SERPRO_AUTENTICA_PROCURADOR_URL;
   if (env.SERPRO_AUTENTICA_PROCURADOR_PATH) {
     return `${getBaseUrl()}${env.SERPRO_AUTENTICA_PROCURADOR_PATH}`;
+  }
+  // Autentica Procurador é serviço de apoio → /Apoiar (não /Emitir)
+  if (env.SERPRO_API_BASE_URL) {
+    return `${getBaseUrl()}/Apoiar`;
   }
   return '';
 };
@@ -1413,6 +1418,13 @@ export const uploadCertificate = async (userId, payload) => {
 
   await assertMeiCertificateEligible(certDocument);
 
+  if (!env.MEI_CERT_ENCRYPTION_KEY) {
+    throw badRequest(
+      'MEI_CERT_ENCRYPTION_KEY não configurada no servidor. Sem ela o certificado não é gravado e some ao reiniciar.',
+      { code: 'MEI_CERT_ENCRYPTION_KEY_MISSING' },
+    );
+  }
+
   let previousCertDocument = null;
   if (certDocument) {
     try {
@@ -1422,21 +1434,19 @@ export const uploadCertificate = async (userId, payload) => {
     }
   }
 
-  if (env.MEI_CERT_ENCRYPTION_KEY) {
-    try {
-      const { passphraseEnc, passphraseIv } = encryptPassphrase(password);
-      await saveCertificate(userId, {
-        pfxBase64: file.buffer.toString('base64'),
-        passphraseEnc,
-        passphraseIv,
-        certDocument,
-        certValidFrom: certInfo?.validFrom ?? null,
-        certValidTo: certInfo?.validTo ?? null,
-        ...(emitente ? { emitente } : {})
-      });
-    } catch (err) {
-      throw badRequest(err?.message || 'Falha ao salvar certificado');
-    }
+  try {
+    const { passphraseEnc, passphraseIv } = encryptPassphrase(password);
+    await saveCertificate(userId, {
+      pfxBase64: file.buffer.toString('base64'),
+      passphraseEnc,
+      passphraseIv,
+      certDocument,
+      certValidFrom: certInfo?.validFrom ?? null,
+      certValidTo: certInfo?.validTo ?? null,
+      ...(emitente ? { emitente } : {})
+    });
+  } catch (err) {
+    throw badRequest(err?.message || 'Falha ao salvar certificado');
   }
 
   if (certDocument) {
@@ -1553,6 +1563,8 @@ export const removeCertificate = async (userId) => {
 };
 
 /** Status do certificado MEI; `nfseEmitente` segue o typedef `NfseEmitenteApiSnapshot` em `mei-certificate-store.js`. */
+export { getNfsePrestadorPrefill };
+
 export const getCertificateStatus = async (userId) => {
   await ensureUserCertLoaded(userId);
   const userCert = getUserCert(userId);
@@ -1589,7 +1601,8 @@ export const getCertificateStatus = async (userId) => {
     documentosAtivos = null;
   }
   const docResolved = docFromCache || docFromDb || null;
-  const hasCert = Boolean(userCert);
+  // Status da UI deve refletir .pfx persistido (não só cache em memória / linha sem blob).
+  const hasCert = await userHasMeiCertificate(userId);
   return {
     hasUserCertificate: hasCert,
     hasEnvCertificate: Boolean(env.SERPRO_CERT_PFX_BASE64),

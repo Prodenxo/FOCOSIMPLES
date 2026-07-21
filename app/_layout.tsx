@@ -13,7 +13,7 @@ import {
   type PasswordRecoveryPayload,
 } from '@/lib/passwordRecoveryDeepLink';
 import ResetPasswordScreen from '@/screens/auth/ResetPasswordScreen';
-import { isSupabaseConfigured } from '@/lib/supabase';
+import { isAppConfigured } from '@/lib/authMode';
 import { RootErrorBoundary } from '@/components/RootErrorBoundary';
 
 type RecoveryUiState =
@@ -21,21 +21,25 @@ type RecoveryUiState =
   | { kind: 'invalid' }
   | ({ kind: 'recovery' } & PasswordRecoveryPayload);
 
-function SupabaseConfigScreen() {
+function AppConfigScreen() {
   return (
     <ScrollView contentContainerStyle={styles.configContainer}>
-      <Text style={styles.configTitle}>Supabase não configurado</Text>
-      <Text style={styles.configText}>Configure as credenciais para o app funcionar:</Text>
+      <Text style={styles.configTitle}>App não configurado</Text>
+      <Text style={styles.configText}>
+        Auth local (sem Supabase) — na raiz do projeto crie `.env`:
+      </Text>
       <Text style={styles.configCode}>
-        Local: frontend/.env{'\n'}
+        EXPO_PUBLIC_AUTH_MODE=local{'\n'}
+        EXPO_PUBLIC_MEI_API_URL_DEV=http://localhost:3333{'\n'}
+        EXPO_PUBLIC_APP_PRODUCT=focosimples
+      </Text>
+      <Text style={styles.configText}>Ou configure Supabase clássico:</Text>
+      <Text style={styles.configCode}>
         EXPO_PUBLIC_SUPABASE_URL=...{'\n'}
-        EXPO_PUBLIC_SUPABASE_ANON_KEY=...{'\n'}
-        {'\n'}
-        Easypanel: Environment ou Build Args{'\n'}
-        (aceita VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY também)
+        EXPO_PUBLIC_SUPABASE_ANON_KEY=...
       </Text>
       <Text style={styles.configSubtext}>
-        Após alterar env no servidor, faça Redeploy (rebuild).
+        Depois reinicie o Expo (`npm start -c`).
       </Text>
     </ScrollView>
   );
@@ -91,8 +95,8 @@ function RootLayoutInner() {
   usePasswordRecoveryDeepLink(recoveryHandlers);
   const closeRecovery = useCallback(() => setRecoveryState({ kind: 'none' }), []);
 
-  if (!isSupabaseConfigured()) {
-    return <SupabaseConfigScreen />;
+  if (!isAppConfigured()) {
+    return <AppConfigScreen />;
   }
 
   return (

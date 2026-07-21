@@ -492,6 +492,16 @@ export const listSubscriptionLinesForEmpresa = async (
 
 /** Status de cobrança da empresa do requester (gate /planos). */
 export const getMeiBillingStatusForRequester = async (accessToken) => {
+  // FocoSimples não cobra pacotes MEI via Stripe — gate /planos é só FocoMEI.
+  if (String(env.APP_PRODUCT || "").trim().toLowerCase() === "focosimples") {
+    return {
+      required: false,
+      maxMei: null,
+      hasActiveSubscription: false,
+      packages: MEI_PUBLIC_PACKAGES,
+    };
+  }
+
   const requester = await getRequesterContext(accessToken);
   if (requester.role === "superadmin") {
     return { required: false, maxMei: null, hasActiveSubscription: true };

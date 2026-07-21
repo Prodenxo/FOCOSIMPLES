@@ -1,9 +1,11 @@
 import type { ContaFinanceira } from './contaFinanceiraTypes'
 
-/** Nome da carteira/conta padrão do produto Meu Financeiro. */
-export const DEFAULT_CONTA_NOME = 'Meu Financeiro'
+/** Nome da carteira/conta padrão do produto Foco Simples. */
+export const DEFAULT_CONTA_NOME = 'Foco Simples'
 
 const DEFAULT_CONTA_NAME_KEYS = [
+  'foco simples',
+  'focosimples',
   'meu financeiro',
   'carteira',
   'carteira principal',

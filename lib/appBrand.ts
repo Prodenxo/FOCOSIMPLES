@@ -5,7 +5,7 @@ import { getPublicEnv } from './runtimeEnv'
 export const APP_BRAND_NAME = 'FocoSimples'
 
 export const APP_BRAND_TAGLINE =
-  'Notas e DAS do Simples. Você cuida do negócio.'
+  'Finanças e obrigações do Simples. Você cuida do negócio.'
 
 /** Label da aba/tela principal (área fiscal Simples). */
 export const APP_NAV_HOME_LABEL = 'Área fiscal'

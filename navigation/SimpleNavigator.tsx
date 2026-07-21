@@ -63,7 +63,7 @@ const ALL_ITEMS: (DrawerItem<AppScreenName> & {
     name: "MeuMei",
     icon: "briefcase-outline",
     activeIcon: "briefcase",
-    label: "Meu MEI",
+    label: "Notas",
     requiresMeiAccess: true,
   },
   {
@@ -179,7 +179,7 @@ export default function SimpleNavigator() {
           current={currentScreen}
           onSelect={setCurrentScreen}
           theme={theme}
-          brandTitle="Meu Financeiro"
+          brandTitle="Foco Simples"
           headerLabel="Navegação"
         />
       </View>

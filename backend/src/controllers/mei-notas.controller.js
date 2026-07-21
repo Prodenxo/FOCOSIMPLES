@@ -267,6 +267,12 @@ const injectCertificadoIdIntoEmpresaPayload = async (userId, payload) => {
 
 export const cadastrarPlugNotasEmpresa = async (req, res, next) => {
   try {
+    if (!env.PLUGNOTAS_API_BASE_URL || !env.PLUGNOTAS_API_KEY) {
+      throw badRequest(
+        'PlugNotas não configurado. Defina PLUGNOTAS_API_BASE_URL e PLUGNOTAS_API_KEY no .env do backend, reinicie o servidor e reenvie o certificado .pfx.',
+        { plugnotasCode: 'plugnotas_nao_configurado' },
+      );
+    }
     const payload = getEmpresaPayloadFromRequest(req);
     const { certId, diagnostics } = await injectCertificadoIdIntoEmpresaPayload(req.user?.id, payload);
     if (!certId) {

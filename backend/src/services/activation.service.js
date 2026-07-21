@@ -2,6 +2,8 @@ import { createSupabaseClient } from '../config/supabase.js';
 import { canonicalizeBrazilWhatsappPhone } from '../utils/whatsapp-phone.js';
 import { userHasMeiCertificate } from './mei-guide.service.js';
 import { ensureGlobalCategoriesCopiedForUser } from './categories.service.js';
+import { env } from '../config/env.js';
+import { query } from '../config/pg.js';
 
 /** Cliente Supabase injetável em testes. */
 let getActivationDbClient = () => createSupabaseClient({ useServiceRole: true });
@@ -13,6 +15,8 @@ export const __setActivationDbClientForTests = (fn) => {
     getActivationDbClient = prev;
   };
 };
+
+const isLocalAuthMode = () => env.AUTH_MODE === 'local';
 
 export const getMonthStartDateString = (date = new Date()) => {
   const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
@@ -226,6 +230,10 @@ const fetchMeiFlag = async (admin, userId) => {
 };
 
 export const gatherActivationContext = async (userId) => {
+  if (isLocalAuthMode()) {
+    return gatherActivationContextPg(userId);
+  }
+
   const admin = getActivationDbClient();
   const monthStart = getMonthStartDateString();
 
@@ -305,11 +313,84 @@ export const gatherActivationContext = async (userId) => {
   };
 };
 
+const gatherActivationContextPg = async (userId) => {
+  const monthStart = getMonthStartDateString();
+  const [
+    userRes,
+    n8nRes,
+    accountsRes,
+    txRes,
+    budgetRes,
+    googleRes,
+    linkRes,
+  ] = await Promise.all([
+    query(
+      `SELECT email, phone, raw_user_meta_data FROM public.users WHERE id = $1 LIMIT 1`,
+      [userId],
+    ),
+    query(
+      `SELECT user_number FROM public.n8n_link WHERE user_id = $1 LIMIT 1`,
+      [userId],
+    ),
+    query(
+      `SELECT count(*)::int AS c FROM public.contas_financeiras
+       WHERE user_id = $1 AND ativo = true`,
+      [userId],
+    ),
+    query(
+      `SELECT count(*)::int AS c FROM public.lancamentos_id WHERE user_id = $1`,
+      [userId],
+    ),
+    query(
+      `SELECT id FROM public.orcamentos
+       WHERE user_id = $1 AND date = $2 AND valor_orcado IS NOT NULL
+       LIMIT 1`,
+      [userId, monthStart],
+    ),
+    query(
+      `SELECT access_token FROM public.google_tokens_id WHERE user_id = $1 LIMIT 1`,
+      [userId],
+    ),
+    query(
+      `SELECT mei FROM public.role_x_user_x_empresa
+       WHERE user_id = $1 AND status = true
+       ORDER BY created_at DESC LIMIT 1`,
+      [userId],
+    ),
+  ]);
+
+  const user = userRes.rows[0];
+  const meta = user?.raw_user_meta_data || {};
+  const displayName = meta.display_name || meta.full_name || null;
+  const phoneRaw = user?.phone || meta.phone || n8nRes.rows[0]?.user_number || null;
+
+  return {
+    showMei: linkRes.rows[0]?.mei === true,
+    ctx: {
+      hasProfileName: isProfileNameComplete(displayName),
+      hasPhone: isPhoneWhatsappComplete(phoneRaw),
+      accountsCount: accountsRes.rows[0]?.c ?? 0,
+      transactionsCount: txRes.rows[0]?.c ?? 0,
+      hasBudgetThisMonth: (budgetRes.rows || []).length > 0,
+      hasGoogleCalendar: Boolean(googleRes.rows[0]?.access_token),
+      hasMeiCertificate: false,
+      hasDasActivity: false,
+      nfseClientsCount: 0,
+    },
+  };
+};
+
 export const getActivationProgress = async (userId) => {
-  const admin = getActivationDbClient();
-  await ensureGlobalCategoriesCopiedForUser(admin, userId).catch((err) => {
-    console.warn('[activation] ensureGlobalCategoriesCopiedForUser:', err?.message || err);
-  });
+  if (!isLocalAuthMode()) {
+    const admin = getActivationDbClient();
+    await ensureGlobalCategoriesCopiedForUser(admin, userId).catch((err) => {
+      console.warn('[activation] ensureGlobalCategoriesCopiedForUser:', err?.message || err);
+    });
+  } else {
+    await ensureGlobalCategoriesCopiedForUser(null, userId).catch((err) => {
+      console.warn('[activation] ensureGlobalCategoriesCopiedForUser:', err?.message || err);
+    });
+  }
 
   const { showMei, ctx } = await gatherActivationContext(userId);
   const steps = buildActivationSteps(ctx, { showMei });

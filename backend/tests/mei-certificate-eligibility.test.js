@@ -57,6 +57,7 @@ test('classifyCnpjMeiEligibility: LTDA bloqueia', () => {
 });
 
 test('assertMeiCertificateEligible bloqueia e-CPF (11 dígitos)', async () => {
+  process.env.APP_PRODUCT = 'focomei';
   process.env.MEI_CERT_ENFORCE_MEI_CNPJ = 'true';
   const { assertMeiCertificateEligible } = await import(
     '../src/services/mei-certificate-eligibility.service.js'
@@ -72,6 +73,7 @@ test('assertMeiCertificateEligible bloqueia e-CPF (11 dígitos)', async () => {
 });
 
 test('assertMeiCertificateEligible bloqueia CNPJ Simples sem MEI', async () => {
+  process.env.APP_PRODUCT = 'focomei';
   process.env.MEI_CERT_ENFORCE_MEI_CNPJ = 'true';
   const originalFetch = global.fetch;
   global.fetch = async () => ({
@@ -103,6 +105,7 @@ test('assertMeiCertificateEligible bloqueia CNPJ Simples sem MEI', async () => {
 });
 
 test('assertMeiCertificateEligible permite somente opcao_mei true', async () => {
+  process.env.APP_PRODUCT = 'focomei';
   process.env.MEI_CERT_ENFORCE_MEI_CNPJ = 'true';
   const originalFetch = global.fetch;
   global.fetch = async () => ({
@@ -123,6 +126,47 @@ test('assertMeiCertificateEligible permite somente opcao_mei true', async () => 
     );
     const result = await assertMeiCertificateEligible('17422651000172');
     assert.equal(result.signal, 'opcao_mei_true');
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('classifyCnpjSimplesEligibility: Simples Nacional sem MEI é permitido', async () => {
+  const { classifyCnpjSimplesEligibility } = await import(
+    '../src/services/mei-certificate-eligibility.service.js'
+  );
+  const verdict = classifyCnpjSimplesEligibility({
+    opcaoMei: false,
+    opcaoSimples: true,
+    situacaoCadastral: 'ATIVA',
+  });
+  assert.equal(verdict.eligible, true);
+  assert.equal(verdict.signal, 'opcao_simples_true');
+});
+
+test('assertMeiCertificateEligible no focosimples aceita CNPJ Simples sem MEI', async () => {
+  process.env.APP_PRODUCT = 'focosimples';
+  process.env.MEI_CERT_ENFORCE_MEI_CNPJ = 'true';
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      razao_social: 'EMPRESA SIMPLES LTDA',
+      opcao_pelo_mei: false,
+      opcao_pelo_simples: true,
+      descricao_situacao_cadastral: 'ATIVA',
+      codigo_natureza_juridica: 2062,
+    }),
+  });
+
+  try {
+    const { assertMeiCertificateEligible } = await import(
+      `../src/services/mei-certificate-eligibility.service.js?t=${Date.now()}`
+    );
+    const result = await assertMeiCertificateEligible('17422651000172');
+    assert.equal(result.signal, 'opcao_simples_true');
+    assert.equal(result.product, 'focosimples');
   } finally {
     global.fetch = originalFetch;
   }

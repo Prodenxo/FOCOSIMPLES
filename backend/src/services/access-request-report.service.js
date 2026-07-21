@@ -1,4 +1,6 @@
 import { getServiceRoleClient } from '../config/supabase.js';
+import { query } from '../config/pg.js';
+import { isLocalAuthMode } from './local-auth.service.js';
 
 const ADMIN_ROLE_ID = '849af65c-fe71-464c-8d26-1c61166b29a1';
 
@@ -75,8 +77,95 @@ const fetchEmpresasByIds = async (sb, empresaIds) => {
  * Histórico de solicitações (service role). Consultas em lote — sem tabela nova / RLS.
  */
 export const buildAccessRequestReport = async (limit = 200) => {
-  const sb = getServiceRoleClient();
   const cap = Math.min(Math.max(Number(limit) || 200, 1), 500);
+
+  if (isLocalAuthMode()) {
+    const linkCap = Math.min(cap * 3, 600);
+    const { rows: links } = await query(
+      `SELECT user_id, empresas_id, created_at, status, roles_id, mei
+       FROM public.role_x_user_x_empresa
+       ORDER BY created_at DESC
+       LIMIT $1`,
+      [linkCap],
+    );
+    if (!links.length) return { entries: [] };
+
+    const empresaIds = [...new Set(links.map((l) => l.empresas_id).filter(Boolean))];
+    const { rows: empresas } = await query(
+      `SELECT id, empresa, cnpj, razao_social, nome_fantasia, status, requested_by, created_at, email
+       FROM public.empresas
+       WHERE id = ANY($1::uuid[])`,
+      [empresaIds],
+    );
+    const empById = new Map(empresas.map((e) => [e.id, e]));
+
+    const { rows: activeLinks } = await query(
+      `SELECT empresas_id
+       FROM public.role_x_user_x_empresa
+       WHERE empresas_id = ANY($1::uuid[]) AND status = true`,
+      [empresaIds],
+    );
+    const activeCountByEmpresa = new Map();
+    for (const row of activeLinks) {
+      if (!row.empresas_id) continue;
+      activeCountByEmpresa.set(
+        row.empresas_id,
+        (activeCountByEmpresa.get(row.empresas_id) || 0) + 1,
+      );
+    }
+
+    const userIds = [...new Set(links.map((l) => l.user_id).filter(Boolean))];
+    const { rows: users } = await query(
+      `SELECT id, email, raw_user_meta_data
+       FROM public.users
+       WHERE id = ANY($1::uuid[])`,
+      [userIds],
+    );
+    const userById = new Map(users.map((u) => [u.id, u]));
+
+    const seen = new Set();
+    const entries = [];
+    for (const link of links) {
+      const key = `${link.user_id}-${link.empresas_id}`;
+      if (seen.has(key)) continue;
+      const emp = empById.get(link.empresas_id);
+      if (!emp) continue;
+      const activeMembers = activeCountByEmpresa.get(link.empresas_id) ?? 0;
+      if (!isAccessRequestLink(link, emp, activeMembers)) continue;
+      seen.add(key);
+
+      const user = userById.get(link.user_id);
+      const meta = user?.raw_user_meta_data || {};
+      const empresaNome = emp.empresa ?? emp.razao_social ?? emp.nome_fantasia ?? null;
+      const requestedAt = meta.access_requested_at ?? link.created_at ?? emp.created_at ?? null;
+      const isApproved = link.status === true;
+
+      entries.push({
+        id: key,
+        eventType: isApproved ? 'approved' : 'submitted',
+        subjectUserId: link.user_id,
+        email: user?.email ?? emp.email ?? null,
+        fullName: meta.full_name ?? meta.name ?? empresaNome,
+        empresaNome,
+        cnpj: emp.cnpj ?? null,
+        observacao: meta.access_request_observacao ?? meta.observacao ?? null,
+        actorEmail: isApproved ? meta.access_approved_by_email ?? null : null,
+        occurredAt: isApproved ? meta.access_approved_at ?? requestedAt : requestedAt,
+        requestedAt,
+        approvedAt: isApproved ? meta.access_approved_at ?? null : null,
+      });
+      if (entries.length >= cap) break;
+    }
+
+    entries.sort((a, b) => {
+      const ta = new Date(a.occurredAt || 0).getTime();
+      const tb = new Date(b.occurredAt || 0).getTime();
+      return tb - ta;
+    });
+    return { entries };
+  }
+
+  const sb = getServiceRoleClient();
   const linkCap = Math.min(cap * 3, 600);
 
   const { data: links, error: linksErr } = await sb

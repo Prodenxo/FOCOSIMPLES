@@ -44,6 +44,8 @@ import {
 import {
   enrichCodigosServicosComNbs,
   resolveCodigoNbsForServico,
+  resolveCodigoTributacaoForServico,
+  resolveRegimeApuracaoTributaria,
 } from './nfse-codigo-nbs.js';
 import {
   extractNfeItemQuantidade,
@@ -180,7 +182,7 @@ export const assertNfseServicoCodigosMinLength = (payload) => {
     if (normalized.length < NFSE_SERVICO_CODIGO_MIN_LENGTH) {
       const pos = index + 1;
       throw badRequest(
-        `Código do serviço (NFSe) deve ter pelo menos ${NFSE_SERVICO_CODIGO_MIN_LENGTH} caracteres alfanuméricos após remover máscaras (serviço ${pos}). Informe o código válido conforme o município ou a lista de serviços.`
+        `Código do serviço (NFSe) deve ter pelo menos ${NFSE_SERVICO_CODIGO_MIN_LENGTH} caracteres alfanuméricos após remover máscaras (serviço ${pos}). Use o item completo da lista municipal (ex.: 17.19.01 → 171901); códigos como 17.19 não bastam.`
       );
     }
   });
@@ -397,7 +399,10 @@ const buildServicoFromInput = (input) => {
   const issSource = input.iss && typeof input.iss === 'object' ? { ...input.iss } : {};
   delete issSource.aliquota;
   const valor = input.valor || {};
-  const codigo = input.codigo || input.codigoServico || null;
+  const codigoRaw = input.codigo || input.codigoServico || null;
+  const codigoKey = normalizeNfseServicoCodigoForLength(codigoRaw);
+  // ADN / PlugNotas: cTribNac costuma ir sem máscara (ex.: 171901).
+  const codigo = codigoKey || codigoRaw;
   const discriminacao = input.discriminacao || input.descricaoServico || null;
   const cnae = input.cnae || null;
   const valorServico = input.valorServico ?? valor.servico;
@@ -405,6 +410,7 @@ const buildServicoFromInput = (input) => {
     codigo,
     codigoNbs: input.codigoNbs ?? input.codigo_nbs,
   });
+  const codigoTributacao = resolveCodigoTributacaoForServico(input);
 
   // MEI optante pelo Simples Nacional: não informar alíquota ISS no JSON (regra fiscal / prefeitura).
   return prune({
@@ -413,6 +419,7 @@ const buildServicoFromInput = (input) => {
     discriminacao,
     cnae,
     codigoNbs,
+    codigoTributacao,
     iss: prune(issSource),
     valor: prune({
       ...valor,
@@ -514,6 +521,9 @@ const buildPayloadFromInput = (input, userId) => {
     idIntegracao,
     enviarEmail: input?.enviarEmail ?? false,
     naturezaTributacao: input?.naturezaTributacao ?? null,
+    // ADN / PlugNotas E0166: obrigatório para optante SN ME/EPP (regApTribSN).
+    // 1 = trib. fed. e mun. pelo SN (padrão DAS / ISS no Simples). Número, não string.
+    regimeApuracaoTributaria: resolveRegimeApuracaoTributaria(input),
     descricao: input?.descricao ?? null,
     informacoesComplementares: input?.informacoesComplementares ?? null,
     prestador: prune({

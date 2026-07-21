@@ -1,11 +1,14 @@
+import { resolveAppOrigin } from '@/lib/appOrigin'
 import { fetchMeiBillingStatus } from '@/services/billingService'
 import { useAuthStore } from '@/store/authStore'
 
 /**
- * Admin sem MEI pago precisa de /planos.
- * Também cobre falha da API: se role=admin e mei!==true, exige plano.
+ * Admin FocoMEI sem plano pago precisa de /planos (Stripe).
+ * FocoSimples não usa esse paywall de pacotes MEI.
  */
 export async function shouldRequireMeiBillingRoute (): Promise<boolean> {
+  if (resolveAppOrigin() === 'focosimples') return false
+
   const { role, mei } = useAuthStore.getState()
   if (role === 'superadmin') return false
   if (role !== 'admin') return false

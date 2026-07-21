@@ -68,6 +68,49 @@ export const resolveCodigoNbsForServico = (input = {}) => {
 };
 
 /**
+ * Código complementar municipal (cTribMun) — PlugNotas: `servico.codigoTributacao`.
+ * Padrão Nacional NFS-e: 3 dígitos. No RJ e na maioria dos municípios o valor exigido é `001`.
+ * @param {unknown} value
+ * @returns {string|null}
+ */
+export const normalizeCodigoTributacaoMunicipal = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  const digits = String(value).replace(/\D/g, '');
+  if (!digits) return null;
+  return digits.slice(0, 3).padStart(3, '0');
+};
+
+/**
+ * Resolve cTribMun: explícito no input > default `001` (exigido pelo ADN em vários municípios, ex. RJ).
+ * @param {{ codigoTributacao?: unknown, codigo_tributacao?: unknown, cTribMun?: unknown }} input
+ * @returns {string}
+ */
+export const resolveCodigoTributacaoForServico = (input = {}) => {
+  const explicit = normalizeCodigoTributacaoMunicipal(
+    input.codigoTributacao ?? input.codigo_tributacao ?? input.cTribMun,
+  );
+  return explicit || '001';
+};
+
+/**
+ * Regime de apuração dos tributos do SN (ADN `regApTribSN` / PlugNotas `regimeApuracaoTributaria`).
+ * E0166 exige o campo para optante SN ME/EPP.
+ * PlugNotas valida como número inteiro (1|2|3), não string.
+ * 1 = trib. federais e municipais pelo SN (padrão DAS).
+ * @param {{ regimeApuracaoTributaria?: unknown, regime_apuracao_tributaria?: unknown, regApTribSN?: unknown }} input
+ * @returns {1|2|3}
+ */
+export const resolveRegimeApuracaoTributaria = (input = {}) => {
+  const raw = input.regimeApuracaoTributaria
+    ?? input.regime_apuracao_tributaria
+    ?? input.regApTribSN
+    ?? 1;
+  const n = Number.parseInt(String(raw ?? '').trim(), 10);
+  if (n === 1 || n === 2 || n === 3) return n;
+  return 1;
+};
+
+/**
  * Enriquece linhas de `codigosservicos` com sugestão NBS (quando existir no mapa local).
  * @param {Array<{ codigo: string, descricao: string }>} rows
  * @returns {Array<{ codigo: string, descricao: string, codigo_nbs: string|null }>}

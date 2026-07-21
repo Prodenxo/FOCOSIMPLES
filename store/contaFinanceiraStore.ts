@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from './authStore'
 import { formatContaFinanceiraDbError } from '../lib/errors'
+import { apiClient } from '../lib/apiClient'
+import { isLocalApiAuthMode } from '../lib/authMode'
 import {
   normalizeContaRow,
   type ContaFinanceira,
@@ -45,6 +47,14 @@ export const useContaFinanceiraStore = create<ContaFinanceiraState>((set, get) =
     }
     set({ loading: true, error: null })
     try {
+      if (isLocalApiAuthMode()) {
+        const data = await apiClient.get<Record<string, unknown>[]>('/contas-financeiras')
+        set({
+          contas: (data || []).map((row) => normalizeContaRow(row)),
+          loading: false,
+        })
+        return
+      }
       const { data, error } = await supabase
         .from('contas_financeiras')
         .select('*')
@@ -67,6 +77,14 @@ export const useContaFinanceiraStore = create<ContaFinanceiraState>((set, get) =
       return null
     }
     try {
+      if (isLocalApiAuthMode()) {
+        const data = await apiClient.post<Record<string, unknown>>(
+          '/contas-financeiras',
+          toDbPayload(input),
+        )
+        await get().fetchContas()
+        return data ? normalizeContaRow(data) : null
+      }
       const { data, error } = await supabase
         .from('contas_financeiras')
         .insert([{ ...toDbPayload(input), user_id: userId }])
@@ -85,6 +103,11 @@ export const useContaFinanceiraStore = create<ContaFinanceiraState>((set, get) =
     const userId = useAuthStore.getState().userId
     if (!userId) return { error: 'Usuário não autenticado' }
     try {
+      if (isLocalApiAuthMode()) {
+        await apiClient.put(`/contas-financeiras/${encodeURIComponent(id)}`, toDbPayload(input))
+        await get().fetchContas()
+        return { error: null }
+      }
       const { error } = await supabase
         .from('contas_financeiras')
         .update(toDbPayload(input))
@@ -104,6 +127,11 @@ export const useContaFinanceiraStore = create<ContaFinanceiraState>((set, get) =
     const userId = useAuthStore.getState().userId
     if (!userId) return { error: 'Usuário não autenticado' }
     try {
+      if (isLocalApiAuthMode()) {
+        await apiClient.delete(`/contas-financeiras/${encodeURIComponent(id)}`)
+        await get().fetchContas()
+        return { error: null }
+      }
       const { error } = await supabase
         .from('contas_financeiras')
         .delete()

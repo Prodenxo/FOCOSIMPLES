@@ -23,6 +23,7 @@ import {
 } from '../lib/meiCertificateUpload'
 import { formatApiNetworkError } from '../lib/apiNetworkError';
 import { APP_BRAND_NAME } from '../lib/appBrand';
+import { resolveAppOrigin } from '../lib/appOrigin';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -53,6 +54,12 @@ import {
   type ParcelamentoItem,
   type ParcelamentoParcelaOption,
 } from '../services/guidesMeiService';
+import {
+  fetchSimplesDasPeriods,
+  gerarSimplesDas,
+  downloadSimplesDas,
+  SIMPLES_DAS_PORTAL_FALLBACK,
+} from '../services/simplesDasService';
 import {
   listarNfse,
   obterNfse,
@@ -189,6 +196,24 @@ import { toMeiUserErrorMessage } from '../utils/meiUserFacingMessage';
 
 const PGMEI_URL =
   'https://www8.receita.fazenda.gov.br/SimplesNacional/Aplicacoes/ATSPO/pgmei.app/Identificacao';
+
+const isFocoSimplesUi = resolveAppOrigin() === 'focosimples';
+const DAS_PORTAL_URL = isFocoSimplesUi ? SIMPLES_DAS_PORTAL_FALLBACK : PGMEI_URL;
+const DAS_PORTAL_LABEL = isFocoSimplesUi ? 'PGDAS-D' : 'PGMEI';
+const DAS_PAGE_TITLE = isFocoSimplesUi ? 'Guia DAS (Simples Nacional)' : 'Guia DAS';
+const DAS_PAGE_DESC = isFocoSimplesUi
+  ? 'Competências do PGDAS-D: consulte e baixe o DAS da empresa no Simples Nacional.'
+  : 'Dois passos: escolha o mês e baixe o PDF.';
+const NOTAS_AREA_TITLE = isFocoSimplesUi ? 'Notas' : 'Meu MEI';
+const NOTAS_AREA_SUBTITLE = isFocoSimplesUi
+  ? 'Emissão fiscal — Simples Nacional (NFS-e, NF-e e NFC-e).'
+  : 'Status rápido das áreas do Meu MEI.';
+const NOTAS_ACCESS_DENIED = isFocoSimplesUi
+  ? 'A emissão de notas está disponível para administradores e utilizadores do Foco Simples.'
+  : 'O Meu MEI está disponível apenas para administradores ou utilizadores com MEI habilitado. Fale com o suporte se precisar de acesso.';
+const NOTAS_PAYWALL = isFocoSimplesUi
+  ? 'Sua conta está ativa, mas a emissão de notas só libera depois do pagamento do plano.'
+  : 'Sua conta está ativa, mas o Meu MEI só libera depois do pagamento do plano.';
 
 const formatDateToBR = (dateString: string): string => {
   if (!dateString) return '';
@@ -786,7 +811,9 @@ function MeiScreenContent() {
     () => Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, '0')),
     []
   );
-  const canDownloadGuide = normalizedCnpj.length === 14 && hasCertificate && !downloadLoading;
+  const canDownloadGuide = normalizedCnpj.length === 14
+    && (isFocoSimplesUi || hasCertificate)
+    && !downloadLoading;
 
   useEffect(() => {
     if (!userId) return;
@@ -938,9 +965,9 @@ function MeiScreenContent() {
 
   const handleOpenPgmei = async () => {
     try {
-      await Linking.openURL(PGMEI_URL);
+      await Linking.openURL(DAS_PORTAL_URL);
     } catch {
-      Alert.alert('Erro', 'Não foi possível abrir o PGMEI');
+      Alert.alert('Erro', `Não foi possível abrir o ${DAS_PORTAL_LABEL}`);
     }
   };
 
@@ -949,12 +976,15 @@ function MeiScreenContent() {
       Alert.alert('Erro', 'Informe um CNPJ válido do contribuinte');
       return;
     }
-    if (!contribuinteTipo) {
+    if (!isFocoSimplesUi && !contribuinteTipo) {
       Alert.alert('Erro', 'Documento do contribuinte inválido');
       return;
     }
-    if (!hasCertificate) {
-      Alert.alert('Erro', 'Certificado não configurado no servidor');
+    if (!hasCertificate && !isFocoSimplesUi) {
+      Alert.alert(
+        'Erro',
+        'Certificado não configurado no servidor',
+      );
       return;
     }
     if (period?.status === 'indisponivel') {
@@ -978,6 +1008,33 @@ function MeiScreenContent() {
     const vencida = period ? isMeiPeriodVencida(period) : false;
     setDownloadLoading(true);
     try {
+      if (isFocoSimplesUi) {
+        const guideId = period?.guideId || `pgdasd-${periodoApuracao}`;
+        let guide = await downloadSimplesDas(String(guideId));
+        if (!guide?.pdfBase64) {
+          guide = await gerarSimplesDas({ cnpj: normalizedCnpj, periodoApuracao });
+        }
+        if (!guide?.pdfBase64) {
+          Alert.alert(
+            'Sem PDF',
+            'A Receita não devolveu o arquivo. Confirme se a declaração do período já foi transmitida no PGDAS-D.',
+            [{ text: `Abrir ${DAS_PORTAL_LABEL}`, onPress: () => void handleOpenPgmei() }, { text: 'OK' }],
+          );
+          return;
+        }
+        const saved = await saveMeiGuidePdfFromBase64(
+          guide.pdfBase64,
+          guide.filename || `DAS-SN-${periodoApuracao}.pdf`,
+        );
+        await presentDownloadedFile(saved, {
+          mimeType: 'application/pdf',
+          dialogTitle: 'DAS Simples Nacional',
+          successMessage: saved.localUri ? `Guia salva em: ${saved.localUri}` : undefined,
+        });
+        void loadMeiPeriods({ silent: true, refresh: true });
+        return;
+      }
+
       if (vencida) {
         const guide = await regenerateMeiGuide(periodoApuracao, {
           cnpj: normalizedCnpj,
@@ -1035,6 +1092,27 @@ function MeiScreenContent() {
         );
       } else if (code === 'MEI_DAS_PERIODO_INDISPONIVEL') {
         Alert.alert('DAS indisponível', error?.message || 'Competência indisponível na Receita.');
+      } else if (code === 'PGDASD_SEM_DEBITO') {
+        void loadMeiPeriods({ silent: true, refresh: true });
+        Alert.alert(
+          'Sem DAS a pagar',
+          error?.message
+            || 'A Receita informou que não há valor devido neste período (declaração sem débito).',
+          [
+            { text: `Abrir ${DAS_PORTAL_LABEL}`, onPress: () => void handleOpenPgmei() },
+            { text: 'OK' },
+          ],
+        );
+      } else if (code === 'PGDASD_DAS_NO_PDF') {
+        Alert.alert(
+          'PDF não disponível',
+          error?.message
+            || 'A Receita não devolveu o PDF. Confirme se a declaração do período já foi transmitida.',
+          [
+            { text: `Abrir ${DAS_PORTAL_LABEL}`, onPress: () => void handleOpenPgmei() },
+            { text: 'OK' },
+          ],
+        );
       } else {
         const hint =
           period?.status === 'erro' && period.errorMessage
@@ -1207,6 +1285,33 @@ function MeiScreenContent() {
     setMeiPeriodsError(null);
     meiPeriodsInFlightRef.current = true;
     try {
+      if (isFocoSimplesUi) {
+        const data = await withMeiFetchTimeout(
+          fetchSimplesDasPeriods({
+            cnpj: normalizedCnpj,
+            refresh,
+          }),
+        );
+        const rows = Array.isArray(data?.periods) ? data.periods : [];
+        setMeiPeriods(rows);
+        writeMeiOverviewPeriods(normalizedCnpj, rows);
+        if (!data?.integration?.configured) {
+          setMeiPeriodsError(
+            data?.integration?.message
+              || 'Integração Simples Nacional (PGDAS-D) não configurada no servidor.',
+          );
+        } else if (data?.remoteError) {
+          setMeiPeriodsError(toMeiUserErrorMessage(data.remoteError));
+        } else if (rows.length === 0) {
+          setMeiPeriodsError(
+            'Nenhuma declaração PGDAS-D encontrada para este CNPJ no ano. Transmita a declaração no portal ou confira a procuração e-CAC.',
+          );
+        } else {
+          setMeiPeriodsError(null);
+        }
+        return;
+      }
+
       const contrib = contribuinteTipo ? { numero: normalizedCnpj, tipo: contribuinteTipo } : undefined;
       const fetchOpts = refresh ? { refresh: true } : undefined;
       const fetchPromise = hasUserCertificate && contrib
@@ -1584,17 +1689,41 @@ function MeiScreenContent() {
   );
 
   const handleCreateGuide = async () => {
-    if (normalizedCnpj.length !== 14 || !contribuinteTipo) {
+    if (normalizedCnpj.length !== 14 || (!isFocoSimplesUi && !contribuinteTipo)) {
       Alert.alert('Erro', 'Informe um CNPJ válido');
       return;
     }
     setCreateGuideLoading(true);
     try {
       const periodoApuracao = `${selectedYear}${selectedMonth}`;
+
+      if (isFocoSimplesUi) {
+        const guide = await gerarSimplesDas({ cnpj: normalizedCnpj, periodoApuracao });
+        if (!guide?.pdfBase64) {
+          Alert.alert(
+            'Sem PDF',
+            'A Receita não devolveu o arquivo. Confirme a declaração no PGDAS-D.',
+            [{ text: `Abrir ${DAS_PORTAL_LABEL}`, onPress: () => void handleOpenPgmei() }, { text: 'OK' }],
+          );
+          return;
+        }
+        const saved = await saveMeiGuidePdfFromBase64(
+          guide.pdfBase64,
+          guide.filename || `DAS-SN-${periodoApuracao}.pdf`,
+        );
+        await presentDownloadedFile(saved, {
+          mimeType: 'application/pdf',
+          dialogTitle: 'DAS Simples Nacional',
+        });
+        Alert.alert('Sucesso', 'PDF do DAS Simples gerado.');
+        loadMeiPeriods({ refresh: true });
+        return;
+      }
+
       const input = {
         cnpj: normalizedCnpj,
         periodoApuracao,
-        contribuinte: { numero: normalizedCnpj, tipo: contribuinteTipo },
+        contribuinte: { numero: normalizedCnpj, tipo: contribuinteTipo! },
       };
       const guide = await createMeiGuide(input);
 
@@ -1627,10 +1756,10 @@ function MeiScreenContent() {
         String(e?.code || '') === 'MEI_DAS_PAID_NO_PDF' || /j[aá]\s*pago|n[aã]o devolveu/i.test(msg)
       ) {
         Alert.alert(
-          'Fevereiro já está pago',
-          `${msg}\n\nBaixe o comprovante no site da Receita (PGMEI) e guarde no celular. O integrador não reemite PDF de mês quitado.`,
+          'Mês já pago',
+          `${msg}\n\nBaixe o comprovante no site da Receita (${DAS_PORTAL_LABEL}).`,
           [
-            { text: 'Abrir PGMEI', onPress: () => void handleOpenPgmei() },
+            { text: `Abrir ${DAS_PORTAL_LABEL}`, onPress: () => void handleOpenPgmei() },
             { text: 'OK' },
           ]
         );
@@ -1763,9 +1892,13 @@ function MeiScreenContent() {
         Alert.alert('Sucesso', 'Certificado salvo com sucesso.');
       }
     } catch (e: unknown) {
-      const certToast = getMeiCertificateUploadToast(e);
+      const certToast = getMeiCertificateUploadToast(e, {
+        product: isFocoSimplesUi ? 'focosimples' : 'focomei',
+      });
       if (certToast) {
-        showToast(certToast, 'error');
+        // Preferir mensagem do backend quando existir (mais específica que o toast genérico)
+        const backendMsg = e instanceof Error ? e.message.trim() : '';
+        showToast(backendMsg || certToast, 'error');
       } else {
         const message =
           e instanceof Error ? e.message : 'Falha ao enviar certificado';
@@ -2217,17 +2350,24 @@ function MeiScreenContent() {
 
   const handleSelectCatalogProduto = (item: NfseCatalogProduto) => {
     if (emitirNotaType === 'NFSE') {
+      const codigoCatalogo = String(item.codigo ?? '').trim();
       setNfseForm((f) => ({
         ...f,
         servico: {
           ...f.servico,
-          codigo: item.codigo ?? '',
+          codigo: codigoCatalogo,
           cnae: item.cnae ?? '',
           discriminacao: item.discriminacao ?? '',
           aliquota: item.aliquota != null ? String(item.aliquota) : '',
           valorServico: item.valor_sugerido != null ? String(item.valor_sugerido) : '',
         },
       }));
+      if (!codigoCatalogo || codigoCatalogo.replace(/[^0-9A-Za-z]/g, '').length < 6) {
+        showToast(
+          'Este serviço ainda não tem código LC 116 completo (mín. 6 caracteres, ex.: 17.19.01). Complete o campo Código serviço.',
+          'error',
+        );
+      }
     } else {
       if (!isCatalogProdutoUsableForNfeLike(item, emitirNotaType)) {
         showToast(
@@ -2515,7 +2655,7 @@ function MeiScreenContent() {
   const tabs: { key: MeiTab; label: string }[] = [
     { key: 'overview', label: 'Início' },
     { key: 'certificado', label: 'Certificado' },
-    { key: 'das', label: 'Guia DAS' },
+    { key: 'das', label: isFocoSimplesUi ? 'DAS Simples' : 'Guia DAS' },
     { key: 'parcelamentos', label: isDesktop ? 'Parcelamentos' : 'Parcelar' },
     { key: 'notas', label: 'Notas' },
   ];
@@ -2524,7 +2664,7 @@ function MeiScreenContent() {
   const sidebarTabs: { key: MeiTab; label: string; icon: React.ComponentProps<typeof Ionicons>['name']; badge?: number }[] = [
     { key: 'overview', label: 'Início', icon: 'home-outline' },
     { key: 'certificado', label: 'Certificado', icon: 'shield-checkmark-outline' },
-    { key: 'das', label: 'Guia DAS', icon: 'document-text-outline' },
+    { key: 'das', label: isFocoSimplesUi ? 'DAS Simples' : 'Guia DAS', icon: 'document-text-outline' },
     { key: 'parcelamentos', label: 'Parcelamentos', icon: 'list-outline', badge: parcelamentos?.length || undefined },
     { key: 'notas', label: 'Notas', icon: 'receipt-outline', badge: notas?.length || undefined },
   ];
@@ -2608,7 +2748,7 @@ function MeiScreenContent() {
       {/* Mobile — só header fixo; abas rolam com o conteúdo */}
       {!isDesktop ? (
         <MfAppHeader
-          title="Meu MEI"
+          title={NOTAS_AREA_TITLE}
           subtitle={mobileTabSubtitle[activeTab]}
           onMenuPress={openDrawer}
         />
@@ -2635,7 +2775,7 @@ function MeiScreenContent() {
         {isDesktop && activeTab === 'overview' && (
           <View style={styles.meiSubHeader}>
             <View style={styles.meiSubHeaderLeft}>
-              <Text style={styles.meiSubHeaderTitle}>🏛️  Meu MEI</Text>
+              <Text style={styles.meiSubHeaderTitle}>🏛️  {NOTAS_AREA_TITLE}</Text>
               <Text style={styles.meiSubHeaderDesc}>
                 Gerencie guias DAS, notas fiscais, parcelamentos e dados do contribuinte.
               </Text>
@@ -2727,7 +2867,7 @@ function MeiScreenContent() {
                     {sidebarTabs.find((t) => t.key === activeTab)?.label || 'Início'}
                   </Text>
                   <Text style={styles.meiContentDesc}>
-                    {activeTab === 'overview' && 'Status rápido das áreas do Meu MEI.'}
+                    {activeTab === 'overview' && NOTAS_AREA_SUBTITLE}
                     {activeTab === 'parcelamentos' && 'Acompanhe parcelamentos ativos e baixe os PDFs.'}
                     {activeTab === 'notas' &&
                       'Emita, consulte e sincronize NFSe, NFe e NFC-e com o emissor.'}
@@ -2738,8 +2878,8 @@ function MeiScreenContent() {
             )}
             {isDesktop && activeTab === 'das' && (
               <View style={styles.meiDasPageHeader}>
-                <Text style={styles.meiDasPageTitle}>Guia DAS</Text>
-                <Text style={styles.meiDasPageDesc}>Dois passos: escolha o mês e baixe o PDF.</Text>
+                <Text style={styles.meiDasPageTitle}>{DAS_PAGE_TITLE}</Text>
+                <Text style={styles.meiDasPageDesc}>{DAS_PAGE_DESC}</Text>
               </View>
             )}
         {activeTab === 'overview' && (
@@ -2802,7 +2942,9 @@ function MeiScreenContent() {
                 <View style={[styles.overviewIconWrap, styles.overviewIconWrapWarn]}>
                   <Ionicons name="document-text-outline" size={22} color={theme.warning} />
                 </View>
-                <Text style={styles.overviewTitle}>DAS · Guias mensais</Text>
+                <Text style={styles.overviewTitle}>
+                  {isFocoSimplesUi ? 'DAS · Simples Nacional' : 'DAS · Guias mensais'}
+                </Text>
                 <Text style={styles.overviewDesc}>
                   Gere e baixe as guias do Simples Nacional MEI mês a mês.
                 </Text>
@@ -2955,7 +3097,7 @@ function MeiScreenContent() {
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.dasBtnSecondary} onPress={handleOpenPgmei}>
                   <Ionicons name="open-outline" size={14} color={theme.primary} />
-                  <Text style={styles.dasBtnSecondaryText}>PGMEI</Text>
+                  <Text style={styles.dasBtnSecondaryText}>{DAS_PORTAL_LABEL}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -3164,6 +3306,7 @@ function MeiScreenContent() {
             onCreateGuide={() => void handleCreateGuide()}
             onRefreshPeriods={() => void handleAtualizarPeriodosDas()}
             onOpenPgmei={() => void handleOpenPgmei()}
+            portalButtonLabel={DAS_PORTAL_LABEL}
             selectedMonth={selectedMonth}
             selectedYear={selectedYear}
             onSelectPeriod={handleSelectDasPeriod}
@@ -4192,9 +4335,10 @@ function MeiScreenContent() {
                     }}
                   />
                   <MeiFormField
-                    label="Código serviço"
+                    label="Código serviço (LC 116)"
                     required
-                    placeholder="Código"
+                    placeholder="Ex.: 17.19.01"
+                    hint="Item da lista municipal — mínimo 6 caracteres sem pontos (17.19 não basta; use 17.19.01)."
                     value={nfseForm.servico?.codigo ?? ''}
                     onChangeText={(t) => setNfseForm((f) => ({ ...f, servico: { ...f.servico, codigo: t } }))}
                   />
@@ -4679,13 +4823,21 @@ function MeiScreenContent() {
                   : 'Nenhum produto NF-e no catálogo. Cadastre em Catálogo → Produtos (tipo NFE).'}
               </Text>
             }
-            renderItem={({ item }) => (
-              <MeiCatalogListCard
-                title={buildProdutoCatalogLabel(item)}
-                meta={item.document_type ?? undefined}
-                onPress={() => handleSelectCatalogProduto(item)}
-              />
-            )}
+            renderItem={({ item }) => {
+              const needsCodigo = !String(item.codigo || '').trim()
+                || String(item.codigo || '').replace(/[^0-9A-Za-z]/g, '').length < 6
+              return (
+                <MeiCatalogListCard
+                  title={buildProdutoCatalogLabel(item)}
+                  meta={[
+                    item.document_type,
+                    item.cnae ? `CNAE ${item.cnae}` : null,
+                    needsCodigo ? 'Completar código LC 116' : null,
+                  ].filter(Boolean).join(' · ') || undefined}
+                  onPress={() => handleSelectCatalogProduto(item)}
+                />
+              )
+            }}
           />
         )}
       </MeiFlowModalShell>
@@ -4714,8 +4866,8 @@ export default function MeiScreen() {
           </Text>
           <Text style={styles.accessDeniedText}>
             {needsPlan
-              ? 'Sua conta está ativa, mas o Meu MEI só libera depois do pagamento do plano.'
-              : 'O Meu MEI está disponível apenas para administradores ou utilizadores com MEI habilitado. Fale com o suporte se precisar de acesso.'}
+              ? NOTAS_PAYWALL
+              : NOTAS_ACCESS_DENIED}
           </Text>
           {sessionEmail ? (
             <Text style={[styles.accessDeniedText, { marginTop: 8 }]}>

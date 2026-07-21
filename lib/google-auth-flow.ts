@@ -447,7 +447,10 @@ export async function startGoogleAuthFlow(): Promise<boolean | null> {
     }
     // Reset contador em caso de erro
     authFlowAttempts = 0;
-    Alert.alert('Erro', 'Erro ao autenticar.');
+    Alert.alert(
+      'Erro',
+      error?.message || 'Erro ao autenticar com o Google Calendar.',
+    );
     return false;
   }
 }

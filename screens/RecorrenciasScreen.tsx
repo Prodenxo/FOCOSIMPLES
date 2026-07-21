@@ -19,7 +19,7 @@ import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
 import { getTheme } from '../lib/theme';
 import { formatCurrencyBR, formatCurrencyInput } from '../lib/numberFormat';
-import { supabase } from '../lib/supabase';
+import { fetchUserCategories } from '../lib/categoryService';
 import { MfScrollView } from '../components/ui/MfScrollView';
 
 interface Categoria {
@@ -101,22 +101,24 @@ function RecorrenciaFormModal({
 
   useEffect(() => {
     if (!visible || !userId) return;
-    supabase
-      .from('categorias_id')
-      .select('id, nome, tipo')
-      .eq('user_id', userId)
-      .order('nome')
-      .then(({ data, error }) => {
-        if (!error && data) {
-          setCategorias(
-            (data || []).map((c: { id: unknown; nome: unknown; tipo: unknown }) => ({
-              id: Number(c.id) || 0,
-              nome: String(c.nome || ''),
-              tipo: String(c.tipo || ''),
-            }))
-          );
-        } else setCategorias([]);
+    let cancelled = false;
+    void fetchUserCategories(userId)
+      .then((data) => {
+        if (cancelled) return;
+        setCategorias(
+          (data || []).map((c) => ({
+            id: Number(c.id) || 0,
+            nome: String(c.nome || ''),
+            tipo: String(c.tipo || ''),
+          }))
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setCategorias([]);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [visible, userId]);
 
   useEffect(() => {

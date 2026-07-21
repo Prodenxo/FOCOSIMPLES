@@ -1,4 +1,6 @@
 import { apiClient, downloadToFile } from '../lib/apiClient';
+import { getMeiApiBaseUrl } from '../lib/runtimeEnv';
+import { isLocalApiAuthMode } from '../lib/authMode';
 import { supabase } from '../lib/supabase';
 import { handleFunctionError } from '../lib/user-management';
 import type { NfsePrestadorPrefillDto } from '../lib/nfsePrestadorPrefillDto';
@@ -336,9 +338,25 @@ export async function emitirNotaAsAdmin(
 }
 
 /**
- * Prefill prestador NFSe para utilizador alvo (admin/superadmin). Edge `mei-prestador-prefill` + body.userId.
+ * Prefill prestador NFSe para utilizador alvo (admin/superadmin).
  */
 export async function fetchAdminNfsePrestadorPrefill(userId: string): Promise<NfsePrestadorPrefillDto> {
+  const empty = {
+    prestadorCpfCnpj: null,
+    prestadorRazaoSocial: null,
+    prestadorEmail: null,
+    prestadorInscricaoMunicipal: null,
+    prestadorEndereco: null,
+    sourceRowId: null,
+  } as NfsePrestadorPrefillDto;
+
+  if (Boolean(getMeiApiBaseUrl()) || isLocalApiAuthMode()) {
+    const data = await apiClient.get<{ prefill?: NfsePrestadorPrefillDto }>(
+      `/admin/mei-guide/${encodeURIComponent(userId)}/prestador-prefill`,
+    );
+    return data?.prefill ?? empty;
+  }
+
   const { data, error } = await supabase.functions.invoke<{
     prefill?: NfsePrestadorPrefillDto;
     error?: string;
@@ -347,14 +365,5 @@ export async function fetchAdminNfsePrestadorPrefill(userId: string): Promise<Nf
   if (data && typeof data === 'object' && 'error' in data && typeof data.error === 'string') {
     throw new Error(data.error);
   }
-  return (
-    data?.prefill ?? {
-      prestadorCpfCnpj: null,
-      prestadorRazaoSocial: null,
-      prestadorEmail: null,
-      prestadorInscricaoMunicipal: null,
-      prestadorEndereco: null,
-      sourceRowId: null,
-    }
-  );
+  return data?.prefill ?? empty;
 }

@@ -52,6 +52,10 @@ const getBaseUrl = () => {
 };
 
 const getAccessToken = async (): Promise<string | null> => {
+  const { getLocalAccessToken } = await import('./localAuthSession');
+  const local = await getLocalAccessToken();
+  if (local) return local;
+
   const { data } = await supabase.auth.getSession();
   return data?.session?.access_token || null;
 };

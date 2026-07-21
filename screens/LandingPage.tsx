@@ -41,20 +41,20 @@ const AUDIENCES = [
   {
     icon: 'briefcase-outline' as const,
     title: 'Contadores',
-    tagline: 'Mais MEI. Mais margem. Menos esforço.',
-    desc: 'Escale sem contratar mais. Automação fiscal e receita recorrente previsível.',
+    tagline: 'Mais clientes no Simples. Menos esforço operacional.',
+    desc: 'Controle financeiro e obrigações do Simples Nacional em um só lugar.',
   },
   {
     icon: 'school-outline' as const,
     title: 'Estudantes',
     tagline: 'Construa sua carteira antes de pegar o diploma.',
-    desc: 'Atenda MEIs com ferramenta profissional enquanto ainda forma sua base.',
+    desc: 'Atenda empresas do Simples com ferramenta profissional enquanto forma sua base.',
   },
   {
     icon: 'rocket-outline' as const,
     title: 'Empreendedores',
-    tagline: 'Um negócio lucrativo começa onde outros param de olhar.',
-    desc: 'Baixa barreira de entrada para montar operação sólida no mercado MEI.',
+    tagline: 'Organize o caixa e as obrigações sem planilha.',
+    desc: 'Baixa barreira de entrada para montar operação sólida no regime Simples.',
   },
 ];
 
@@ -67,30 +67,30 @@ function ProductMockup() {
           <Ionicons name="cellular" size={11} color="rgba(255,255,255,0.45)" />
         </View>
 
-        <Text style={mock.sectionLabel}>PAINEL MEI</Text>
-        <Text style={mock.metric}>15</Text>
-        <Text style={mock.metricHint}>notas emitidas este mês</Text>
+        <Text style={mock.sectionLabel}>PAINEL FOCO SIMPLES</Text>
+        <Text style={mock.metric}>R$ 12.4k</Text>
+        <Text style={mock.metricHint}>saldo do mês</Text>
 
         <View style={mock.statsRow}>
           <View style={[mock.statCard, { backgroundColor: 'rgba(0,168,107,0.14)' }]}>
             <Text style={[mock.statValue, { color: C.secondary }]}>Em dia</Text>
-            <Text style={mock.statLabel}>DAS</Text>
+            <Text style={mock.statLabel}>Obrigações</Text>
           </View>
           <View style={[mock.statCard, { backgroundColor: 'rgba(255,255,255,0.06)' }]}>
-            <Text style={mock.statValue}>72%</Text>
-            <Text style={mock.statLabel}>limite MEI</Text>
+            <Text style={mock.statValue}>68%</Text>
+            <Text style={mock.statLabel}>orçado</Text>
           </View>
         </View>
 
         <View style={mock.waBubble}>
           <View style={mock.waHeader}>
-            <Ionicons name="logo-whatsapp" size={14} color={C.secondary} />
-            <Text style={mock.waTitle}>WhatsApp · áudio</Text>
+            <Ionicons name="swap-horizontal" size={14} color={C.secondary} />
+            <Text style={mock.waTitle}>Lançamento · hoje</Text>
           </View>
           <Text style={mock.waQuote}>
-            "Emitir nota de consultoria, R$ 350, para João Silva."
+            "Entrada de R$ 2.800 — serviço de consultoria."
           </Text>
-          <Text style={mock.waStatus}>NFSe autorizada ✓</Text>
+          <Text style={mock.waStatus}>Registrado ✓</Text>
         </View>
       </View>
     </View>
@@ -474,13 +474,13 @@ export default function LandingPage() {
             <Reveal delay={120}>
               <View style={s.pill}>
                 <PulseDot />
-                <Text style={s.pillText}>Tecnologia para quem atende MEI</Text>
+                <Text style={s.pillText}>Tecnologia para o Simples Nacional</Text>
               </View>
             </Reveal>
 
             <Reveal delay={220}>
               <Text style={[s.h1, isMobile && s.h1Mobile]}>
-                O MEI sempre foi lucrativo.{'\n'}Agora você vai provar.
+                Finanças claras.{'\n'}Obrigações sob controle.
               </Text>
             </Reveal>
 
@@ -490,8 +490,9 @@ export default function LandingPage() {
 
             <Reveal delay={420}>
               <Text style={s.heroBody}>
-                Automação de DAS e nota fiscal, inclusive por áudio no WhatsApp.
-                Receita recorrente, previsível e escalável para quem leva o MEI a sério.
+                Controle de caixa, categorias, orçamentos e recorrências — com caminho
+                aberto para emissão no Simples Nacional. Feito para contadores e empresas
+                que querem operar sem planilha.
               </Text>
             </Reveal>
           </View>
@@ -508,9 +509,9 @@ export default function LandingPage() {
       <View style={s.strip}>
         <View style={[cx, s.stripRow, isMobile && s.stripRowMobile]}>
           {[
-            { n: '15M+', label: 'CNPJs MEI no Brasil' },
-            { n: '70%', label: 'de todas as empresas' },
-            { n: '1ª', label: 'NF por áudio no WhatsApp' },
+            { n: 'Simples', label: 'Foco no regime Simples' },
+            { n: '1 lugar', label: 'Caixa + obrigações' },
+            { n: 'Zero', label: 'planilha improvisada' },
           ].map((item, index) => (
             <Reveal key={item.label} delay={120 + index * 100} style={s.stripItem}>
               <Text style={s.stripN}>{item.n}</Text>
@@ -526,7 +527,7 @@ export default function LandingPage() {
           <Reveal delay={80}>
             <Text style={s.eyebrow}>PARA QUEM</Text>
             <Text style={[s.h2, isMobile && s.h2Mobile]}>
-              Quem transforma MEI{'\n'}em negócio lucrativo
+              Quem organiza o Simples{'\n'}com método
             </Text>
           </Reveal>
           <View style={[s.grid, isMobile && s.gridMobile]}>
@@ -545,18 +546,17 @@ export default function LandingPage() {
           <Reveal delay={100} style={s.diffCopy}>
             <Text style={s.eyebrow}>DIFERENCIAL</Text>
             <Text style={[s.h2, isMobile && s.h2Mobile]}>
-              Nota fiscal por áudio.{'\n'}Só no {APP_BRAND_NAME}.
+              Caixa e obrigações.{'\n'}No mesmo {APP_BRAND_NAME}.
             </Text>
             <Text style={s.diffBody}>
-              O MEI manda um áudio no WhatsApp. O sistema emite a nota.
-              Não existe nada igual no mercado hoje: foco, tecnologia e movimento
-              na prática do dia a dia.
+              Lançamentos, contas, categorias e orçamentos no dia a dia — com base
+              pronta para as obrigações do Simples Nacional. Menos fricção, mais clareza.
             </Text>
           </Reveal>
           <Reveal delay={220} style={s.diffHighlight}>
-            <Ionicons name="mic-outline" size={28} color={C.secondary} />
+            <Ionicons name="wallet-outline" size={28} color={C.secondary} />
             <Text style={s.diffHighlightText}>
-              DAS + NFSe integrados à rotina do cliente, sem planilha e sem fricção.
+              Financeiro operacional + caminho fiscal do Simples, sem depender de planilha.
             </Text>
           </Reveal>
         </View>
@@ -568,25 +568,25 @@ export default function LandingPage() {
           <Reveal delay={80}>
             <Text style={s.eyebrow}>O QUE ENTREGAMOS</Text>
             <Text style={[s.h2, isMobile && s.h2Mobile]}>
-              O sistema cuida do MEI.{'\n'}Você cuida do lucro.
+              O sistema organiza o Simples.{'\n'}Você cuida do negócio.
             </Text>
           </Reveal>
           <View style={[s.grid, isMobile && s.gridMobile]}>
             {[
               {
-                icon: 'logo-whatsapp' as const,
-                title: 'NFSe por WhatsApp',
-                desc: 'Emissão por áudio, o diferencial que nenhuma outra plataforma oferece.',
+                icon: 'swap-horizontal-outline' as const,
+                title: 'Controle financeiro',
+                desc: 'Lançamentos, recorrências, contas e categorias com visão clara do mês.',
               },
               {
-                icon: 'receipt-outline' as const,
-                title: 'DAS e obrigações',
-                desc: 'Guias, parcelamentos e acompanhamento fiscal sem depender de planilha.',
+                icon: 'pie-chart-outline' as const,
+                title: 'Orçamentos e DRE',
+                desc: 'Planeje por categoria e acompanhe realizado sem perder o fio.',
               },
               {
                 icon: 'document-text-outline' as const,
-                title: 'Painel web completo',
-                desc: 'Catálogo, certificado digital, limites de faturamento e histórico de notas.',
+                title: 'Base para o Simples',
+                desc: 'Estrutura pronta para obrigações e emissão no Simples Nacional.',
               },
             ].map((item, index) => (
               <Reveal key={item.title} delay={160 + index * 90} style={s.gridReveal}>
@@ -602,11 +602,11 @@ export default function LandingPage() {
         <View style={[cx, s.ctaInner]}>
           <Reveal delay={100}>
             <Text style={[s.ctaTitle, isMobile && s.h2Mobile]}>
-              Mais MEI. Mais margem. Menos esforço.
+              Mais clareza. Mais Simples. Menos esforço.
             </Text>
             <Text style={s.ctaSub}>
-              Plataforma de tecnologia e estratégia para contadores, estudantes e empreendedores
-              que querem escalar com governança e resultados documentados.
+              Plataforma para contadores, estudantes e empreendedores que querem
+              operar o Simples com governança e resultados documentados.
             </Text>
           </Reveal>
           <View style={[s.ctaBtns, isMobile && s.ctaBtnsMobile]}>

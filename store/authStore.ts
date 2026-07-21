@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { Session, User } from '@supabase/supabase-js';
 import { clearSupabaseAuthStorage, supabase } from '../lib/supabase';
-import { cleanPhone, resolveRoleAndEmpresa, type UserRole } from '../lib/auth-roles';
+import { cleanPhone, normalizeRoleValue, resolveRoleAndEmpresa, type UserRole } from '../lib/auth-roles';
 import { resetSessionActivationSkip } from '../lib/activationSession';
 import {
   getErrorMessage,
@@ -10,7 +10,12 @@ import {
   isInvalidRefreshTokenMessage,
 } from '../lib/errors';
 import { getSupabaseAuthMessagePt } from '../lib/authErrors';
-import { requestPasswordReset } from '../services/authService';
+import {
+  fetchAuthSession,
+  requestPasswordReset,
+  signInWithApi,
+  signUpWithApi,
+} from '../services/authService';
 import {
   backupAdminSession,
   clearBackedUpAdminSession,
@@ -24,6 +29,13 @@ import {
   applyMinimalSessionState,
   withTimeout,
 } from '../lib/authBootGuard';
+import { isLocalApiAuthMode } from '../lib/authMode';
+import {
+  buildLocalUser,
+  clearLocalAuthSnapshot,
+  readLocalAuthSnapshot,
+  writeLocalAuthSnapshot,
+} from '../lib/localAuthSession';
 
 export type SignUpResult =
   | { needsEmailConfirmation: true; email: string }
@@ -97,7 +109,52 @@ const CLEARED_AUTH_STATE = {
 async function clearLocalAuthSession(set: (partial: Partial<AuthState>) => void): Promise<void> {
   await clearBackedUpAdminSession();
   await clearSupabaseAuthStorage();
+  await clearLocalAuthSnapshot();
   set(CLEARED_AUTH_STATE);
+}
+
+async function applyLocalApiResultToStore(
+  result: Awaited<ReturnType<typeof signInWithApi>>,
+  set: (partial: Partial<AuthState>) => void,
+): Promise<void> {
+  const accessToken = result.session?.access_token;
+  if (!accessToken) {
+    throw new Error('Sessão inválida retornada pela API');
+  }
+  const userId = result.userId || result.user?.id;
+  if (!userId) {
+    throw new Error('Usuário inválido retornado pela API');
+  }
+  const phone = result.phone || result.user?.user_metadata?.phone || null;
+  const displayName =
+    result.displayName || result.user?.user_metadata?.display_name || null;
+  const user = buildLocalUser({
+    id: userId,
+    email: result.user?.email || null,
+    phone,
+    displayName,
+  });
+  const role = normalizeRoleValue(result.role) || (result.role as UserRole | null);
+  const snapshot = {
+    accessToken,
+    user,
+    role,
+    empresaId: result.empresaId,
+    mei: result.mei,
+    phone,
+    displayName,
+  };
+  await writeLocalAuthSnapshot(snapshot);
+  set({
+    user,
+    phone,
+    displayName,
+    userId,
+    role,
+    mei: result.mei,
+    empresaId: result.empresaId,
+    isImpersonating: false,
+  });
 }
 
 async function getStoredSessionOrClear(set: (partial: Partial<AuthState>) => void) {
@@ -186,6 +243,8 @@ interface AuthState {
   resetPassword: (email: string) => Promise<void>;
   impersonate: (targetUserId: string) => Promise<void>;
   stopImpersonating: () => Promise<void>;
+  /** Reconsulta role/empresa/mei no backend (ex.: após liberar Notas no admin). */
+  refreshAccessContext: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -209,6 +268,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setPhone: (phone) => set({ phone }),
   setDisplayName: (displayName) => set({ displayName }),
   signUp: async (email, password, phone = null, displayName = null, inviteToken = null) => {
+    if (isLocalApiAuthMode()) {
+      const cleanedPhone = cleanPhone(phone) || null;
+      const result = await signUpWithApi({
+        email,
+        password,
+        phone: cleanedPhone,
+        displayName,
+        inviteToken,
+      });
+      await applyLocalApiResultToStore(result, set);
+      return { needsEmailConfirmation: false };
+    }
+
     const cleanedPhone = cleanPhone(phone) || null;
     const emailNorm = email.trim();
     const { data, error } = await supabase.auth.signUp({
@@ -341,6 +413,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
   signIn: async (email, password) => {
+    if (isLocalApiAuthMode()) {
+      const result = await signInWithApi(email, password);
+      await applyLocalApiResultToStore(result, set);
+      return;
+    }
+
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       throw new Error(getSupabaseAuthMessagePt(error));
@@ -366,6 +444,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
   signOut: async () => {
     await clearBackedUpAdminSession();
+    if (isLocalApiAuthMode()) {
+      await clearLocalAuthSnapshot();
+      resetSessionActivationSkip();
+      set(CLEARED_AUTH_STATE);
+      return;
+    }
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
@@ -431,12 +515,33 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await applySessionToStore(data.session, set, false);
   },
   initAuth: async () => {
-    // Evitar múltiplas inicializações
     const currentState = useAuthStore.getState();
     if (currentState.sessionRestored) {
       return;
     }
-    
+
+    if (isLocalApiAuthMode()) {
+      const snap = await readLocalAuthSnapshot();
+      if (snap) {
+        set({
+          user: snap.user,
+          phone: snap.phone,
+          displayName: snap.displayName,
+          userId: snap.user.id,
+          role: snap.role,
+          mei: snap.mei,
+          empresaId: snap.empresaId,
+          isImpersonating: false,
+          sessionRestored: true,
+        });
+        // Revalida mei/role no servidor (snapshot pode estar defasado após liberar Notas)
+        void get().refreshAccessContext();
+        return;
+      }
+      set({ ...CLEARED_AUTH_STATE, sessionRestored: true });
+      return;
+    }
+
     const { data: { session } } = await getStoredSessionOrClear(set);
     const isImpersonating = await hasBackedUpAdminSession();
     if (session?.user) {
@@ -458,6 +563,51 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   resetPassword: async (email) => {
     await requestPasswordReset(email);
   },
+  refreshAccessContext: async () => {
+    const state = get();
+    if (!state.userId) return;
+
+    if (isLocalApiAuthMode()) {
+      try {
+        const session = await fetchAuthSession();
+        const role = normalizeRoleValue(session.role) || (session.role as UserRole | null);
+        const mei = typeof session.mei === 'boolean' ? session.mei : null;
+        const empresaId = session.empresaId || null;
+        const snap = await readLocalAuthSnapshot();
+        if (snap) {
+          await writeLocalAuthSnapshot({
+            ...snap,
+            role,
+            mei,
+            empresaId,
+            phone: session.user?.phone ?? snap.phone,
+            displayName: session.user?.displayName ?? snap.displayName,
+          });
+        }
+        set({
+          role,
+          mei,
+          empresaId,
+          phone: session.user?.phone ?? state.phone,
+          displayName: session.user?.displayName ?? state.displayName,
+        });
+      } catch (error) {
+        console.warn('[Auth] refreshAccessContext (local) falhou:', getErrorMessage(error));
+      }
+      return;
+    }
+
+    try {
+      const resolved = await resolveRoleAndEmpresa(state.userId);
+      set({
+        role: resolved.role,
+        empresaId: resolved.empresaId,
+        mei: resolved.mei ?? null,
+      });
+    } catch (error) {
+      console.warn('[Auth] refreshAccessContext falhou:', getErrorMessage(error));
+    }
+  },
 }));
 
 /** Watchdog global: vale em qualquer rota (não só `/`). */
@@ -469,6 +619,27 @@ setTimeout(() => {
 }, AUTH_BOOT_TIMEOUT_MS);
 
 async function bootstrapAuthFromStorage(): Promise<void> {
+  if (isLocalApiAuthMode()) {
+    const snap = await readLocalAuthSnapshot();
+    if (snap) {
+      useAuthStore.setState({
+        user: snap.user,
+        phone: snap.phone,
+        displayName: snap.displayName,
+        userId: snap.user.id,
+        role: snap.role,
+        mei: snap.mei,
+        empresaId: snap.empresaId,
+        isImpersonating: false,
+        sessionRestored: true,
+      });
+      void useAuthStore.getState().refreshAccessContext();
+      return;
+    }
+    useAuthStore.setState({ ...CLEARED_AUTH_STATE, sessionRestored: true });
+    return;
+  }
+
   const { data: { session } } = await getStoredSessionOrClear(useAuthStore.setState);
   const isImpersonating = await hasBackedUpAdminSession();
 
@@ -509,25 +680,25 @@ void bootstrapAuthFromStorage().catch(async (error) => {
   useAuthStore.setState({ sessionRestored: true });
 });
 
-// Listener para eventos de autenticação pós-inicialização.
-// TOKEN_REFRESHED: Supabase renovou o JWT automaticamente — atualiza o user no store.
-// SIGNED_OUT: sessão expirou sem renovação possível (ex: refresh token inválido) — limpa o store.
-supabase.auth.onAuthStateChange(async (event, session) => {
-  if (event === 'TOKEN_REFRESHED' && session) {
-    useAuthStore.setState({ user: session.user, userId: session.user.id });
-  } else if (event === 'SIGNED_OUT') {
-    useAuthStore.setState({
-      user: null,
-      phone: null,
-      displayName: null,
-      userId: null,
-      role: null,
-      mei: null,
-      empresaId: null,
-      isImpersonating: false,
-    });
-  }
-});
+// Listener para eventos de autenticação pós-inicialização (só Supabase).
+if (!isLocalApiAuthMode()) {
+  supabase.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'TOKEN_REFRESHED' && session) {
+      useAuthStore.setState({ user: session.user, userId: session.user.id });
+    } else if (event === 'SIGNED_OUT') {
+      useAuthStore.setState({
+        user: null,
+        phone: null,
+        displayName: null,
+        userId: null,
+        role: null,
+        mei: null,
+        empresaId: null,
+        isImpersonating: false,
+      });
+    }
+  });
+}
 
 
 

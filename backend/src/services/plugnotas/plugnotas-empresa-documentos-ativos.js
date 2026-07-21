@@ -256,4 +256,6 @@ export const applyEmpresaPlugnotasDocumentSelectionForPost = (payload, selection
 export const applyEmpresaPlugnotasDocumentSelectionForPatch = (payload, selection, opts = {}) => {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return;
   assignDocumentBlocksFromSelection(payload, selection, opts);
+  // Igual ao POST: PlugNotas exige IE quando NF-e/NFC-e está ativo
+  normalizeInscricaoEstadualApenasNfse(payload);
 };

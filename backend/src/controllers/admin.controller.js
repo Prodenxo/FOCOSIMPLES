@@ -206,6 +206,18 @@ export const getAdminMeiCertificateStatus = async (req, res, next) => {
   }
 };
 
+export const getAdminMeiPrestadorPrefill = async (req, res, next) => {
+  try {
+    const userId = req.params.userId;
+    await ensureCanViewUser(req.accessToken, userId);
+    await ensureMeiEnabledForUser(req.accessToken, userId);
+    const prefill = await meiGuideServiceRef.getNfsePrestadorPrefill(userId);
+    return sendSuccess(res, { prefill }, 'Prefill do prestador obtido');
+  } catch (error) {
+    return next(error);
+  }
+};
+
 /** Admin define quais tipos de nota o utilizador pode emitir (espelho local). */
 export const patchAdminMeiDocumentosAtivos = async (req, res, next) => {
   try {
@@ -500,6 +512,51 @@ export const getAccessRequestsReport = async (req, res, next) => {
       entries = entries.filter((e) => e.eventType === eventType);
     }
     return sendSuccess(res, { entries });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const listPendingAccessRequestsAdmin = async (req, res, next) => {
+  try {
+    const { listPendingAccessRequests } = await import('../services/access-request-manage.service.js');
+    const requests = await listPendingAccessRequests(null);
+    return sendSuccess(res, { requests }, 'Solicitações pendentes listadas');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const manageAccessRequestAdmin = async (req, res, next) => {
+  try {
+    const action = String(req.body?.action || '').trim().toLowerCase();
+    const userId = String(req.body?.userId || '').trim();
+    if (!userId) {
+      return next(badRequest('userId é obrigatório'));
+    }
+    const {
+      approveAccessRequest,
+      rejectAccessRequest,
+    } = await import('../services/access-request-manage.service.js');
+
+    if (action === 'approve') {
+      const result = await approveAccessRequest({
+        actorUserId: req.user?.id,
+        userId,
+      });
+      if (!result.ok) {
+        return next(badRequest('Solicitação não está pendente.'));
+      }
+      return sendSuccess(res, result, 'Solicitação aprovada');
+    }
+    if (action === 'reject') {
+      const result = await rejectAccessRequest({ userId });
+      if (!result.ok) {
+        return next(badRequest('Solicitação não está pendente.'));
+      }
+      return sendSuccess(res, result, 'Solicitação negada');
+    }
+    return next(badRequest('Ação inválida. Use approve ou reject.'));
   } catch (error) {
     return next(error);
   }

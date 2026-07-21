@@ -19,6 +19,7 @@ import SimpleNavigator from "./SimpleNavigator";
 import AuthNavigator from "./AuthNavigator";
 import OnboardingScreen from "../screens/OnboardingScreen";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
+import { isAppConfigured, isLocalApiAuthMode } from "../lib/authMode";
 
 const ONBOARDING_KEY = "onboarding_done";
 
@@ -31,23 +32,19 @@ function LoadingScreen() {
   );
 }
 
-function SupabaseConfigScreen() {
+function AppConfigScreen() {
   return (
     <ScrollView contentContainerStyle={styles.configContainer}>
-      <Text style={styles.configTitle}>Supabase não configurado</Text>
+      <Text style={styles.configTitle}>App não configurado</Text>
       <Text style={styles.configText}>
-        Configure as credenciais para o app funcionar:
+        Auth local — crie `.env` na raiz:
       </Text>
       <Text style={styles.configCode}>
-        1. Crie frontend/.env com:{"\n"}
-        EXPO_PUBLIC_SUPABASE_URL=sua_url{"\n"}
-        EXPO_PUBLIC_SUPABASE_ANON_KEY=sua_chave
-      </Text>
-      <Text style={styles.configText}>
-        2. Ou preencha em app.json → extra → supabaseUrl e supabaseAnonKey
+        EXPO_PUBLIC_AUTH_MODE=local{"\n"}
+        EXPO_PUBLIC_MEI_API_URL_DEV=http://localhost:3333
       </Text>
       <Text style={styles.configSubtext}>
-        Depois reinicie o servidor (npx expo start).
+        Depois reinicie o Expo (`npx expo start -c`).
       </Text>
     </ScrollView>
   );
@@ -63,9 +60,8 @@ export default function AppNavigator() {
     });
   }, []);
 
-  // Pausa o timer de auto-refresh quando o app vai para background e retoma ao voltar
-  // ao foreground. Sem isso, o timer pode ser throttled pelo OS e perder a janela de renovação.
   useEffect(() => {
+    if (isLocalApiAuthMode() || !isSupabaseConfigured()) return;
     const subscription = AppState.addEventListener("change", (nextAppState) => {
       if (nextAppState === "active") {
         supabase.auth.startAutoRefresh();
@@ -76,8 +72,8 @@ export default function AppNavigator() {
     return () => subscription.remove();
   }, []);
 
-  if (!isSupabaseConfigured()) {
-    return <SupabaseConfigScreen />;
+  if (!isAppConfigured()) {
+    return <AppConfigScreen />;
   }
 
   if (!sessionRestored || onboardingDone === null) {

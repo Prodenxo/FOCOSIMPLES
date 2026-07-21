@@ -48,6 +48,7 @@ router.get('/das/status', requireAuth, requireAdmin, controller.listDasStatus);
 router.get('/das/pending', requireAuth, requireAdmin, controller.listPendingDas);
 router.post('/das/reprocess', requireAuth, requireAdmin, controller.reprocessDas);
 router.get('/mei-guide/:userId/certificate/status', requireAuth, requireAdmin, controller.getAdminMeiCertificateStatus);
+router.get('/mei-guide/:userId/prestador-prefill', requireAuth, requireAdmin, controller.getAdminMeiPrestadorPrefill);
 router.patch(
   '/users/:userId/mei-documentos-ativos',
   requireAuth,
@@ -66,6 +67,18 @@ router.get(
   requireAuth,
   requireSuperAdmin,
   controller.getAccessRequestsReport,
+);
+router.get(
+  '/access-requests/pending',
+  requireAuth,
+  requireSuperAdmin,
+  controller.listPendingAccessRequestsAdmin,
+);
+router.post(
+  '/access-requests/manage',
+  requireAuth,
+  requireSuperAdmin,
+  controller.manageAccessRequestAdmin,
 );
 
 router.get(

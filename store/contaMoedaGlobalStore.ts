@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from './authStore'
 import { formatContaMoedaGlobalDbError } from '../lib/errors'
+import { isLocalApiAuthMode } from '../lib/authMode'
 import {
   normalizeContaMoedaGlobalRow,
   type ContaMoedaGlobal,
@@ -47,6 +48,11 @@ export const useContaMoedaGlobalStore = create<ContaMoedaGlobalState>((set, get)
       set({ error: 'Usuário não autenticado' })
       return
     }
+    // Sem rotas de contas_moeda_global no backend local — UI não quebra.
+    if (isLocalApiAuthMode()) {
+      set({ contas: [], loading: false, error: null })
+      return
+    }
     set({ loading: true, error: null })
     try {
       const { data, error } = await supabase
@@ -71,6 +77,10 @@ export const useContaMoedaGlobalStore = create<ContaMoedaGlobalState>((set, get)
       set({ error: 'Usuário não autenticado' })
       return null
     }
+    if (isLocalApiAuthMode()) {
+      set({ error: 'Contas em moeda global não disponíveis no modo local' })
+      return null
+    }
     try {
       const { data, error } = await supabase
         .from('contas_moeda_global')
@@ -89,6 +99,11 @@ export const useContaMoedaGlobalStore = create<ContaMoedaGlobalState>((set, get)
   updateConta: async (id, input) => {
     const userId = useAuthStore.getState().userId
     if (!userId) return { error: 'Usuário não autenticado' }
+    if (isLocalApiAuthMode()) {
+      const msg = 'Contas em moeda global não disponíveis no modo local'
+      set({ error: msg })
+      return { error: msg }
+    }
     try {
       const { error } = await supabase
         .from('contas_moeda_global')
@@ -108,6 +123,11 @@ export const useContaMoedaGlobalStore = create<ContaMoedaGlobalState>((set, get)
   deleteConta: async (id) => {
     const userId = useAuthStore.getState().userId
     if (!userId) return { error: 'Usuário não autenticado' }
+    if (isLocalApiAuthMode()) {
+      const msg = 'Contas em moeda global não disponíveis no modo local'
+      set({ error: msg })
+      return { error: msg }
+    }
     try {
       const { error } = await supabase
         .from('contas_moeda_global')

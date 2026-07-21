@@ -1,9 +1,15 @@
-import { Router } from 'express';
-import { proxyGoogleCalendar } from '../controllers/googleCalendar.controller.js';
-import { requireAuth } from '../middlewares/auth.js';
+import { Router } from 'express'
+import {
+  oauthCallbackRedirect,
+  proxyGoogleCalendar,
+} from '../controllers/googleCalendar.controller.js'
+import { requireAuth } from '../middlewares/auth.js'
 
-const router = Router();
+const router = Router()
 
-router.all('/:path', requireAuth, proxyGoogleCalendar);
+// Callback público do Google (sem JWT) — AUTH_MODE=local
+router.get('/oauth-callback', oauthCallbackRedirect)
 
-export default router;
+router.all('/:path', requireAuth, proxyGoogleCalendar)
+
+export default router

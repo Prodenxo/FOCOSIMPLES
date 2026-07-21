@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { isLocalApiAuthMode } from './authMode';
 
 export type UserRole = 'superadmin' | 'admin' | 'usuario' | 'outsider';
 
@@ -35,6 +36,24 @@ export const cleanPhone = (phone?: string | null) => {
 
 export const resolveRoleAndEmpresa = async (userId: string) => {
   if (!userId) {
+    return { role: null as UserRole | null, empresaId: null as string | null, mei: null as boolean | null };
+  }
+
+  // Auth local: role/empresa já vêm do login/snapshot — não consultar Supabase.
+  if (isLocalApiAuthMode()) {
+    try {
+      const { readLocalAuthSnapshot } = await import('./localAuthSession');
+      const snap = await readLocalAuthSnapshot();
+      if (snap?.user?.id === userId) {
+        return {
+          role: snap.role,
+          empresaId: snap.empresaId,
+          mei: snap.mei,
+        };
+      }
+    } catch {
+      // snapshot indisponível
+    }
     return { role: null as UserRole | null, empresaId: null as string | null, mei: null as boolean | null };
   }
 

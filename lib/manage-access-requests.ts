@@ -1,4 +1,8 @@
+import { getLocalAccessToken } from './localAuthSession'
+import { isLocalApiAuthMode } from './authMode'
+import { apiClient } from './apiClient'
 import { supabase } from './supabase'
+import { getMeiApiBaseUrl } from './runtimeEnv'
 
 type ManageAccessResponse = Record<string, unknown> & {
   error?: string
@@ -8,6 +12,12 @@ type ManageAccessResponse = Record<string, unknown> & {
 }
 
 async function resolveAccessToken(): Promise<string> {
+  if (isLocalApiAuthMode()) {
+    const local = await getLocalAccessToken()
+    if (local) return local
+    throw new Error('Não autenticado. Faça login novamente.')
+  }
+
   const { data: initial } = await supabase.auth.getSession()
   let token = initial.session?.access_token
   if (token) return token
@@ -43,11 +53,46 @@ function parseInvokeError(
 }
 
 /**
- * Chama a Edge `manage-access-requests` com JWT explícito (evita 401 no Expo web).
+ * Solicitações de acesso: API do backend no modo local; Edge no modo Supabase.
  */
 export async function invokeManageAccessRequests(
   body: Record<string, unknown>,
 ): Promise<ManageAccessResponse> {
+  if (isLocalApiAuthMode() || getMeiApiBaseUrl()) {
+    try {
+      if (body.action === 'list') {
+        const data = await apiClient.get<{ requests?: unknown[] }>(
+          '/admin/access-requests/pending',
+        )
+        return { ok: true, requests: Array.isArray(data?.requests) ? data.requests : [] }
+      }
+      if (body.action === 'report') {
+        const report = await apiClient.get<{ entries?: unknown[] }>(
+          `/admin/access-requests/report?limit=${Number(body.limit) || 50}`,
+        )
+        return {
+          ok: true,
+          entries: Array.isArray(report?.entries) ? report.entries : [],
+          requests: [],
+        }
+      }
+      if (body.action === 'approve' || body.action === 'reject') {
+        const result = await apiClient.post<ManageAccessResponse>(
+          '/admin/access-requests/manage',
+          {
+            action: body.action,
+            userId: body.userId,
+          },
+        )
+        return { ok: true, ...(result || {}) }
+      }
+      return { ok: true, requests: [], entries: [] }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Falha nas solicitações de acesso'
+      throw new Error(message)
+    }
+  }
+
   const accessToken = await resolveAccessToken()
 
   const { data, error } = await supabase.functions.invoke('manage-access-requests', {

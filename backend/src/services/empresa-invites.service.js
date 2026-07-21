@@ -8,6 +8,8 @@ import {
   getRequesterContext
 } from './users.service.js';
 import { badRequest, forbidden, notFound, unauthorized } from '../utils/errors.js';
+import { isLocalAuthMode, verifyLocalAccessToken } from './local-auth.service.js';
+import { query } from '../config/pg.js';
 
 /** @type {typeof createSupabaseClientReal} */
 let createClient = createSupabaseClientReal;
@@ -27,6 +29,11 @@ export const __setGetRequesterContextForInvitesTests = (fn) => {
 
 const defaultResolveUserIdFromAccessToken = async (accessToken) => {
   if (!accessToken) throw unauthorized();
+  if (isLocalAuthMode()) {
+    const localUser = verifyLocalAccessToken(accessToken);
+    if (!localUser?.id) throw unauthorized();
+    return localUser.id;
+  }
   const c = createSupabaseClientReal({ accessToken });
   const { data: { user } = {}, error } = await c.auth.getUser();
   if (error || !user?.id) throw unauthorized();
@@ -89,8 +96,6 @@ export const createInvite = async (accessToken, body = {}, req) => {
   const ctx = await resolveRequesterContext(accessToken);
   ensureAdminOrSuperadmin(ctx.role);
 
-  const admin = createClient({ useServiceRole: true });
-
   let empresaId;
   if (ctx.role === 'admin') {
     if (body?.empresas_id != null && String(body.empresas_id).trim() !== '') {
@@ -105,6 +110,45 @@ export const createInvite = async (accessToken, body = {}, req) => {
     }
   }
 
+  const invitedEmail = body?.invited_email != null && String(body.invited_email).trim() !== ''
+    ? String(body.invited_email).trim()
+    : null;
+  const isReusable = !!body?.is_reusable;
+  const { rawToken, tokenHash } = generateInviteSecret();
+  const expiresAt = new Date();
+  expiresAt.setUTCDate(expiresAt.getUTCDate() + DEFAULT_TTL_DAYS);
+
+  if (isLocalAuthMode()) {
+    const { rows: empRows } = await query(
+      `SELECT id FROM public.empresas WHERE id = $1 LIMIT 1`,
+      [empresaId],
+    );
+    if (!empRows[0]) throw badRequest('Empresa não encontrada');
+
+    const { rows } = await query(
+      `INSERT INTO public.empresa_invites
+         (empresas_id, token_hash, created_by, expires_at, invited_email, is_reusable, uses_count, raw_token)
+       VALUES ($1, $2, $3, $4, $5, $6, 0, $7)
+       RETURNING id, empresas_id, expires_at, created_at, invited_email, is_reusable, uses_count, raw_token`,
+      [
+        empresaId,
+        tokenHash,
+        ctx.userId,
+        expiresAt.toISOString(),
+        invitedEmail,
+        isReusable,
+        isReusable ? rawToken : null,
+      ],
+    );
+    const row = rows[0];
+    if (!row?.id) throw badRequest('Falha ao criar convite');
+    const base = resolveInviteAppBaseUrl(req);
+    const inviteUrl = `${base}/register?convite=${encodeURIComponent(rawToken)}`;
+    return { inviteUrl, invite: row };
+  }
+
+  const admin = createClient({ useServiceRole: true });
+
   const { data: emp, error: empErr } = await admin
     .from('empresas')
     .select('id')
@@ -112,16 +156,6 @@ export const createInvite = async (accessToken, body = {}, req) => {
     .maybeSingle();
   if (empErr) throw badRequest(empErr.message);
   if (!emp?.id) throw badRequest('Empresa não encontrada');
-
-  const { rawToken, tokenHash } = generateInviteSecret();
-  const expiresAt = new Date();
-  expiresAt.setUTCDate(expiresAt.getUTCDate() + DEFAULT_TTL_DAYS);
-
-  const invitedEmail = body?.invited_email != null && String(body.invited_email).trim() !== ''
-    ? String(body.invited_email).trim()
-    : null;
-
-  const isReusable = !!body?.is_reusable;
 
   const { data: row, error: insErr } = await admin
     .from('empresa_invites')
@@ -151,9 +185,36 @@ export const createInvite = async (accessToken, body = {}, req) => {
  * @param {string} accessToken
  * @param {{ empresas_id?: string }} query
  */
-export const listPendingInvites = async (accessToken, query = {}) => {
+export const listPendingInvites = async (accessToken, queryParams = {}) => {
   const ctx = await resolveRequesterContext(accessToken);
   ensureAdminOrSuperadmin(ctx.role);
+
+  if (isLocalAuthMode()) {
+    const params = [];
+    const clauses = [
+      'used_at IS NULL',
+      'revoked_at IS NULL',
+      'expires_at > now()',
+    ];
+    if (ctx.role === 'admin') {
+      if (!ctx.empresaId) throw forbidden();
+      params.push(ctx.empresaId);
+      clauses.push(`empresas_id = $${params.length}`);
+    } else if (queryParams?.empresas_id) {
+      params.push(queryParams.empresas_id);
+      clauses.push(`empresas_id = $${params.length}`);
+    }
+
+    const { rows } = await query(
+      `SELECT id, empresas_id, created_at, expires_at, created_by, invited_email,
+              is_reusable, uses_count, raw_token
+       FROM public.empresa_invites
+       WHERE ${clauses.join(' AND ')}
+       ORDER BY created_at DESC`,
+      params,
+    );
+    return { invites: rows || [] };
+  }
 
   const admin = createClient({ useServiceRole: true });
   const nowIso = new Date().toISOString();
@@ -169,8 +230,8 @@ export const listPendingInvites = async (accessToken, query = {}) => {
   if (ctx.role === 'admin') {
     if (!ctx.empresaId) throw forbidden();
     q = q.eq('empresas_id', ctx.empresaId);
-  } else if (query?.empresas_id) {
-    q = q.eq('empresas_id', query.empresas_id);
+  } else if (queryParams?.empresas_id) {
+    q = q.eq('empresas_id', queryParams.empresas_id);
   }
 
   const { data, error } = await q;
@@ -187,6 +248,29 @@ export const revokeInvite = async (accessToken, inviteId) => {
   ensureAdminOrSuperadmin(ctx.role);
 
   if (!inviteId || String(inviteId).trim() === '') throw badRequest('Convite inválido');
+
+  if (isLocalAuthMode()) {
+    const { rows } = await query(
+      `SELECT id, empresas_id, used_at, revoked_at
+       FROM public.empresa_invites
+       WHERE id = $1
+       LIMIT 1`,
+      [inviteId],
+    );
+    const row = rows[0];
+    if (!row?.id) throw notFound('Convite não encontrado');
+    if (ctx.role === 'admin') {
+      if (!ctx.empresaId || row.empresas_id !== ctx.empresaId) throw forbidden();
+    }
+    if (row.used_at) throw badRequest('Convite já utilizado');
+    if (row.revoked_at) throw badRequest('Convite já revogado');
+    const revokedAt = new Date().toISOString();
+    await query(
+      `UPDATE public.empresa_invites SET revoked_at = $1 WHERE id = $2`,
+      [revokedAt, inviteId],
+    );
+    return { id: inviteId, revoked_at: revokedAt };
+  }
 
   const admin = createClient({ useServiceRole: true });
   const { data: row, error: fetchErr } = await admin

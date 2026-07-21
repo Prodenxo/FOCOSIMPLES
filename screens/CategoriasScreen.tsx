@@ -42,6 +42,9 @@ import { CategoriasPageChrome } from './Categorias/categoriasPageChrome';
 import { CategoriasSummary } from './Categorias/CategoriasSummary';
 import { CategoryDashboardRow } from './Categorias/CategoryDashboardRow';
 import { fetchUserCategories } from '../lib/categoryService';
+import { apiClient } from '../lib/apiClient';
+import { getMeiApiBaseUrl } from '../lib/runtimeEnv';
+import { isLocalApiAuthMode } from '../lib/authMode';
 
 interface Categoria {
   id: number;
@@ -91,6 +94,8 @@ export default function CategoriasScreen() {
         ? SHELL_CANVAS_DARK
         : SHELL_CANVAS_LIGHT
       : theme.background;
+
+  const useApiCategories = isLocalApiAuthMode() || Boolean(getMeiApiBaseUrl());
 
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loadingCats, setLoadingCats] = useState(true);
@@ -299,15 +304,21 @@ export default function CategoriasScreen() {
       Alert.alert('Erro', 'Usuário não autenticado');
       return;
     }
-    const { error } = await supabase
-      .from('categorias_id')
-      .insert({ nome, tipo, user_id: userId });
-    if (error) {
-      Alert.alert('Erro', `Não foi possível criar a categoria: ${error.message}`);
-      return;
+    try {
+      if (useApiCategories) {
+        await apiClient.post('/categories', { nome, tipo });
+      } else {
+        const { error } = await supabase
+          .from('categorias_id')
+          .insert({ nome, tipo, user_id: userId });
+        if (error) throw error;
+      }
+      await fetchCategorias();
+      await refresh();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro desconhecido';
+      Alert.alert('Erro', `Não foi possível criar a categoria: ${message}`);
     }
-    await fetchCategorias();
-    await refresh();
   }
 
   async function handleUpdateCategoria({ id, nome, tipo }: { id?: number; nome: string; tipo: string }) {
@@ -317,16 +328,38 @@ export default function CategoriasScreen() {
       Alert.alert('Erro', 'Você não tem permissão para editar esta categoria');
       return;
     }
-    await supabase
-      .from('categorias_id')
-      .update({ nome, tipo })
-      .eq('id', id)
-      .eq('user_id', userId);
-    await fetchCategorias();
-    await refresh();
+    try {
+      if (useApiCategories) {
+        await apiClient.put('/categories', { id, nome, tipo });
+      } else {
+        await supabase
+          .from('categorias_id')
+          .update({ nome, tipo })
+          .eq('id', id)
+          .eq('user_id', userId);
+      }
+      await fetchCategorias();
+      await refresh();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro ao atualizar categoria';
+      Alert.alert('Erro', message);
+    }
   }
 
   async function buscarNomeCategoriaPorId(id: number): Promise<string | null> {
+    const fromState = categorias.find((c) => c.id === id);
+    if (fromState?.nome) return fromState.nome;
+
+    if (useApiCategories) {
+      try {
+        const list = await fetchUserCategories(userId || '');
+        const found = list.find((c) => Number(c.id) === id);
+        return found?.nome ?? null;
+      } catch {
+        return null;
+      }
+    }
+
     const { data, error } = await supabase
       .from('categorias_id')
       .select('nome')
@@ -336,6 +369,23 @@ export default function CategoriasScreen() {
     return data.nome;
   }
 
+  function resolveDefaultCategoryName(tipoNormalizado: 'entrada' | 'saida'): string | null {
+    const preferred =
+      tipoNormalizado === 'saida' ? 'Outros (saída)' : 'Outros (entrada)';
+    const exact = categorias.find(
+      (c) =>
+        String(c.nome).trim().toLowerCase() === preferred.toLowerCase() &&
+        (c.tipo === 'entrada' ? 'entrada' : 'saida') === tipoNormalizado,
+    );
+    if (exact) return exact.nome;
+    const fallback = categorias.find(
+      (c) =>
+        /outros/i.test(String(c.nome)) &&
+        (c.tipo === 'entrada' ? 'entrada' : 'saida') === tipoNormalizado,
+    );
+    return fallback?.nome ?? null;
+  }
+
   async function handleDeleteCategoria(categoria: Categoria) {
     if (!userId) return;
 
@@ -343,36 +393,49 @@ export default function CategoriasScreen() {
       const tipoNormalizado =
         categoria.tipo === 'saida' || categoria.tipo === 'saída' ? 'saida' : 'entrada';
       const categoriaPadraoId = tipoNormalizado === 'saida' ? 62 : 228;
-      const nomeCategoriaPadrao = await buscarNomeCategoriaPorId(categoriaPadraoId);
+      const nomeCategoriaPadrao =
+        resolveDefaultCategoryName(tipoNormalizado) ||
+        (await buscarNomeCategoriaPorId(categoriaPadraoId));
       if (!nomeCategoriaPadrao) {
         Alert.alert('Erro', 'Não foi possível encontrar a categoria padrão');
         return;
       }
 
-      const { error: updateError } = await supabase
-        .from('lancamentos_id')
-        .update({ classificacao: nomeCategoriaPadrao })
-        .eq('classificacao', categoria.nome)
-        .eq('user_id', userId);
+      try {
+        if (useApiCategories) {
+          await apiClient.delete(
+            `/categories?id=${encodeURIComponent(String(categoria.id))}&reassign_to=${encodeURIComponent(nomeCategoriaPadrao)}`,
+          );
+        } else {
+          const { error: updateError } = await supabase
+            .from('lancamentos_id')
+            .update({ classificacao: nomeCategoriaPadrao })
+            .eq('classificacao', categoria.nome)
+            .eq('user_id', userId);
 
-      if (updateError) {
-        Alert.alert('Erro', 'Não foi possível atualizar as transações relacionadas');
-        return;
+          if (updateError) {
+            Alert.alert('Erro', 'Não foi possível atualizar as transações relacionadas');
+            return;
+          }
+
+          const { error: deleteError } = await supabase
+            .from('categorias_id')
+            .delete()
+            .eq('id', categoria.id)
+            .eq('user_id', userId);
+
+          if (deleteError) {
+            Alert.alert('Erro', 'Não foi possível excluir a categoria');
+            return;
+          }
+        }
+
+        await fetchCategorias();
+        await refresh();
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Não foi possível excluir a categoria';
+        Alert.alert('Erro', message);
       }
-
-      const { error: deleteError } = await supabase
-        .from('categorias_id')
-        .delete()
-        .eq('id', categoria.id)
-        .eq('user_id', userId);
-
-      if (deleteError) {
-        Alert.alert('Erro', 'Não foi possível excluir a categoria');
-        return;
-      }
-
-      await fetchCategorias();
-      await refresh();
     };
 
     const confirmMessage = `Excluir "${categoria.nome}"? Os lançamentos passam para a categoria padrão.`;

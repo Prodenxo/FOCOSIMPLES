@@ -5,6 +5,7 @@ import { useThemeStore } from '@/store/themeStore';
 import { useAuthStore } from '@/store/authStore';
 import { getTheme } from '@/lib/theme';
 import { canAccessMeiArea } from '@/lib/meiAccess';
+import { isLocalApiAuthMode } from '@/lib/authMode';
 import { supabase } from '@/lib/supabase';
 import SideDrawer from '@/components/SideDrawer';
 import PendingApprovalScreen from '@/screens/PendingApprovalScreen';
@@ -99,6 +100,11 @@ export default function AppLayout() {
   useEffect(() => {
     if (!user) {
       setAccessStatus('checking');
+      return;
+    }
+    // Auth local: vínculo/role já vêm do login — sem consulta Supabase.
+    if (isLocalApiAuthMode()) {
+      setAccessStatus('ok');
       return;
     }
     let cancelled = false;

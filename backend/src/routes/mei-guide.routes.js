@@ -15,6 +15,7 @@ router.post('/certificate', requireAuth, requireMeiEnabled, upload.single('certi
 router.patch('/certificate/emitente-nfse', requireAuth, requireMeiEnabled, controller.patchCertificateEmitenteNfse);
 router.delete('/certificate', requireAuth, requireMeiEnabled, controller.removeCertificate);
 router.get('/certificate/status', requireAuth, requireMeiEnabled, controller.getCertificateStatus);
+router.get('/prestador-prefill', requireAuth, requireMeiEnabled, controller.getPrestadorPrefill);
 router.post('/validate', requireAuth, requireMeiEnabled, controller.validateGuide);
 router.get('/periods', requireAuth, requireMeiEnabled, controller.listPeriods);
 router.get('/periods-by-cnpj', requireAuth, requireMeiEnabled, controller.listPeriodsByCnpj);

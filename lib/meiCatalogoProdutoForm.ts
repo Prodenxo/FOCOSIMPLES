@@ -81,7 +81,10 @@ export function validateProdutoCatalogForm (
     return 'Código do serviço (lista municipal / LC 116) é obrigatório.'
   }
   if (codigoNorm.length < NFSE_SERVICO_CODIGO_MIN_LENGTH) {
-    return `Código do serviço deve ter pelo menos ${NFSE_SERVICO_CODIGO_MIN_LENGTH} caracteres (ex.: 07.02 ou 140101).`
+    return (
+      `Código do serviço deve ter pelo menos ${NFSE_SERVICO_CODIGO_MIN_LENGTH} caracteres `
+      + '(ex.: 17.19.01 ou 140101 — não use só 17.19).'
+    )
   }
 
   const cnaeNorm = normalizeCnaeInput(input.cnae)

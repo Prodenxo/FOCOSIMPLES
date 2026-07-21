@@ -15,6 +15,7 @@ import { useAuthStore } from "../store/authStore";
 import { useRouter } from "expo-router";
 import { SETTINGS_ROUTES } from "../lib/settingsRoutes";
 import { hasRole, normalizeRoleValue, type UserRole } from "../lib/auth-roles";
+import { isLocalApiAuthMode } from "../lib/authMode";
 import { useThemeStore } from "../store/themeStore";
 import { getTheme } from "../lib/theme";
 import { startGoogleAuthFlow } from "../lib/google-auth-flow";
@@ -57,7 +58,7 @@ type GoogleDialogState =
   | null;
 
 export default function SettingsScreen() {
-  const { user, phone, displayName, updatePhone, updateDisplayName } =
+  const { user, phone, displayName, updatePhone, updateDisplayName, role } =
     useAuthStore();
   const { isDarkMode, preference, setPreference } = useThemeStore();
   const { isDarkMode: mfDark } = useMfTheme();
@@ -78,6 +79,8 @@ export default function SettingsScreen() {
   const [checkingIntegration, setCheckingIntegration] = useState<boolean>(true);
   const router = useRouter();
   const [resolvedRole, setResolvedRole] = useState<UserRole | null>(null);
+  // Auth local: role já vem do login. Supabase: resolve via vínculo empresa.
+  const effectiveRole = isLocalApiAuthMode() ? role : (resolvedRole ?? role);
   const [googleDialog, setGoogleDialog] = useState<GoogleDialogState>(null);
   const [disconnectingGoogle, setDisconnectingGoogle] = useState(false);
   const theme = useMemo(() => getTheme(isDarkMode), [isDarkMode]);
@@ -128,6 +131,12 @@ export default function SettingsScreen() {
     const loadRoleFromLink = async () => {
       if (!user?.id) {
         setResolvedRole(null);
+        return;
+      }
+
+      // Auth local: não consulta Supabase — usa role do authStore.
+      if (isLocalApiAuthMode()) {
+        setResolvedRole(role);
         return;
       }
 
@@ -185,7 +194,7 @@ export default function SettingsScreen() {
     };
 
     loadRoleFromLink();
-  }, [user?.id]);
+  }, [user?.id, role]);
 
   const checkGoogleAgendaIntegration = async () => {
     setCheckingIntegration(true);
@@ -517,7 +526,7 @@ export default function SettingsScreen() {
             />
           </SettingsSectionCard>
 
-          {hasRole(resolvedRole, ["admin"]) ? (
+          {hasRole(effectiveRole, ["admin"]) ? (
             <SettingsSectionCard
               title="Equipe"
               description="Gerenciamento de usuários e permissões"
@@ -529,7 +538,7 @@ export default function SettingsScreen() {
                   icon="people-outline"
                   onPress={() => router.push(SETTINGS_ROUTES.usuarios)}
                 />
-                {resolvedRole === "superadmin" ? (
+                {effectiveRole === "superadmin" ? (
                   <SettingsActionLink
                     title="Solicitações de acesso"
                     description="Aprovar novos pedidos de entrada"

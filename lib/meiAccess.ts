@@ -1,15 +1,19 @@
 import type { UserRole } from './auth-roles';
 
 /**
- * Paridade com Meu Financeiro web: `App.tsx` / `Sidebar` (`canAccessMeiArea`).
- * MEI liberado só com `mei === true` no vínculo; superadmin mantém bypass operacional.
+ * Acesso à área fiscal / Notas.
+ * Só aparece com liberação explícita no vínculo (`mei === true`).
+ * No Foco Simples o flag `mei` = “emissão fiscal liberada” (Simples Nacional).
+ * Sem bypass de superadmin na UI — a aba some até alguém ativar o acesso no admin.
  */
 export function canAccessMeiArea(role: UserRole | null, mei: boolean | null): boolean {
-  if (role === 'superadmin') {
-    return true;
+  if (role !== 'superadmin' && role !== 'admin' && role !== 'usuario') {
+    return false;
   }
-  if (role === 'admin' || role === 'usuario') {
-    return mei === true;
-  }
-  return false;
+  return mei === true;
+}
+
+/** Alias de produto para copy/nav. */
+export function canAccessNotasArea(role: UserRole | null, mei: boolean | null): boolean {
+  return canAccessMeiArea(role, mei);
 }

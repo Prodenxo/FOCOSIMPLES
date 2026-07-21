@@ -3,21 +3,30 @@
  * Adaptado do site Meu-financeiro (GuidesMei.tsx).
  */
 
+import { resolveAppOrigin } from './appOrigin';
+
 const normalizeDoc = (value: string) => value.replace(/\D/g, '');
 const hasRequiredText = (value: unknown) => String(value || '').trim().length > 0;
 
 const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
-/** Área Mei Infinito: único regime permitido (Simples + MEI). */
+/** Regime Simples Nacional (código PlugNotas 1). */
 export type PlugNotasRegimeTributario = '1';
 
 /** MEI na Plugnotas: regimeTributario 1 + regimeTributarioEspecial 5. */
 export const PLUGNOTAS_REGIME_ESPECIAL_MEI = 5;
 
 export const PLUGNOTAS_REGIME_TRIBUTARIO_MEI_LABEL = 'Simples Nacional + MEI';
+export const PLUGNOTAS_REGIME_TRIBUTARIO_SIMPLES_LABEL = 'Simples Nacional';
 
 export const PLUGNOTAS_REGIME_TRIBUTARIO_OPTIONS: Array<{ value: PlugNotasRegimeTributario; label: string }> = [
-  { value: '1', label: PLUGNOTAS_REGIME_TRIBUTARIO_MEI_LABEL },
+  {
+    value: '1',
+    label:
+      resolveAppOrigin() === 'focosimples'
+        ? PLUGNOTAS_REGIME_TRIBUTARIO_SIMPLES_LABEL
+        : PLUGNOTAS_REGIME_TRIBUTARIO_MEI_LABEL,
+  },
 ];
 
 export interface PlugNotasCompanyForm {
@@ -123,8 +132,8 @@ export function getDefaultPlugNotasCompanyForm(): PlugNotasCompanyForm {
     descricaoCidade: '',
     estado: '',
     nfseAtivo: true,
-    nfeAtivo: false,
-    nfceAtivo: false,
+    nfeAtivo: resolveAppOrigin() === 'focosimples',
+    nfceAtivo: resolveAppOrigin() === 'focosimples',
     rpsLote: 1,
     rpsNumero: 1,
     rpsSerie: '1',
@@ -203,8 +212,10 @@ export function buildPlugNotasEmpresaPayload({
     razaoSocial: form.razaoSocial.trim(),
     nomeFantasia: form.nomeFantasia.trim() || form.razaoSocial.trim(),
     regimeTributario: Number(form.regimeTributario || '1'),
-    simplesNacional: Boolean(form.simplesNacional),
-    ...(form.regimeTributario === '1' && form.simplesNacional
+    simplesNacional: true,
+    ...(resolveAppOrigin() !== 'focosimples'
+      && form.regimeTributario === '1'
+      && form.simplesNacional
       ? { regimeTributarioEspecial: PLUGNOTAS_REGIME_ESPECIAL_MEI }
       : {}),
     endereco,
@@ -258,7 +269,8 @@ export function buildPlugNotasEmpresaPayload({
   }
   if (email) payload.email = email;
   if (im) payload.inscricaoMunicipal = im;
-  if (ie) payload.inscricaoEstadual = ie;
+  // PlugNotas exige IE com NF-e/NFC-e; vazio → ISENTO (alinhado ao helper da UI)
+  payload.inscricaoEstadual = ie || 'ISENTO';
 
   return payload;
 }

@@ -13,7 +13,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigationDrawer } from '../lib/navigationContext';
-import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
 import { getTheme, mfSpacing, mfTypography } from '../lib/theme';
@@ -21,6 +20,7 @@ import {
   deleteCategoryBudget,
   duplicateMonthlyBudgets,
   fetchCategoryBudgetsSummary,
+  fetchUserCategories,
   saveCategoryBudget,
   type CategoryBudgetSummary,
 } from '../lib/categoryService';
@@ -109,26 +109,20 @@ export default function OrcamentosScreen() {
       setCategorias([]);
       return;
     }
-    const { data, error } = await supabase
-      .from('categorias_id')
-      .select('id, nome, tipo, user_id')
-      .eq('user_id', userId)
-      .order('nome');
-
-    if (error) {
-      Alert.alert('Erro', `Erro ao carregar categorias: ${error.message}`);
-      setCategorias([]);
-      return;
-    }
-    const normalized = (data || []).map(
-      (cat: { id: unknown; nome: unknown; tipo: unknown; user_id: string | null }) => ({
+    try {
+      const data = await fetchUserCategories(userId);
+      const normalized = (data || []).map((cat) => ({
         id: Number(cat.id) || 0,
         nome: String(cat.nome || ''),
         tipo: String(cat.tipo || ''),
         user_id: cat.user_id || null,
-      }),
-    );
-    setCategorias(normalized);
+      }));
+      setCategorias(normalized);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro desconhecido';
+      Alert.alert('Erro', `Erro ao carregar categorias: ${message}`);
+      setCategorias([]);
+    }
   };
 
   const fetchBudgets = async () => {

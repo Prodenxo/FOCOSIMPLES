@@ -59,4 +59,16 @@ describe('getNfseValidationMessage — alíquota opcional', () => {
     }
     expect(getNfseValidationMessage(input)).toMatch(/CEP do destinatário/i)
   })
+
+  it('rejeita código de serviço com menos de 6 alfanuméricos', () => {
+    const input = baseInput()
+    input.servico = { ...input.servico!, codigo: '17.19' }
+    expect(getNfseValidationMessage(input)).toMatch(/pelo menos 6 caracteres/i)
+  })
+
+  it('aceita código LC 116 completo com máscara', () => {
+    const input = baseInput()
+    input.servico = { ...input.servico!, codigo: '17.19.01' }
+    expect(getNfseValidationMessage(input)).toBeNull()
+  })
 })

@@ -16,7 +16,7 @@ export function MfAppHeader({ title, subtitle, onMenuPress, right, style, testID
   const showMenu = Boolean(onMenuPress) && !hasGlobalNav;
   /** Topo: `MfScreenSafeArea` / SafeAreaView `edges` inclui `top` no ecrã pai. */
   const isShellWeb = hasGlobalNav && Platform.OS === 'web';
-  const isDashboardGreeting = title === 'Meu Financeiro';
+  const isDashboardGreeting = title === 'Meu Financeiro' || title === 'Foco Simples';
 
   if (isShellWeb && isDashboardGreeting && !right) {
     return null;

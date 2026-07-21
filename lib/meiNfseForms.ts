@@ -32,6 +32,10 @@ import {
   buildDefaultNfePagamentos,
 } from './plugnotasNfeItem';
 import { isValidCnpjDigits, isValidCpfOrCnpjDigits } from './validateCnpj';
+import {
+  NFSE_SERVICO_CODIGO_MIN_LENGTH,
+  normalizeCodigoServicoInput,
+} from './meiCatalogoProdutoForm';
 
 export type { DestinatarioIndIeDest } from './meiNfeDestinatarioIe';
 export type { NfeDestinatarioEnderecoForm } from './meiNfeDestinatarioEndereco';
@@ -361,6 +365,13 @@ export function getNfseValidationMessage(
     !hasRequiredText(servico.valorServico)
   ) {
     return 'Preencha os campos obrigatórios do serviço.';
+  }
+  const codigoNorm = normalizeCodigoServicoInput(servico.codigo);
+  if (codigoNorm.length < NFSE_SERVICO_CODIGO_MIN_LENGTH) {
+    return (
+      `Código do serviço deve ter pelo menos ${NFSE_SERVICO_CODIGO_MIN_LENGTH} caracteres `
+      + 'após remover pontos (ex.: 17.19.01 → 171901). Códigos curtos como 17.19 não bastam.'
+    );
   }
   if (hasRequiredText(servico.aliquota)) {
     const aliquota = parseDecimalInput(servico.aliquota);

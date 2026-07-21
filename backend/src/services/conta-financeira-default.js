@@ -1,7 +1,9 @@
-/** Nome da carteira/conta padrão do produto Meu Financeiro. */
-export const DEFAULT_CONTA_NOME = 'Meu Financeiro';
+/** Nome da carteira/conta padrão do produto Foco Simples. */
+export const DEFAULT_CONTA_NOME = 'Foco Simples';
 
 const DEFAULT_CONTA_NAME_KEYS = [
+  'foco simples',
+  'focosimples',
   'meu financeiro',
   'carteira',
   'carteira principal',
@@ -143,7 +145,7 @@ export const matchContaByTipoHint = (contas, rawHint) => {
  */
 export const resolveExplicitContaFromPayload = (contas = [], payload = {}) => {
   const explicit =
-    payload?.conta_id ?? payload?.contaId ?? payload?.conta_uuid ?? null;
+    payload?.conta_id ?? payload?.contaId ?? payload?.conta_uuid ?? payload?.id ?? null;
   if (explicit) {
     const id = String(explicit).trim();
     if (UUID_RE.test(id)) {

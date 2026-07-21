@@ -12,6 +12,8 @@ test('proxy Google Calendar aceita apenas rotas/metodos permitidos', async () =>
   assert.equal(isAllowedProxyRoute('callback', 'POST'), true);
   assert.equal(isAllowedProxyRoute('events', 'GET'), true);
   assert.equal(isAllowedProxyRoute('create-event', 'POST'), true);
+  assert.equal(isAllowedProxyRoute('disconnect', 'DELETE'), true);
+  assert.equal(isAllowedProxyRoute('disconnect', 'POST'), true);
 
   assert.equal(isAllowedProxyRoute('callback', 'GET'), false);
   assert.equal(isAllowedProxyRoute('events', 'POST'), false);

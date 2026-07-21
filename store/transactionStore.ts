@@ -4,6 +4,8 @@ import { useAuthStore } from './authStore';
 import { useRecorrenciaStore } from './recorrenciaStore';
 import { createCalendarEvent } from '../lib/google-calendar';
 import { getErrorMessage } from '../lib/errors';
+import { apiClient } from '../lib/apiClient';
+import { isLocalApiAuthMode } from '../lib/authMode';
 
 interface Transaction {
   id: string; // UUID no Supabase
@@ -36,6 +38,29 @@ interface TransactionState {
   clearGoogleAuthRequired: () => void;
 }
 
+function normalizeTransactionRow(t: Record<string, unknown>): Transaction {
+  return {
+    ...t,
+    id: String(t.id || ''),
+    valor: typeof t.valor === 'string' ? parseFloat(t.valor) : Number(t.valor),
+    tipo: (String(t.tipo) === 'saida' ? 'saída' : String(t.tipo)) as Transaction['tipo'],
+    classificacao: String(t.classificacao || ''),
+    status: String(t.status || ''),
+    user_id: t.user_id ? String(t.user_id) : null,
+    criado_em: String(t.criado_em || ''),
+    data: t.data ? String(t.data) : null,
+    categoria: t.categoria !== null && t.categoria !== undefined
+      ? (typeof t.categoria === 'string'
+        ? (isNaN(Number(t.categoria)) ? t.categoria : Number(t.categoria))
+        : t.categoria as string | number)
+      : null,
+    obs: t.obs ? String(t.obs) : null,
+    conta_id: t.conta_id ? String(t.conta_id) : null,
+    recorrencia_id: t.recorrencia_id ? String(t.recorrencia_id) : null,
+    recorrencia_ano_mes: t.recorrencia_ano_mes ? String(t.recorrencia_ano_mes) : null,
+  } as Transaction;
+}
+
 export const useTransactionStore = create<TransactionState>((set, get) => ({
   transactions: [],
   loading: false,
@@ -50,32 +75,20 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
 
     set({ loading: true, error: null });
     try {
-      const { data, error } = await supabase
-        .from('lancamentos_id')
-        .select('*')
-        .eq('user_id', userId)
-        .order('criado_em', { ascending: false });
-      
-      if (error) throw error;
-      
-      // Normalizar dados do banco para garantir tipos corretos
-      const normalizedData = (data || []).map((t: any) => ({
-        ...t,
-        id: String(t.id || ''), // UUID sempre como string
-        valor: typeof t.valor === 'string' ? parseFloat(t.valor) : Number(t.valor),
-        tipo: String(t.tipo) === 'saida' ? 'saída' : String(t.tipo),
-        classificacao: String(t.classificacao || ''),
-        status: String(t.status || ''),
-        user_id: t.user_id ? String(t.user_id) : null, // Permitir null para transações globais
-        criado_em: String(t.criado_em || ''),
-        data: t.data ? String(t.data) : null,
-        categoria: t.categoria !== null && t.categoria !== undefined 
-          ? (typeof t.categoria === 'string' ? (isNaN(Number(t.categoria)) ? t.categoria : Number(t.categoria)) : t.categoria)
-          : null,
-        obs: t.obs ? String(t.obs) : null,
-        conta_id: t.conta_id ? String(t.conta_id) : null,
-      }));
-      
+      let data: Record<string, unknown>[] | null = null;
+      if (isLocalApiAuthMode()) {
+        data = await apiClient.get<Record<string, unknown>[]>('/transactions');
+      } else {
+        const res = await supabase
+          .from('lancamentos_id')
+          .select('*')
+          .eq('user_id', userId)
+          .order('criado_em', { ascending: false });
+        if (res.error) throw res.error;
+        data = (res.data || []) as Record<string, unknown>[];
+      }
+
+      const normalizedData = (data || []).map((t) => normalizeTransactionRow(t));
       set({ transactions: normalizedData, loading: false });
     } catch (error: any) {
       set({ error: error.message, loading: false });
@@ -89,18 +102,20 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
     }
 
     try {
-      // Garantir que valor seja sempre um número
       const transactionData = {
         ...transaction,
         valor: typeof transaction.valor === 'number' ? transaction.valor : parseFloat(String(transaction.valor)),
         user_id: userId
       };
 
-      const { error } = await supabase
-        .from('lancamentos_id')
-        .insert([transactionData]);
-
-      if (error) throw error;
+      if (isLocalApiAuthMode()) {
+        await apiClient.post('/transactions', transactionData);
+      } else {
+        const { error } = await supabase
+          .from('lancamentos_id')
+          .insert([transactionData]);
+        if (error) throw error;
+      }
       await get().fetchTransactions();
 
       // Google Calendar agora é opt-in via options.addToCalendar.
@@ -142,18 +157,23 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
     }
 
     try {
-      // Garantir que valor seja sempre um número
       const transactionData = {
         ...transaction,
         valor: typeof transaction.valor === 'number' ? transaction.valor : parseFloat(String(transaction.valor))
       };
-      
-      const { data, error } = await supabase
-        .from('lancamentos_id')
-        .update(transactionData)
-        .eq('id', idString) // UUID como string
-        .eq('user_id', userId);
-      if (error) throw error;
+
+      let data: unknown = null;
+      if (isLocalApiAuthMode()) {
+        data = await apiClient.put('/transactions', { id: idString, ...transactionData });
+      } else {
+        const res = await supabase
+          .from('lancamentos_id')
+          .update(transactionData)
+          .eq('id', idString)
+          .eq('user_id', userId);
+        if (res.error) throw res.error;
+        data = res.data;
+      }
       await get().fetchTransactions();
       return { data, error: null };
     } catch (error: unknown) {
@@ -190,12 +210,18 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
           .addSkip(targetTx.recorrencia_id, targetTx.recorrencia_ano_mes);
       }
 
-      const { data, error } = await supabase
-        .from('lancamentos_id')
-        .delete()
-        .eq('id', idString)
-        .eq('user_id', userId);
-      if (error) throw error;
+      let data: unknown = null;
+      if (isLocalApiAuthMode()) {
+        data = await apiClient.delete(`/transactions?id=${encodeURIComponent(idString)}`);
+      } else {
+        const res = await supabase
+          .from('lancamentos_id')
+          .delete()
+          .eq('id', idString)
+          .eq('user_id', userId);
+        if (res.error) throw res.error;
+        data = res.data;
+      }
       await get().fetchTransactions();
       return { data, error: null };
     } catch (error: unknown) {
@@ -208,4 +234,3 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
     set({ googleAuthRequired: false });
   },
 }));
-

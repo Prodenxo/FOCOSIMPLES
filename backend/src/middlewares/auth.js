@@ -7,6 +7,10 @@ import {
   verifySupabaseAccessToken,
 } from '../utils/verifySupabaseAccessToken.js';
 import { verifySupabaseAccessTokenWithJwks } from '../utils/verifySupabaseAccessTokenJwks.js';
+import {
+  isLocalAuthMode,
+  verifyLocalAccessToken,
+} from '../services/local-auth.service.js';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -111,7 +115,19 @@ export const requireAuth = async (req, _res, next) => {
       return next();
     }
 
-    // 🔐 3. JWT do Supabase (utilizador real) — validação local (sem round-trip Auth)
+    // 🔐 3a. Auth local (EasyPanel / AUTH_MODE=local)
+    if (isLocalAuthMode()) {
+      const localUser = verifyLocalAccessToken(token);
+      if (localUser) {
+        req.user = localUser;
+        req.accessToken = token;
+        req.authType = 'user';
+        return next();
+      }
+      return next(unauthorized('Sessão inválida ou expirada. Faça login novamente.'));
+    }
+
+    // 🔐 3b. JWT do Supabase (utilizador real) — validação local (sem round-trip Auth)
     const jwtHeader = decodeJwtHeader(token);
     const jwtSecret = env.SUPABASE_JWT_SECRET;
 
