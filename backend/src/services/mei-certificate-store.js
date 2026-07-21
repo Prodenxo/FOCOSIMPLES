@@ -597,7 +597,7 @@ export const saveCertificateDocument = async (userId, certDocument) => {
 };
 
 /**
- * Carrega o certificado do usuário (pfx_base64 e senha criptografada).
+ * Carrega o certificado do usuário (PFX cifrado ou legado pfx_base64).
  * @returns {{ pfxBase64: string, passphraseEnc: string, passphraseIv: string, certDocument: string | null } | null}
  */
 export const loadCertificate = async (userId) => {
@@ -605,15 +605,34 @@ export const loadCertificate = async (userId) => {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from(TABLE)
-    .select('pfx_base64, passphrase_enc, passphrase_iv, cert_document, cert_valid_from, cert_valid_to')
+    .select(`
+      pfx_base64, pfx_enc, pfx_iv, pfx_auth_tag,
+      passphrase_enc, passphrase_iv, cert_document, cert_valid_from, cert_valid_to, status
+    `)
     .eq('user_id', userId)
     .maybeSingle();
   if (error || !data) return null;
-  if (!data.pfx_base64 || !data.passphrase_enc || !data.passphrase_iv) {
-    return null;
+  if (data.status === 'REMOVIDO') return null;
+  if (!data.passphrase_enc || !data.passphrase_iv) return null;
+
+  let pfxBase64 = data.pfx_base64 || null;
+  if (!pfxBase64 && data.pfx_enc && data.pfx_iv && data.pfx_auth_tag) {
+    try {
+      const { decryptBufferAesGcm } = await import('./certificate-encryption.service.js');
+      const buf = decryptBufferAesGcm({
+        ciphertext: data.pfx_enc,
+        iv: data.pfx_iv,
+        authTag: data.pfx_auth_tag,
+      });
+      pfxBase64 = buf.toString('base64');
+    } catch {
+      return null;
+    }
   }
+  if (!pfxBase64) return null;
+
   return {
-    pfxBase64: data.pfx_base64,
+    pfxBase64,
     passphraseEnc: data.passphrase_enc,
     passphraseIv: data.passphrase_iv,
     certDocument: data.cert_document ?? null,
@@ -849,11 +868,15 @@ export const deleteCertificate = async (userId) => {
     .from(TABLE)
     .update({
       pfx_base64: null,
+      pfx_enc: null,
+      pfx_iv: null,
+      pfx_auth_tag: null,
       passphrase_enc: null,
       passphrase_iv: null,
       cert_valid_from: null,
       cert_valid_to: null,
       plugnotas_cert_id: null,
+      status: 'REMOVIDO',
       updated_at: new Date().toISOString()
     })
     .eq('user_id', userId);
@@ -872,10 +895,11 @@ export const hasCertificatePfx = async (userId) => {
   const supabase = getSupabase();
   const { data } = await supabase
     .from(TABLE)
-    .select('pfx_base64')
+    .select('pfx_base64, pfx_enc, status')
     .eq('user_id', userId)
     .maybeSingle();
-  return Boolean(data?.pfx_base64);
+  if (!data || data.status === 'REMOVIDO') return false;
+  return Boolean(data.pfx_enc || data.pfx_base64);
 };
 
 /**

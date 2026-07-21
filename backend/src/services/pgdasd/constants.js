@@ -1,6 +1,11 @@
 /**
  * Constantes Integra Contador — PGDAS-D (Simples Nacional).
+ *
+ * Auth (ICGERENCIADOR-019): contratante = plataforma (OAuth); autor = contribuinte = empresa;
+ * termo Autentica Procurador assinado com A1 da própria empresa.
+ *
  * @see https://apicenter.estaleiro.serpro.gov.br/documentacao/api-integra-contador/pt/solucoes/integra-sn/pgdasd/
+ * @see https://apicenter.estaleiro.serpro.gov.br/documentacao/api-integra-contador/pt/solucoes/integra-contador-gerenciador/autenticaprocurador/
  */
 
 export const PGDASD_SISTEMA = 'PGDASD'

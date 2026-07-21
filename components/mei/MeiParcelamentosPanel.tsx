@@ -228,7 +228,11 @@ export function MeiParcelamentosPanel ({
             Nenhum parcelamento ativo. Pedidos encerrados não aparecem aqui.
           </Text>
         ) : filteredRows.length === 0 ? (
-          <Text style={styles.ledgerEmpty}>Nenhuma parcela neste filtro.</Text>
+          <Text style={styles.ledgerEmpty}>
+            {pedidoAtivo
+              ? 'Pedido encontrado, mas nenhuma parcela veio da Receita ainda. Toque em atualizar.'
+              : 'Nenhuma parcela neste filtro.'}
+          </Text>
         ) : (
           <MfScrollView
             style={[

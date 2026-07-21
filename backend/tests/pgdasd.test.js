@@ -43,6 +43,54 @@ describe('pgdasd consultar map', () => {
     })
     assert.equal(periods[0].status, 'pago')
   })
+
+  it('marca pago quando indiceDas.dasPago=true', () => {
+    const periods = mapDeclaracoesToPeriods({
+      periodos: [
+        {
+          periodoApuracao: '202602',
+          operacoes: [
+            { tipoOperacao: 'Declaração Original' },
+            {
+              tipoOperacao: 'Geração de DAS',
+              indiceDas: { numeroDas: '1', dasPago: true },
+            },
+          ],
+        },
+      ],
+    })
+    assert.equal(periods[0].status, 'pago')
+  })
+
+  it('marca a_pagar quando houve Geração de DAS não pago', () => {
+    const periods = mapDeclaracoesToPeriods({
+      periodos: [
+        {
+          periodoApuracao: '202603',
+          operacoes: [
+            { tipoOperacao: 'Declaração Original' },
+            {
+              tipoOperacao: 'Geração de DAS',
+              indiceDas: { numeroDas: '2', dasPago: false },
+            },
+          ],
+        },
+      ],
+    })
+    assert.equal(periods[0].status, 'a_pagar')
+  })
+
+  it('marca pago quando só há declaração (sem geração de DAS / sem valor devido)', () => {
+    const periods = mapDeclaracoesToPeriods({
+      periodos: [
+        {
+          periodoApuracao: '202601',
+          operacoes: [{ tipoOperacao: 'Declaração Original', indiceDeclaracao: { numeroDeclaracao: '9' } }],
+        },
+      ],
+    })
+    assert.equal(periods[0].status, 'pago')
+  })
 })
 
 describe('pgdasd declaracao draft', () => {

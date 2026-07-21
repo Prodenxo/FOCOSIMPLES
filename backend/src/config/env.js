@@ -174,7 +174,9 @@ export const env = {
     process.env.MEI_API_DOWNLOAD_PATH || "/mei-guide/{id}/download",
   MEI_API_PERIODS_PATH: process.env.MEI_API_PERIODS_PATH || "",
   MEI_API_TIMEOUT_MS: process.env.MEI_API_TIMEOUT_MS || "15000",
-  MEI_CERT_ENCRYPTION_KEY: process.env.MEI_CERT_ENCRYPTION_KEY || "",
+  MEI_CERT_ENCRYPTION_KEY:
+    process.env.MEI_CERT_ENCRYPTION_KEY || process.env.CERT_ENCRYPTION_KEY || "",
+  CERT_ENCRYPTION_KEY: process.env.CERT_ENCRYPTION_KEY || "",
   /** Quando true (padrão), bloqueia certificado cujo CNPJ não seja MEI na Receita. */
   MEI_CERT_ENFORCE_MEI_CNPJ: process.env.MEI_CERT_ENFORCE_MEI_CNPJ || "true",
   PLUGNOTAS_API_BASE_URL: process.env.PLUGNOTAS_API_BASE_URL || "",

@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS public.das_simples (
   periodo_apuracao text NOT NULL CHECK (periodo_apuracao ~ '^[0-9]{6}$'),
   competencia text NOT NULL CHECK (competencia ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'),
   status text NOT NULL DEFAULT 'pendente'
-    CHECK (status = ANY (ARRAY['pago', 'pendente', 'erro', 'gerado', 'sem_declaracao'])),
+    CHECK (status = ANY (ARRAY['pago', 'pendente', 'erro', 'gerado', 'sem_declaracao', 'sem_debito'])),
   pdf_base64 text,
   numero_documento text,
   valor_total numeric,

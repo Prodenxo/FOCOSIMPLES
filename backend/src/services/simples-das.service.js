@@ -5,7 +5,7 @@
 
 import { env } from '../config/env.js'
 import { badRequest } from '../utils/errors.js'
-import { getCertificateDocument } from './mei-certificate-store.js'
+import { getCertificateDocument, hasCertificatePfx } from './mei-certificate-store.js'
 import {
   assertPgdasdSerproConfigured,
   inspectPgdasdSerproConfig,
@@ -18,6 +18,7 @@ import {
 } from './pgdasd/consultar-declaracoes.js'
 import { gerarDasPgdasd } from './pgdasd/gerar-das.js'
 import {
+  getDasSimplesById,
   getDasSimplesByPeriodo,
   listDasSimplesPeriods,
   upsertDasSimples,
@@ -27,6 +28,8 @@ import {
   sumNfseFaturamentoPeriodo,
   transmitirDeclaracaoMensal,
 } from './pgdasd/transmitir-declaracao.js'
+import { recordFiscalAudit } from './fiscal-audit.service.js'
+import { resolveUserEmpresaContext } from './certificate-repository.js'
 
 const normalizeDoc = (value) => String(value || '').replace(/\D/g, '')
 
@@ -38,12 +41,48 @@ const normalizePeriodo = (value) => {
   return digits
 }
 
+/**
+ * CNPJ da operação = certificado da empresa autenticada.
+ * Hint do frontend só é aceito se coincidir com o CNPJ do cert / empresa.
+ */
 const resolveContribuinteCnpj = async (userId, cnpjHint) => {
-  const fromHint = normalizeDoc(cnpjHint)
-  if (fromHint.length === 14) return fromHint
   const fromCert = normalizeDoc(await getCertificateDocument(userId))
-  if (fromCert.length === 14) return fromCert
-  throw badRequest('Informe um CNPJ válido ou envie o certificado A1 da empresa.')
+  const empresa = await resolveUserEmpresaContext(userId)
+  const canonical = fromCert.length === 14
+    ? fromCert
+    : (empresa.cnpj?.length === 14 ? empresa.cnpj : '')
+
+  if (canonical.length !== 14) {
+    throw badRequest(
+      'Envie o certificado A1 (e-CNPJ) da própria empresa antes de consultar o DAS Simples.',
+      { code: 'CERT_REQUIRED_FOR_PGDASD' },
+    )
+  }
+
+  const fromHint = normalizeDoc(cnpjHint)
+  if (fromHint.length === 14 && fromHint !== canonical) {
+    throw badRequest('Não é permitido consultar/emitir DAS de outro CNPJ.', {
+      code: 'PGDASD_CNPJ_FORBIDDEN',
+    })
+  }
+
+  if (empresa.cnpj && empresa.cnpj.length === 14 && empresa.cnpj !== canonical) {
+    throw badRequest('CNPJ do certificado diverge do CNPJ da empresa cadastrada.', {
+      code: 'CERT_CNPJ_MISMATCH',
+    })
+  }
+
+  return canonical
+}
+
+const assertCompanyCertReady = async (userId) => {
+  const hasPfx = await hasCertificatePfx(userId)
+  if (!hasPfx) {
+    throw badRequest(
+      'Certificado A1 da empresa obrigatório para Autentica Procurador / DAS Simples.',
+      { code: 'CERT_REQUIRED_FOR_PGDASD' },
+    )
+  }
 }
 
 export const getSimplesDasIntegrationStatus = () => {
@@ -64,6 +103,7 @@ export const getSimplesDasIntegrationStatus = () => {
  */
 export const listSimplesDasPeriods = async (userId, { cnpj, ano, refresh = false } = {}) => {
   const integration = getSimplesDasIntegrationStatus()
+  await assertCompanyCertReady(userId)
   const contribuinteCnpj = await resolveContribuinteCnpj(userId, cnpj)
   const year = Number(ano) || new Date().getFullYear()
 
@@ -78,7 +118,6 @@ export const listSimplesDasPeriods = async (userId, { cnpj, ano, refresh = false
         userId,
       })
       remote = mapDeclaracoesToPeriods(dados)
-      // Também tenta ano anterior se lista vazia (virada de ano).
       if (remote.length === 0 && !refresh) {
         const prev = await consultarDeclaracoesPorAno({
           contribuinteCnpj,
@@ -87,8 +126,20 @@ export const listSimplesDasPeriods = async (userId, { cnpj, ano, refresh = false
         })
         remote = mapDeclaracoesToPeriods(prev.dados)
       }
+      await recordFiscalAudit({
+        userId,
+        acao: 'pgdasd_consultar_periodos',
+        cnpj: contribuinteCnpj,
+        detalhe: `ano=${year}; count=${remote.length}`,
+      })
     } catch (err) {
       remoteError = err instanceof Error ? err.message : String(err)
+      await recordFiscalAudit({
+        userId,
+        acao: 'pgdasd_consultar_erro',
+        cnpj: contribuinteCnpj,
+        detalhe: String(remoteError).slice(0, 200),
+      })
     }
   }
 
@@ -111,24 +162,28 @@ export const listSimplesDasPeriods = async (userId, { cnpj, ano, refresh = false
   for (const row of local) {
     const periodo = row.periodo_apuracao
     if (!periodo) continue
-    const prev = byPeriodo.get(periodo) || {
-      competencia: row.competencia,
-      periodoApuracao: periodo,
-      guideId: `pgdasd-${periodo}`,
-      status: 'a_pagar',
+    const prev = byPeriodo.get(periodo)
+    if (!prev) {
+      // Sem retorno remoto: usa só cache local de PDF (status neutro a_pagar se tiver PDF).
+      byPeriodo.set(periodo, {
+        competencia: row.competencia,
+        periodoApuracao: periodo,
+        guideId: row.id || `pgdasd-${periodo}`,
+        status: row.pdf_base64 ? 'a_pagar' : (String(row.status) === 'pago' ? 'pago' : 'a_pagar'),
+        errorMessage: row.error_message || null,
+        valorTotal: row.valor_total ?? null,
+        numeroDocumento: row.numero_documento || null,
+        hasLocalPdf: Boolean(row.pdf_base64),
+      })
+      continue
     }
-    const localStatus = String(row.status || '')
-    let status = prev.status || 'a_pagar'
-    if (localStatus === 'sem_debito') status = 'indisponivel'
-    else if (localStatus === 'pago') status = 'pago'
-    else if (localStatus === 'gerado' && row.pdf_base64) status = 'a_pagar'
+    // Status vem da Receita (CONSDECLARACAO). Local só enriquece PDF/valores.
+    // guideId estável = pgdasd-AAAAMM (nunca UUID do banco — quebra o download).
     byPeriodo.set(periodo, {
       ...prev,
-      status,
-      guideId: row.id || prev.guideId,
-      errorMessage: row.error_message || prev.errorMessage || null,
-      valorTotal: row.valor_total ?? null,
-      numeroDocumento: row.numero_documento || null,
+      guideId: `pgdasd-${periodo}`,
+      valorTotal: row.valor_total ?? prev.valorTotal ?? null,
+      numeroDocumento: row.numero_documento || prev.numeroDocumento || null,
       hasLocalPdf: Boolean(row.pdf_base64),
     })
   }
@@ -162,7 +217,7 @@ export const listSimplesDasPeriods = async (userId, { cnpj, ano, refresh = false
  */
 export const gerarSimplesDas = async (userId, payload = {}) => {
   assertPgdasdSerproConfigured()
-  // Auth PGDASD usa SERPRO_CERT_* (contratante). A1 do cliente não é exigido aqui.
+  await assertCompanyCertReady(userId)
   const contribuinteCnpj = await resolveContribuinteCnpj(userId, payload.cnpj)
   const periodo = normalizePeriodo(payload.periodoApuracao || payload.periodo)
   if (!periodo) {
@@ -176,19 +231,12 @@ export const gerarSimplesDas = async (userId, payload = {}) => {
     userId,
   }).catch(async (err) => {
     const code = err?.errors?.code || err?.code
-    if (code === 'PGDASD_SEM_DEBITO') {
-      try {
-        await upsertDasSimples({
-          userId,
-          cnpj: contribuinteCnpj,
-          periodoApuracao: periodo,
-          status: 'sem_debito',
-          pdfBase64: null,
-          errorMessage: err.message,
-        })
-      } catch {
-        /* ignore persist failure */
-      }
+    const msg = String(err?.message || '')
+    const isSemDebito = code === 'PGDASD_SEM_DEBITO'
+      || /MSG_E0139|n[aã]o\s+haver\s+valor\s+devido|sem\s+valor\s+devido|n[aã]o\s+foi\s+gerado\s+das/i.test(msg)
+    // Não grava status no banco: a listagem lê dasPago / operações no CONSDECLARACAO.
+    if (isSemDebito && code !== 'PGDASD_SEM_DEBITO') {
+      throw badRequest(msg || 'Não há DAS a pagar neste período.', { code: 'PGDASD_SEM_DEBITO' })
     }
     throw err
   })
@@ -218,11 +266,42 @@ export const gerarSimplesDas = async (userId, payload = {}) => {
 
 /**
  * Download PDF (cache local ou regenera).
+ * Aceita: AAAAMM | pgdasd-AAAAMM | UUID de das_simples.
  */
 export const downloadSimplesDas = async (userId, idOrPeriodo, { regenerate = false } = {}) => {
-  const raw = String(idOrPeriodo || '')
-  const periodoFromId = raw.startsWith('pgdasd-') ? raw.slice('pgdasd-'.length) : raw
-  const periodo = normalizePeriodo(periodoFromId) || normalizePeriodo(raw.replace(/\D/g, '').slice(-6))
+  const raw = String(idOrPeriodo || '').trim()
+  let periodo = null
+
+  if (raw.startsWith('pgdasd-')) {
+    periodo = normalizePeriodo(raw.slice('pgdasd-'.length))
+  } else {
+    periodo = normalizePeriodo(raw)
+  }
+
+  // guideId às vezes vem como UUID da linha local (não como período)
+  if (!periodo && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(raw)) {
+    try {
+      const byId = await getDasSimplesById({ userId, id: raw })
+      periodo = normalizePeriodo(byId?.periodo_apuracao)
+      if (!regenerate && byId?.pdf_base64 && periodo) {
+        return {
+          id: byId.id,
+          status: byId.status || 'gerado',
+          periodoApuracao: periodo,
+          competencia: byId.competencia,
+          pdfBase64: byId.pdf_base64,
+          filename: `DAS-SN-${periodo}.pdf`,
+          contentType: 'application/pdf',
+        }
+      }
+    } catch {
+      /* segue para erro de período */
+    }
+  }
+
+  if (!periodo) {
+    periodo = normalizePeriodo(raw.replace(/\D/g, '').slice(-6))
+  }
 
   if (!periodo) {
     throw badRequest('Identificador/período inválido.')

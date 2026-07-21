@@ -22,6 +22,7 @@ import {
   getMeiCertificateUploadToast,
 } from '../lib/meiCertificateUpload'
 import { formatApiNetworkError } from '../lib/apiNetworkError';
+import { alertDialog } from '../lib/confirmDialog';
 import { APP_BRAND_NAME } from '../lib/appBrand';
 import { resolveAppOrigin } from '../lib/appOrigin';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -803,6 +804,15 @@ function MeiScreenContent() {
     () => (meiPeriods || []).filter((p) => p.status === 'a_pagar'),
     [meiPeriods]
   );
+
+  const parcelasEmAbertoCount = useMemo(() => {
+    const rows = buildParcelaLedgerRows(parcelamentos, parcelasPorNumero);
+    const abertas = rows.filter(
+      (row) => row.status === 'a_pagar' || row.status === 'liberada',
+    ).length;
+    if (abertas > 0) return abertas;
+    return parcelamentos.filter((p) => isParcelamentoEmAberto(p.situacao)).length;
+  }, [parcelamentos, parcelasPorNumero]);
   const availableYears = useMemo(() => {
     const currentYear = new Date().getFullYear();
     return Array.from({ length: 10 }, (_, index) => currentYear - index);
@@ -812,7 +822,7 @@ function MeiScreenContent() {
     []
   );
   const canDownloadGuide = normalizedCnpj.length === 14
-    && (isFocoSimplesUi || hasCertificate)
+    && hasCertificate
     && !downloadLoading;
 
   useEffect(() => {
@@ -980,10 +990,12 @@ function MeiScreenContent() {
       Alert.alert('Erro', 'Documento do contribuinte inválido');
       return;
     }
-    if (!hasCertificate && !isFocoSimplesUi) {
+    if (!hasCertificate) {
       Alert.alert(
         'Erro',
-        'Certificado não configurado no servidor',
+        isFocoSimplesUi
+          ? 'Envie o certificado A1 (e-CNPJ) da própria empresa na aba Certificado. Ele assina o termo Autentica Procurador na SERPRO.'
+          : 'Certificado não configurado no servidor',
       );
       return;
     }
@@ -1009,8 +1021,9 @@ function MeiScreenContent() {
     setDownloadLoading(true);
     try {
       if (isFocoSimplesUi) {
-        const guideId = period?.guideId || `pgdasd-${periodoApuracao}`;
-        let guide = await downloadSimplesDas(String(guideId));
+        // Sempre período AAAAMM — guideId UUID do cache local quebrava o download.
+        const downloadKey = `pgdasd-${periodoApuracao}`;
+        let guide = await downloadSimplesDas(downloadKey, { regenerate: Boolean(vencida) });
         if (!guide?.pdfBase64) {
           guide = await gerarSimplesDas({ cnpj: normalizedCnpj, periodoApuracao });
         }
@@ -1080,45 +1093,45 @@ function MeiScreenContent() {
       void loadMeiPeriods({ silent: true, refresh: true });
     } catch (error: any) {
       const code = String(error?.code || '');
+      const rawMsg = String(error?.message || '');
+      const friendly = toMeiUserErrorMessage(rawMsg);
+      const isSemDebito = code === 'PGDASD_SEM_DEBITO'
+        || /MSG_E0139|sem valor devido|não foi gerado das/i.test(rawMsg);
+
       if (code === 'MEI_DAS_PAID_NO_PDF') {
         void loadMeiPeriods({ refresh: true });
-        Alert.alert(
-          'DAS já pago',
-          error?.message || 'A Receita não devolveu PDF deste mês por aqui.',
-          [
-            { text: 'Abrir PGMEI', onPress: () => void handleOpenPgmei() },
-            { text: 'OK' },
-          ]
-        );
+        alertDialog('DAS já pago', error?.message || 'A Receita não devolveu PDF deste mês por aqui.');
+        showToast('DAS já pago neste período.', 'info');
       } else if (code === 'MEI_DAS_PERIODO_INDISPONIVEL') {
-        Alert.alert('DAS indisponível', error?.message || 'Competência indisponível na Receita.');
-      } else if (code === 'PGDASD_SEM_DEBITO') {
+        alertDialog('DAS indisponível', error?.message || 'Competência indisponível na Receita.');
+        showToast(friendly, 'info');
+      } else if (isSemDebito) {
+        if (period?.competencia) {
+          setMeiPeriods((prev) => prev.map((row) => (
+            row.competencia === period.competencia
+              ? { ...row, status: 'pago' as const, errorMessage: friendly }
+              : row
+          )));
+        }
         void loadMeiPeriods({ silent: true, refresh: true });
-        Alert.alert(
-          'Sem DAS a pagar',
-          error?.message
-            || 'A Receita informou que não há valor devido neste período (declaração sem débito).',
-          [
-            { text: `Abrir ${DAS_PORTAL_LABEL}`, onPress: () => void handleOpenPgmei() },
-            { text: 'OK' },
-          ],
+        alertDialog(
+          'Período sem valor devido',
+          'A Receita informou que não há DAS a pagar neste período. A lista será atualizada com o status da consulta.',
         );
+        showToast('Sem valor devido — status vem da Receita na próxima consulta.', 'info');
       } else if (code === 'PGDASD_DAS_NO_PDF') {
-        Alert.alert(
+        alertDialog(
           'PDF não disponível',
-          error?.message
-            || 'A Receita não devolveu o PDF. Confirme se a declaração do período já foi transmitida.',
-          [
-            { text: `Abrir ${DAS_PORTAL_LABEL}`, onPress: () => void handleOpenPgmei() },
-            { text: 'OK' },
-          ],
+          friendly || 'A Receita não devolveu o PDF. Confirme se a declaração do período já foi transmitida.',
         );
+        showToast(friendly, 'error');
       } else {
         const hint =
           period?.status === 'erro' && period.errorMessage
             ? period.errorMessage
-            : error?.message || 'Não foi possível baixar a guia';
-        Alert.alert(vencida ? 'Erro ao atualizar guia vencida' : 'Erro ao baixar DAS', hint);
+            : friendly || 'Não foi possível baixar a guia';
+        alertDialog(vencida ? 'Erro ao atualizar guia vencida' : 'Erro ao baixar DAS', hint);
+        showToast(hint, 'error');
       }
     } finally {
       setDownloadLoading(false);
@@ -1511,9 +1524,9 @@ function MeiScreenContent() {
   }, [activeTab, loadParcelamentos]);
 
   useEffect(() => {
-    if (activeTab !== 'parcelamentos' || parcelamentos.length === 0) return;
+    if (parcelamentos.length === 0) return;
     void atualizarParcelasPorCompetencia();
-  }, [activeTab, parcelamentos, atualizarParcelasPorCompetencia]);
+  }, [parcelamentos, atualizarParcelasPorCompetencia]);
 
   useEffect(() => {
     if (activeTab !== 'das') return;
@@ -1572,8 +1585,18 @@ function MeiScreenContent() {
     if (!hasCertificate) return;
     if (normalizedCnpj.length !== 14) return;
     void loadMeiPeriods({ silent: true });
-    void loadParcelamentos({ scope: 'mei', silent: true });
-  }, [meiCertificateLoading, hasCertificate, normalizedCnpj, loadMeiPeriods, loadParcelamentos]);
+    // Foco Simples: scope all (PARCSN). MEI: só modalidades MEI (mais leve).
+    void loadParcelamentos({
+      scope: isFocoSimplesUi ? 'all' : 'mei',
+      silent: true,
+    });
+  }, [
+    meiCertificateLoading,
+    hasCertificate,
+    normalizedCnpj,
+    loadMeiPeriods,
+    loadParcelamentos,
+  ]);
 
   const certDocDigitsLen = useMemo(
     () => (certDocumento ? String(certDocumento).replace(/\D/g, '').length : 0),
@@ -1634,16 +1657,17 @@ function MeiScreenContent() {
     const aguardandoDados =
       hasCertificate && normalizedCnpj.length === 14 && parcelamentos.length === 0 && parcelamentosLoading;
     const tudoEmDia =
-      parcelamentos.length === 0 &&
+      parcelasEmAbertoCount === 0 &&
       hasCertificate &&
       normalizedCnpj.length === 14 &&
       !aguardandoDados &&
       !parcelamentosLoading;
     return {
       tudoEmDia,
-      texto: aguardandoDados ? '…' : tudoEmDia ? 'Tudo em dia' : String(parcelamentos.length),
+      texto: aguardandoDados ? '…' : tudoEmDia ? 'Tudo em dia' : String(parcelasEmAbertoCount || parcelamentos.length),
     };
   }, [
+    parcelasEmAbertoCount,
     parcelamentos.length,
     hasCertificate,
     normalizedCnpj.length,
@@ -2664,8 +2688,18 @@ function MeiScreenContent() {
   const sidebarTabs: { key: MeiTab; label: string; icon: React.ComponentProps<typeof Ionicons>['name']; badge?: number }[] = [
     { key: 'overview', label: 'Início', icon: 'home-outline' },
     { key: 'certificado', label: 'Certificado', icon: 'shield-checkmark-outline' },
-    { key: 'das', label: isFocoSimplesUi ? 'DAS Simples' : 'Guia DAS', icon: 'document-text-outline' },
-    { key: 'parcelamentos', label: 'Parcelamentos', icon: 'list-outline', badge: parcelamentos?.length || undefined },
+    {
+      key: 'das',
+      label: isFocoSimplesUi ? 'DAS Simples' : 'Guia DAS',
+      icon: 'document-text-outline',
+      badge: meiPeriodsEmAberto.length || undefined,
+    },
+    {
+      key: 'parcelamentos',
+      label: 'Parcelamentos',
+      icon: 'list-outline',
+      badge: parcelasEmAbertoCount || undefined,
+    },
     { key: 'notas', label: 'Notas', icon: 'receipt-outline', badge: notas?.length || undefined },
   ];
 
@@ -2714,7 +2748,7 @@ function MeiScreenContent() {
       tab.key === 'das'
         ? meiPeriodsEmAberto.length || undefined
         : tab.key === 'parcelamentos'
-          ? parcelamentos?.length || undefined
+          ? parcelasEmAbertoCount || undefined
           : tab.key === 'notas'
             ? notas?.length || undefined
             : undefined,
@@ -3253,13 +3287,13 @@ function MeiScreenContent() {
                               'A pagar'}
                           </Text>
                         </View>
-                        {vencida ? (
+                        {vencida && p.status === 'a_pagar' ? (
                           <Text style={styles.dasPeriodReason} numberOfLines={2}>
                             Venceu {p.vencimento || 'dia 20'} — baixar atualiza o valor
                           </Text>
                         ) : (p.status === 'erro' || p.status === 'indisponivel') ? (
                           <Text style={styles.dasPeriodReason} numberOfLines={2}>
-                            Indisponível neste mês
+                            {p.errorMessage || 'Indisponível neste mês'}
                           </Text>
                         ) : null}
                       </View>
@@ -3615,7 +3649,11 @@ function MeiScreenContent() {
               </>
             ) : (
               <>
-                <Text style={styles.sectionDescription}>Envie o certificado A1 (PFX) para gerar guias DAS e emitir notas.</Text>
+                <Text style={styles.sectionDescription}>
+                  {isFocoSimplesUi
+                    ? 'Envie o certificado A1 (e-CNPJ) da própria empresa (.pfx). Ele assina o termo Autentica Procurador na SERPRO e habilita DAS Simples e notas.'
+                    : 'Envie o certificado A1 (PFX) para gerar guias DAS e emitir notas.'}
+                </Text>
 
                 {/* Passo 1: selecionar arquivo */}
                 <View style={styles.inputGroup}>
@@ -3984,8 +4022,11 @@ function MeiScreenContent() {
             {/* Corpo */}
             <View style={{ padding: 20, gap: 12 }}>
               <Text style={{ fontSize: 14, color: theme.text, lineHeight: 22 }}>
-                Pra usar essa parte do app você precisa enviar antes o seu{' '}
-                <Text style={{ fontWeight: '700' }}>certificado digital A1</Text> (o arquivo .pfx do seu MEI).
+                Pra usar essa parte do app você precisa enviar antes o{' '}
+                <Text style={{ fontWeight: '700' }}>certificado digital A1</Text>
+                {isFocoSimplesUi
+                  ? ' (e-CNPJ da própria empresa, arquivo .pfx).'
+                  : ' (o arquivo .pfx do seu MEI).'}
               </Text>
               <Text style={{ fontSize: 14, color: theme.text, lineHeight: 22 }}>
                 É ele que autoriza o app a:

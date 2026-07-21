@@ -92,6 +92,22 @@ export const getDasSimplesByPeriodo = async ({ userId, periodoApuracao }) => {
   return data
 }
 
+export const getDasSimplesById = async ({ userId, id }) => {
+  const rowId = String(id || '').trim()
+  if (!userId || !rowId) return null
+  const db = getDb()
+  const { data, error } = await db
+    .from(TABLE)
+    .select('*')
+    .eq('user_id', userId)
+    .eq('id', rowId)
+    .maybeSingle()
+  if (error) {
+    throw badRequest(error.message || 'Falha ao consultar DAS Simples.')
+  }
+  return data
+}
+
 export const listDasSimplesPeriods = async ({ userId, limit = 24 } = {}) => {
   if (!userId) return []
   const db = getDb()

@@ -404,6 +404,9 @@ const setUserCert = (userId, cert) => {
   return cacheKey;
 };
 
+/** Injeta certificado em cache para Autentica Procurador (DAS / termo XMLDSig). */
+export const __setUserCertForAuthorization = (userId, cert) => setUserCert(userId, cert);
+
 const getUserCertDocument = (userId) => {
   const cert = getUserCert(userId);
   const doc = cert?.certInfo?.doc || null;
@@ -1399,6 +1402,11 @@ export const uploadCertificate = async (userId, payload) => {
   if (!password) {
     throw badRequest('Senha do certificado é obrigatória');
   }
+
+  // Persistência segura: PKCS#12 reempacotado + AES-GCM; CNPJ deve bater com empresas.cnpj
+  const { uploadCompanyCertificate } = await import('./certificate-upload.service.js');
+  const publicCert = await uploadCompanyCertificate(userId, { file, password });
+
   let certInfo;
   try {
     const extracted = extractPfxKeyAndCert(file.buffer, password);
@@ -1409,21 +1417,17 @@ export const uploadCertificate = async (userId, payload) => {
         code: MEI_CERT_INVALID_PASSWORD
       });
     }
-    throw badRequest('Certificado inválido ou senha incorreta');
+    certInfo = {
+      doc: publicCert.cnpj,
+      holderName: publicCert.titular,
+      validFrom: publicCert.validoDe,
+      validTo: publicCert.validoAte
+    };
   }
 
   const emitente = parseEmitenteFromPayload(payload);
 
-  const certDocument = certInfo?.doc ? normalizeDoc(certInfo.doc) : null;
-
-  await assertMeiCertificateEligible(certDocument);
-
-  if (!env.MEI_CERT_ENCRYPTION_KEY) {
-    throw badRequest(
-      'MEI_CERT_ENCRYPTION_KEY não configurada no servidor. Sem ela o certificado não é gravado e some ao reiniciar.',
-      { code: 'MEI_CERT_ENCRYPTION_KEY_MISSING' },
-    );
-  }
+  const certDocument = publicCert.cnpj || (certInfo?.doc ? normalizeDoc(certInfo.doc) : null);
 
   let previousCertDocument = null;
   if (certDocument) {
@@ -1434,19 +1438,12 @@ export const uploadCertificate = async (userId, payload) => {
     }
   }
 
-  try {
-    const { passphraseEnc, passphraseIv } = encryptPassphrase(password);
-    await saveCertificate(userId, {
-      pfxBase64: file.buffer.toString('base64'),
-      passphraseEnc,
-      passphraseIv,
-      certDocument,
-      certValidFrom: certInfo?.validFrom ?? null,
-      certValidTo: certInfo?.validTo ?? null,
-      ...(emitente ? { emitente } : {})
-    });
-  } catch (err) {
-    throw badRequest(err?.message || 'Falha ao salvar certificado');
+  if (emitente && Object.keys(emitente).length) {
+    try {
+      await patchEmitenteNfseFields(userId, emitente);
+    } catch {
+      /* emitente opcional */
+    }
   }
 
   if (certDocument) {
@@ -1513,7 +1510,7 @@ export const uploadCertificate = async (userId, payload) => {
   }
 
   const status = await getCertificateStatus(userId);
-  return { ...status, plugnotasIntegration };
+  return { ...status, publicCertificate: publicCert, plugnotasIntegration };
 };
 
 /**
@@ -1555,8 +1552,13 @@ export const removeCertificate = async (userId) => {
     }
   }
 
-  if (env.MEI_CERT_ENCRYPTION_KEY) {
-    await deleteCertificate(userId);
+  // Sempre limpa blob local (cifrado ou legado); não depende da chave de cifra.
+  await deleteCertificate(userId);
+  try {
+    const { clearEmpresaAutenticaCache } = await import('./serpro-authorization.service.js');
+    clearEmpresaAutenticaCache(userId);
+  } catch {
+    /* ignore */
   }
   clearUserCaches(userId);
   return getCertificateStatus(userId);
@@ -1603,12 +1605,23 @@ export const getCertificateStatus = async (userId) => {
   const docResolved = docFromCache || docFromDb || null;
   // Status da UI deve refletir .pfx persistido (não só cache em memória / linha sem blob).
   const hasCert = await userHasMeiCertificate(userId);
+  let nearExpiry = false;
+  let expiresInDays = null;
+  if (certValidTo) {
+    const validToDate = new Date(certValidTo);
+    if (!Number.isNaN(validToDate.getTime())) {
+      expiresInDays = Math.ceil((validToDate.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+      nearExpiry = expiresInDays >= 0 && expiresInDays <= 30
+    }
+  }
   return {
     hasUserCertificate: hasCert,
     hasEnvCertificate: Boolean(env.SERPRO_CERT_PFX_BASE64),
     documento: docResolved,
     certValidFrom: certValidFrom || null,
     certValidTo: certValidTo || null,
+    nearExpiry,
+    expiresInDays,
     nfseEmitente,
     documentosAtivos
   };
@@ -2416,27 +2429,49 @@ const invalidatePeriodsListCache = (userId, cnpj) => {
 /**
  * Mapeamento para obter PDF por parcelamento: Consultar Parcelamento (numero -> detalhes com periodoApuracao)
  * e Emitir DAS (parcelaParaEmitir AAAAMM -> docArrecadacaoPdfB64). Doc SERPRO Integra Parcelamento.
- * Só modalidades com ambos configurados tentam fetch+store em background.
+ * Códigos oficiais: catálogo Integra Contador (PARCSN 16.x, PARCSN-ESP 17.x, …).
  */
 const PARCELAMENTO_PDF_SERPRO = {
-  'PARCSN': { consultar: { idSistema: 'PARCSN', idServico: 'OBTERPARC224' }, emitir: null },
-  'PARCSN-ESP': { consultar: { idSistema: 'PARCSN-ESP', idServico: 'OBTERPARC224' }, emitir: { idSistema: 'PARCSN-ESP', idServico: 'GERARDAS171' } },
-  'RELPSN': { consultar: { idSistema: 'RELPSN', idServico: 'OBTERPARC224' }, emitir: null },
-  'PARCMEI': {
+  PARCSN: {
+    consultar: { idSistema: 'PARCSN', idServico: 'OBTERPARC164' },
+    listarParcelas: { idSistema: 'PARCSN', idServico: 'PARCELASPARAGERAR162' },
+    emitir: { idSistema: 'PARCSN', idServico: 'GERARDAS161' },
+  },
+  'PARCSN-ESP': {
+    consultar: { idSistema: 'PARCSN-ESP', idServico: 'OBTERPARC174' },
+    listarParcelas: { idSistema: 'PARCSN-ESP', idServico: 'PARCELASPARAGERAR172' },
+    emitir: { idSistema: 'PARCSN-ESP', idServico: 'GERARDAS171' },
+  },
+  PERTSN: {
+    consultar: { idSistema: 'PERTSN', idServico: 'OBTERPARC184' },
+    listarParcelas: { idSistema: 'PERTSN', idServico: 'PARCELASPARAGERAR182' },
+    emitir: { idSistema: 'PERTSN', idServico: 'GERARDAS181' },
+  },
+  RELPSN: {
+    consultar: { idSistema: 'RELPSN', idServico: 'OBTERPARC194' },
+    listarParcelas: { idSistema: 'RELPSN', idServico: 'PARCELASPARAGERAR192' },
+    emitir: { idSistema: 'RELPSN', idServico: 'GERARDAS191' },
+  },
+  PARCMEI: {
     consultar: { idSistema: 'PARCMEI', idServico: 'OBTERPARC204' },
     listarParcelas: { idSistema: 'PARCMEI', idServico: 'PARCELASPARAGERAR202' },
-    emitir: { idSistema: 'PARCMEI', idServico: 'GERARDAS201' }
+    emitir: { idSistema: 'PARCMEI', idServico: 'GERARDAS201' },
   },
   'PARCMEI-ESP': {
     consultar: { idSistema: 'PARCMEI-ESP', idServico: 'OBTERPARC214' },
     listarParcelas: { idSistema: 'PARCMEI-ESP', idServico: 'PARCELASPARAGERAR212' },
-    emitir: { idSistema: 'PARCMEI-ESP', idServico: 'GERARDAS211' }
+    emitir: { idSistema: 'PARCMEI-ESP', idServico: 'GERARDAS211' },
   },
-  'PERTMEI': {
+  PERTMEI: {
     consultar: { idSistema: 'PERTMEI', idServico: 'OBTERPARC224' },
-    emitir: { idSistema: 'PERTMEI', idServico: 'GERARDAS221' }
+    listarParcelas: { idSistema: 'PERTMEI', idServico: 'PARCELASPARAGERAR222' },
+    emitir: { idSistema: 'PERTMEI', idServico: 'GERARDAS221' },
   },
-  'RELPMEI': { consultar: { idSistema: 'RELPMEI', idServico: 'OBTERPARC224' }, emitir: null }
+  RELPMEI: {
+    consultar: { idSistema: 'RELPMEI', idServico: 'OBTERPARC234' },
+    listarParcelas: { idSistema: 'RELPMEI', idServico: 'PARCELASPARAGERAR232' },
+    emitir: { idSistema: 'RELPMEI', idServico: 'GERARDAS231' },
+  },
 };
 
 const MODALIDADE_TO_IDSISTEMA = Object.fromEntries(
@@ -2657,7 +2692,7 @@ async function fetchParcelasListaImpressaoSerpro({
   const parcelas = extractListaParcelasImpressao(result?.dados);
   if (env.NODE_ENV !== 'production') {
     console.info(
-      '[mei-guide] PARCELASPARAGERAR202:',
+      `[mei-guide] ${config.listarParcelas.idServico}:`,
       parcelas.length ? parcelas.join(', ') : '(vazio)',
       'raw:',
       JSON.stringify(result?.dados ?? result?.raw?.dados)?.slice(0, 500)
@@ -3124,7 +3159,7 @@ export const listParcelamentoParcelas = async (userId, payload) => {
   const { contribNumero, autorPedidoNumero, contratanteNumero } = parties;
   const idSistema = MODALIDADE_TO_IDSISTEMA[modalidade];
   const config = idSistema ? PARCELAMENTO_PDF_SERPRO[idSistema] : null;
-  if (!config?.consultar || !config.emitir) {
+  if (!config?.consultar) {
     throw badRequest(
       modalidade
         ? `Parcelas não configuradas para a modalidade ${modalidade}`

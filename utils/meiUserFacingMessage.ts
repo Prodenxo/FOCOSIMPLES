@@ -30,12 +30,24 @@ function rewriteKnownFiscalErrors (raw: string): string | null {
     )
   }
 
-  if (/msg_e0139|sem valor devido|não foi gerado das/i.test(raw)) {
-    return 'Não há DAS a pagar neste período (Receita: sem valor devido).'
+  if (/msg_e0139|sem valor devido|não foi gerado das|pgdasd_sem_debito/i.test(raw)) {
+    return 'Não há valor devido neste período (Receita).'
   }
 
   if (/pgdasd_not_configured|não configurada no servidor/i.test(raw)) {
     return 'Integração Simples Nacional (PGDAS-D) não configurada no servidor.'
+  }
+
+  if (/cert_required_for_pgdasd|certificado a1 da empresa|autentica procurador/i.test(raw)) {
+    return 'Envie o certificado A1 da própria empresa (aba Certificado) para consultar e baixar o DAS.'
+  }
+
+  if (/pgdasd_cnpj_forbidden|outro cnpj/i.test(raw)) {
+    return 'Não é permitido consultar ou emitir DAS de outro CNPJ.'
+  }
+
+  if (/cert_cnpj_mismatch/i.test(raw)) {
+    return 'O CNPJ do certificado diverge do CNPJ da empresa cadastrada.'
   }
 
   return null

@@ -54,35 +54,89 @@ export const consultarDeclaracoesPorAno = async ({
   }
 }
 
+const isDasGenerationTipo = (tipo) =>
+  /gera[cç][aã]o\s+de\s+das|das\s+avulso|das\s+medida|das\s+cobran[cç]a/i.test(String(tipo || ''))
+
+const isPaymentTipo = (tipo) =>
+  /pag(o|amento)|quitad|liquid/i.test(String(tipo || ''))
+
+const isDeclaracaoTipo = (tipo) =>
+  /declara[cç][aã]o\s+(original|retificadora)/i.test(String(tipo || ''))
+
+/**
+ * Status a partir do índice oficial CONSDECLARACAO13 (sem gravar no banco):
+ * - dasPago=true → pago
+ * - houve Geração de DAS / DAS Avulso / Cobrança sem pagamento → a_pagar
+ * - só declaração (sem geração de DAS) → pago (sem valor devido / nada a emitir)
+ */
+export const resolvePeriodStatusFromOperacoes = (operacoes = []) => {
+  const ops = Array.isArray(operacoes) ? operacoes : []
+  let hasDasGerado = false
+  let hasDasPago = false
+  let hasDeclaracao = false
+  let tipoPrincipal = null
+
+  for (const op of ops) {
+    if (!op || typeof op !== 'object') continue
+    const tipo = String(op.tipoOperacao || op.tipo || '')
+    if (!tipoPrincipal) tipoPrincipal = tipo || null
+
+    const indiceDas = op.indiceDas || op.IndiceDas || null
+    if (indiceDas && typeof indiceDas === 'object') {
+      hasDasGerado = true
+      if (indiceDas.dasPago === true || indiceDas.DasPago === true) {
+        hasDasPago = true
+      }
+    }
+
+    if (isPaymentTipo(tipo) || op.pago === true) {
+      hasDasPago = true
+      tipoPrincipal = tipo || tipoPrincipal
+    }
+    if (isDasGenerationTipo(tipo)) {
+      hasDasGerado = true
+      tipoPrincipal = tipo || tipoPrincipal
+    }
+    if (isDeclaracaoTipo(tipo)) {
+      hasDeclaracao = true
+    }
+  }
+
+  if (hasDasPago) {
+    return { status: 'pago', tipoOperacao: tipoPrincipal }
+  }
+  if (hasDasGerado) {
+    return { status: 'a_pagar', tipoOperacao: tipoPrincipal }
+  }
+  if (hasDeclaracao || ops.length > 0) {
+    // Declaração transmitida sem geração de DAS = sem valor devido
+    return { status: 'pago', tipoOperacao: tipoPrincipal || 'Sem geração de DAS' }
+  }
+  return { status: 'a_pagar', tipoOperacao: tipoPrincipal }
+}
+
 /**
  * Normaliza retorno CONSDECLARACAO13 em lista de competências para a UI.
+ * Agrega todas as operações do período antes de decidir o status.
  * @param {unknown} dados
  * @returns {Array<{ competencia: string, periodoApuracao: string, status: string, tipoOperacao?: string, numeroDeclaracao?: string|null }>}
  */
 export const mapDeclaracoesToPeriods = (dados) => {
-  const out = []
-  const seen = new Set()
+  /** @type {Map<string, { ops: object[], numeroDeclaracao: string|null }>} */
+  const byPeriodo = new Map()
 
-  const pushPeriod = (periodoApuracao, meta = {}) => {
+  const addOps = (periodoApuracao, ops, numeroDeclaracao = null) => {
     const periodo = normalizePeriodo(periodoApuracao)
-    if (!periodo || seen.has(periodo)) return
-    seen.add(periodo)
-    const competencia = periodoToCompetencia(periodo)
-    const tipo = String(meta.tipoOperacao || '').toLowerCase()
-    let status = 'a_pagar'
-    if (meta.pago === true || /pag(o|amento)|quitad|liquid/i.test(tipo)) {
-      status = 'pago'
-    } else if (/sem\s*d[eé]bito|sem\s*valor|sem\s*das/i.test(tipo)) {
-      status = 'indisponivel'
+    if (!periodo) return
+    const prev = byPeriodo.get(periodo) || { ops: [], numeroDeclaracao: null }
+    const list = Array.isArray(ops) ? ops : [ops]
+    for (const op of list) {
+      if (op && typeof op === 'object') prev.ops.push(op)
     }
-    out.push({
-      competencia,
-      periodoApuracao: periodo,
-      status,
-      tipoOperacao: meta.tipoOperacao || null,
-      numeroDeclaracao: meta.numeroDeclaracao || null,
-      guideId: `pgdasd-${periodo}`,
-    })
+    if (numeroDeclaracao && !prev.numeroDeclaracao) {
+      prev.numeroDeclaracao = String(numeroDeclaracao)
+    }
+    byPeriodo.set(periodo, prev)
   }
 
   const walk = (node) => {
@@ -96,19 +150,12 @@ export const mapDeclaracoesToPeriods = (dados) => {
     const pa = node.periodoApuracao || node.periodo_apuracao || node.pa
     if (pa && (node.operacoes || node.tipoOperacao || node.indiceDeclaracao || node.indiceDas)) {
       const ops = Array.isArray(node.operacoes) ? node.operacoes : [node]
-      for (const op of ops) {
-        const tipo = String(op.tipoOperacao || node.tipoOperacao || '')
-        const pagoHint = /pag(o|amento)|quitad|liquid/i.test(tipo)
-          || op.pago === true
-          || node.pago === true
-        pushPeriod(pa, {
-          tipoOperacao: op.tipoOperacao || node.tipoOperacao,
-          numeroDeclaracao: op.indiceDeclaracao?.numeroDeclaracao
-            || op.numeroDeclaracao
-            || node.numeroDeclaracao,
-          pago: pagoHint,
-        })
-      }
+      const numero = ops
+        .map((op) => op?.indiceDeclaracao?.numeroDeclaracao || op?.numeroDeclaracao)
+        .find(Boolean)
+        || node.numeroDeclaracao
+        || null
+      addOps(pa, ops, numero)
     }
 
     if (Array.isArray(node.periodos)) {
@@ -123,6 +170,20 @@ export const mapDeclaracoesToPeriods = (dados) => {
   }
 
   walk(dados)
+
+  const out = []
+  for (const [periodo, bag] of byPeriodo.entries()) {
+    const resolved = resolvePeriodStatusFromOperacoes(bag.ops)
+    out.push({
+      competencia: periodoToCompetencia(periodo),
+      periodoApuracao: periodo,
+      status: resolved.status,
+      tipoOperacao: resolved.tipoOperacao,
+      numeroDeclaracao: bag.numeroDeclaracao,
+      guideId: `pgdasd-${periodo}`,
+    })
+  }
+
   out.sort((a, b) => String(b.periodoApuracao).localeCompare(String(a.periodoApuracao)))
   return out
 }
