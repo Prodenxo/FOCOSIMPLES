@@ -192,6 +192,44 @@ export async function fetchAdminMeiCertificateStatus(userId: string): Promise<Ad
   return apiClient.get<AdminMeiCertificateStatus>(`/admin/mei-guide/${encodeURIComponent(userId)}/certificate/status`);
 }
 
+/** Contador sobe o A1 do cliente (FormData: certificate + password). */
+export async function uploadAdminMeiCertificate(
+  userId: string,
+  file: { uri: string; name: string; type?: string },
+  password: string,
+): Promise<AdminMeiCertificateStatus & { cnpj?: string; titular?: string }> {
+  const formData = new FormData();
+  const mimeType = file.type || 'application/x-pkcs12';
+  const isWeb = typeof window !== 'undefined' && typeof document !== 'undefined';
+  if (isWeb) {
+    const response = await fetch(file.uri);
+    const blob = await response.blob();
+    const fileBlob = new File([blob], file.name, { type: mimeType });
+    formData.append('certificate', fileBlob);
+  } else {
+    // @ts-expect-error React Native FormData file shape
+    formData.append('certificate', { uri: file.uri, name: file.name, type: mimeType });
+  }
+  formData.append('password', password);
+  return apiClient.postForm(
+    `/admin/mei-guide/${encodeURIComponent(userId)}/certificate`,
+    formData,
+  );
+}
+
+export async function adminCriarCatalogoFromCnaes(
+  userId: string,
+  body: {
+    documentType: 'NFSE' | 'NFE' | 'NFCE'
+    items: Array<{ codigo: string; descricao?: string | null; principal?: boolean; codigoServico?: string }>
+  },
+): Promise<{ created: unknown[]; skipped: unknown[]; documentType: string }> {
+  return apiClient.post(
+    `/admin/users/${encodeURIComponent(userId)}/mei-catalogo/produtos/from-cnaes`,
+    body,
+  )
+}
+
 export type AdminMeiDocumentosAtivosInput = {
   nfse: boolean;
   nfe: boolean;

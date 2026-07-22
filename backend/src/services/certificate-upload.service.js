@@ -43,8 +43,9 @@ export const uploadCompanyCertificate = async (userId, payload) => {
   const empresaCtx = await resolveUserEmpresaContext(userId)
   const expectedCnpj = empresaCtx.cnpj || null
 
+  // Não valida CNPJ contra a empresa do escritório: o PFX é do cliente (usuário MEI).
   const validation = validatePkcs12Certificate(file.buffer, password, {
-    expectedCnpj,
+    expectedCnpj: null,
   })
 
   if (!validation.valid) {
@@ -56,10 +57,13 @@ export const uploadCompanyCertificate = async (userId, payload) => {
 
   await assertMeiCertificateEligible(validation.cnpj)
 
-  if (expectedCnpj && validation.cnpj !== expectedCnpj) {
-    throw badRequest(
-      `CNPJ do certificado (${validation.cnpj}) diverge do CNPJ da empresa cadastrada (${expectedCnpj})`,
-      { code: 'CERT_CNPJ_MISMATCH' },
+  // Empresa do escritório (contador) pode ter CNPJ próprio; o certificado é do cliente (usuário).
+  // Só sincroniza CNPJ na empresa se ela ainda não tiver um.
+  if (!(expectedCnpj && validation.cnpj !== expectedCnpj) && empresaCtx.empresaId) {
+    await syncEmpresaCnpjFromCert(
+      empresaCtx.empresaId,
+      validation.cnpj,
+      validation.holderName,
     )
   }
 
@@ -69,14 +73,6 @@ export const uploadCompanyCertificate = async (userId, payload) => {
     repacked = repackPkcs12(validation.privateKey, validation.certificate, appPass)
   } catch {
     throw badRequest('Falha ao reempacotar certificado para armazenamento seguro')
-  }
-
-  if (empresaCtx.empresaId) {
-    await syncEmpresaCnpjFromCert(
-      empresaCtx.empresaId,
-      validation.cnpj,
-      validation.holderName,
-    )
   }
 
   const publicView = await saveEncryptedCertificate({

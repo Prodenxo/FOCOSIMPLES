@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { requireAuth } from '../middlewares/auth.js';
 import { requireAdmin } from '../middlewares/requireAdmin.js';
 import { requireSuperAdmin } from '../middlewares/requireSuperAdmin.js';
@@ -6,6 +7,10 @@ import * as controller from '../controllers/admin.controller.js';
 import * as adminBillingController from '../controllers/admin-billing.controller.js';
 
 const router = Router();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
 
 router.get('/users/:userId/transactions', requireAuth, requireAdmin, controller.listUserTransactions);
 router.get('/users/:userId/categories', requireAuth, requireAdmin, controller.listUserCategories);
@@ -24,6 +29,12 @@ router.get(
   requireAuth,
   requireAdmin,
   controller.listAdminUserMeiCatalogoProdutos
+);
+router.post(
+  '/users/:userId/mei-catalogo/produtos/from-cnaes',
+  requireAuth,
+  requireAdmin,
+  controller.createAdminUserMeiCatalogoFromCnaes
 );
 router.post(
   '/users/:userId/mei-catalogo/clientes',
@@ -48,6 +59,13 @@ router.get('/das/status', requireAuth, requireAdmin, controller.listDasStatus);
 router.get('/das/pending', requireAuth, requireAdmin, controller.listPendingDas);
 router.post('/das/reprocess', requireAuth, requireAdmin, controller.reprocessDas);
 router.get('/mei-guide/:userId/certificate/status', requireAuth, requireAdmin, controller.getAdminMeiCertificateStatus);
+router.post(
+  '/mei-guide/:userId/certificate',
+  requireAuth,
+  requireAdmin,
+  upload.single('certificate'),
+  controller.uploadAdminMeiCertificate,
+);
 router.get('/mei-guide/:userId/prestador-prefill', requireAuth, requireAdmin, controller.getAdminMeiPrestadorPrefill);
 router.patch(
   '/users/:userId/mei-documentos-ativos',

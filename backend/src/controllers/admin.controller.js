@@ -206,6 +206,23 @@ export const getAdminMeiCertificateStatus = async (req, res, next) => {
   }
 };
 
+/** Contador/admin sobe o A1 do cliente (usuário MEI da empresa). */
+export const uploadAdminMeiCertificate = async (req, res, next) => {
+  try {
+    const userId = req.params.userId;
+    await ensureCanViewUser(req.accessToken, userId);
+    await ensureMeiEnabledForUser(req.accessToken, userId);
+    const data = await meiGuideServiceRef.uploadCertificate(userId, {
+      file: req.file,
+      password: req.body?.password,
+      ...req.body,
+    });
+    return sendSuccess(res, data, 'Certificado do cliente carregado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export const getAdminMeiPrestadorPrefill = async (req, res, next) => {
   try {
     const userId = req.params.userId;
@@ -339,6 +356,18 @@ export const listAdminUserMeiCatalogoProdutos = async (req, res, next) => {
     const documentType = String(req.query?.documentType || '').trim() || undefined;
     const data = await meiNotasServiceRef.listarCatalogoProdutos(userId, { q, limit, documentType });
     return sendSuccess(res, data, 'Catálogo de produtos listado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const createAdminUserMeiCatalogoFromCnaes = async (req, res, next) => {
+  try {
+    const userId = req.params.userId;
+    await ensureCanViewUser(req.accessToken, userId);
+    await ensureMeiEnabledForUser(req.accessToken, userId);
+    const data = await meiNotasServiceRef.criarCatalogoProdutosFromCnaes(userId, req.body || {});
+    return sendCreated(res, data, 'CNAEs importados no catálogo do cliente');
   } catch (error) {
     return next(error);
   }

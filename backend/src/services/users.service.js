@@ -1235,6 +1235,9 @@ export const createUser = async (accessToken, input, deps = {}) => {
   const finalPassword = password || generateStrongRandomPassword();
 
   if (isLocalAuthMode()) {
+    const adminClient = createSupabaseClientFn({ useServiceRole: true });
+    await ensureEmpresaCapacity(adminClient, { empresaId: finalEmpresaId, mei: targetMei });
+
     const emailNorm = email.toLowerCase();
     const { rows: existing } = await query(
       `SELECT id FROM public.users WHERE email = $1 AND deleted_at IS NULL LIMIT 1`,

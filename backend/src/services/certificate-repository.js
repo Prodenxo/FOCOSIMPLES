@@ -124,14 +124,12 @@ export const saveEncryptedCertificate = async ({
 
   const db = getDb()
 
-  // Marca anteriores da mesma empresa como SUBSTITUIDO
-  if (empresaId) {
-    await db
-      .from(TABLE)
-      .update({ status: 'SUBSTITUIDO', updated_at: new Date().toISOString() })
-      .eq('empresa_id', empresaId)
-      .eq('status', 'VALIDO')
-  }
+  // Substitui apenas o certificado ativo deste usuário (multi-cliente na mesma empresa).
+  await db
+    .from(TABLE)
+    .update({ status: 'SUBSTITUIDO', updated_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .eq('status', 'VALIDO')
 
   const row = {
     user_id: userId,

@@ -51,6 +51,7 @@ import EmpresaModal from '../components/EmpresaModal';
 import { EmpresaStripeMeiBillingModal } from '../components/EmpresaStripeMeiBillingModal';
 import { InvitesTab } from '../components/admin/InvitesTab';
 import { ManageUsersPageChrome } from '../components/admin/ManageUsersPageChrome';
+import { ProvisionClientWizardModal } from '../components/admin/ProvisionClientWizardModal';
 import {
   fetchAdminMeiCertificateStatus,
   patchAdminMeiDocumentosAtivos,
@@ -884,6 +885,7 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
 
   // Form: criar usuário
   const [createUserOpen, setCreateUserOpen] = useState(false);
+  const [provisionClientOpen, setProvisionClientOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -1103,6 +1105,11 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
   // ----------------------------------------------------------------------
 
   const openCreateUser = () => {
+    // Foco Simples: carrossel do contador (cliente + cert + catálogo).
+    if (resolveAppOrigin() === 'focosimples' && (role === 'admin' || role === 'superadmin')) {
+      setProvisionClientOpen(true);
+      return;
+    }
     setEmail('');
     setPassword('');
     setDisplayName('');
@@ -1700,7 +1707,12 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
             rightAction={
               isDesktop && activeTab !== 'invites'
                 ? {
-                    label: activeTab === 'users' ? 'Novo usuário' : 'Nova empresa',
+                    label:
+                      activeTab === 'users'
+                        ? resolveAppOrigin() === 'focosimples'
+                          ? 'Criar novo usuário'
+                          : 'Novo usuário'
+                        : 'Nova empresa',
                     onPress: activeTab === 'users' ? openCreateUser : openCreateEmpresa,
                   }
                 : null
@@ -2051,6 +2063,18 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
           )}
         </View>
           </MfScrollView>
+
+      {/* ============================================================== */}
+      {/* Wizard: provisionar cliente (contador / Foco Simples)             */}
+      {/* ============================================================== */}
+      <ProvisionClientWizardModal
+        visible={provisionClientOpen}
+        onClose={() => setProvisionClientOpen(false)}
+        onCompleted={() => {
+          void fetchUsers();
+          setSuccess('Cliente provisionado com sucesso.');
+        }}
+      />
 
       {/* ============================================================== */}
       {/* SidePanel: Criar usuário                                        */}
