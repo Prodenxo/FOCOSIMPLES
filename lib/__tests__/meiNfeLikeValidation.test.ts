@@ -14,6 +14,7 @@ function validNfeForm() {
   const form = getDefaultNfeLikeForm()
   form.emitenteCpfCnpj = VALID_CNPJ
   form.emitenteRazaoSocial = 'Emitente MEI'
+  form.emitenteInscricaoEstadual = '123456789'
   form.destinatarioCpfCnpj = VALID_CPF
   form.destinatarioRazaoSocial = 'Cliente teste'
   form.destinatarioEndereco = {
@@ -64,6 +65,12 @@ describe('getNfeLikeValidationMessage', () => {
     expect(getNfeLikeValidationMessage(validNfeForm(), 'NFE')).toBeNull()
   })
 
+  it('exige IE do emitente na NF-e', () => {
+    const form = validNfeForm()
+    form.emitenteInscricaoEstadual = ''
+    expect(getNfeLikeValidationMessage(form, 'NFE')).toMatch(/Inscrição Estadual do emitente/i)
+  })
+
   it('exige CPF/CNPJ do destinatário (espelha backend)', () => {
     const form = validNfeForm()
     form.destinatarioCpfCnpj = ''
@@ -80,6 +87,12 @@ describe('getNfeLikeValidationMessage', () => {
     const form = validNfeForm()
     form.itens[0]!.tributos.icms.csosn = '03025'
     expect(getNfeLikeValidationMessage(form, 'NFE')).toMatch(/CSOSN do ICMS deve ter 3 dígitos/)
+  })
+
+  it('rejeita CEST com tamanho inválido', () => {
+    const form = validNfeForm()
+    form.itens[0]!.cest = '123'
+    expect(getNfeLikeValidationMessage(form, 'NFE')).toMatch(/CEST/)
   })
 })
 

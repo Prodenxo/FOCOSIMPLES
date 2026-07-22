@@ -2779,9 +2779,10 @@ export const findCatalogoProdutoByCnae = async (
 };
 
 /**
- * Cria rascunhos de serviço NFSe a partir de CNAEs da Receita (após import de certificado).
- * `codigoServico` (LC 116) é opcional — se omitido, fica para completar depois.
- * Não cria duplicata do mesmo CNAE.
+ * Cria rascunhos de catálogo a partir de CNAEs da Receita (após import de certificado).
+ * - NFS-e: `codigoServico` (LC 116) opcional — completar depois.
+ * - NF-e / NFC-e: grava tributos padrão SN; NCM fica para completar.
+ * Não cria duplicata do mesmo CNAE no mesmo document_type.
  */
 export const criarCatalogoProdutosFromCnaes = async (userId, body = {}) => {
   const documentType = normalizeDocumentType(
@@ -2792,6 +2793,7 @@ export const criarCatalogoProdutosFromCnaes = async (userId, body = {}) => {
     throw badRequest('Informe ao menos um CNAE em items.');
   }
 
+  const isNfeLike = documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE;
   const created = [];
   const skipped = [];
 
@@ -2802,7 +2804,7 @@ export const criarCatalogoProdutosFromCnaes = async (userId, body = {}) => {
       continue;
     }
     const descricao = String(item?.descricao || item?.discriminacao || '').trim()
-      || `Serviço CNAE ${cnae}`;
+      || (isNfeLike ? `Produto CNAE ${cnae}` : `Serviço CNAE ${cnae}`);
     const codigoServico = String(
       item?.codigoServico ?? item?.servicoCodigo ?? item?.codigo_servico ?? '',
     ).trim();
@@ -2816,18 +2818,34 @@ export const criarCatalogoProdutosFromCnaes = async (userId, body = {}) => {
       });
       continue;
     }
+
+    const metadata_json = isNfeLike
+      ? {
+          cnaeDraft: true,
+          needsNcm: true,
+          cnaeDescricao: descricao.slice(0, 500),
+          ncm: '',
+          cfop: '5102',
+          unidade: 'UN',
+          icmsCsosn: '102',
+          pisCst: '49',
+          cofinsCst: '49',
+          ...(item?.principal === true ? { cnaePrincipal: true } : {}),
+        }
+      : {
+          cnaeDraft: true,
+          needsServicoCodigo: !codigoServico,
+          cnaeDescricao: descricao.slice(0, 500),
+          ...(item?.principal === true ? { cnaePrincipal: true } : {}),
+        };
+
     const row = await criarCatalogoProduto(userId, {
       documentType,
-      codigo: codigoServico,
+      codigo: isNfeLike ? (codigoServico || cnae) : codigoServico,
       cnae,
       discriminacao: descricao.slice(0, 500),
       aliquota: 0,
-      metadata_json: {
-        cnaeDraft: true,
-        needsServicoCodigo: !codigoServico,
-        cnaeDescricao: descricao.slice(0, 500),
-        ...(item?.principal === true ? { cnaePrincipal: true } : {}),
-      },
+      metadata_json,
     });
     created.push(row);
   }
@@ -2982,6 +3000,9 @@ export const eliminarCatalogoCliente = async (userId, id) => {
   if (anyRow && anyRow.user_id !== userId) {
     throw notFound('Cliente do catálogo não encontrado');
   }
+  if (anyRow && anyRow.user_id === userId) {
+    throw badRequest('Não foi possível excluir o cliente do catálogo. Tente de novo.');
+  }
 };
 
 /**
@@ -3007,6 +3028,10 @@ export const eliminarCatalogoProduto = async (userId, id) => {
   if (errLookup) throw badRequest(errLookup.message);
   if (anyRow && anyRow.user_id !== userId) {
     throw notFound('Item do catálogo não encontrado');
+  }
+  // Linha ainda existe para este user → DELETE não surtiu efeito (bug de driver / filtro).
+  if (anyRow && anyRow.user_id === userId) {
+    throw badRequest('Não foi possível excluir o item do catálogo. Tente de novo.');
   }
 };
 

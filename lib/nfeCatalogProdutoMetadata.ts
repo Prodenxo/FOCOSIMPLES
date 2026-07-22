@@ -110,3 +110,11 @@ export function isCatalogProdutoUsableForNfeLike(
   const fields = nfeCatalogProdutoFormFieldsFromMetadata(produto.metadata_json)
   return validateNfeCatalogProdutoFormFields(fields) === null
 }
+
+/** Rascunho de CNAE / produto ainda sem NCM (ou tributos) para emitir NF-e. */
+export function catalogProdutoNeedsNfeCompletion(
+  produto: { metadata_json?: unknown },
+): boolean {
+  const fields = nfeCatalogProdutoFormFieldsFromMetadata(produto.metadata_json)
+  return validateNfeCatalogProdutoFormFields(fields) !== null
+}

@@ -26,6 +26,7 @@ import {
 } from '../services/meiNotasService'
 import { alertDialog } from '../lib/confirmDialog'
 import { useAppToastStore } from '../store/appToastStore'
+import { resolveAppOrigin } from '../lib/appOrigin'
 
 export type MeiImportCnaesModalProps = {
   visible: boolean
@@ -35,6 +36,7 @@ export type MeiImportCnaesModalProps = {
 }
 
 type Step = 'cnaes' | 'codigos'
+type ImportDocType = 'NFSE' | 'NFE'
 
 type ServicoPick = {
   codigo: string
@@ -59,8 +61,12 @@ export default function MeiImportCnaesModal ({
   const { theme, isDarkMode } = useMfTheme()
   const flow = useMeiFlowStyles()
   const showToast = useAppToastStore((s) => s.show)
+  const isFocoSimples = resolveAppOrigin() === 'focosimples'
 
   const [step, setStep] = useState<Step>('cnaes')
+  const [importDocType, setImportDocType] = useState<ImportDocType>(
+    isFocoSimples ? 'NFE' : 'NFSE',
+  )
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [servicoByCnae, setServicoByCnae] = useState<Record<string, ServicoPick | null>>({})
   const [suggestionsByCnae, setSuggestionsByCnae] = useState<
@@ -78,10 +84,12 @@ export default function MeiImportCnaesModal ({
     () => items.filter((c) => selected.has(c.codigo)),
     [items, selected],
   )
+  const isNfeImport = importDocType === 'NFE'
 
   useEffect(() => {
     if (!visible) return
     setStep('cnaes')
+    setImportDocType(isFocoSimples ? 'NFE' : 'NFSE')
     setSelected(new Set(cnaes.map((c) => c.codigo).filter(Boolean)))
     setServicoByCnae({})
     setSuggestionsByCnae({})
@@ -89,7 +97,7 @@ export default function MeiImportCnaesModal ({
     setBrowseQuery('')
     setBrowseResults([])
     setSaving(false)
-  }, [visible, cnaes])
+  }, [visible, cnaes, isFocoSimples])
 
   const loadSuggestions = useCallback(async (list: CnpjLookupCnaeItem[]) => {
     setSuggestionsLoading(true)
@@ -161,6 +169,10 @@ export default function MeiImportCnaesModal ({
       alertDialog('Seleção', 'Marque ao menos um CNAE ou cancele.')
       return
     }
+    if (isNfeImport) {
+      void handleConfirm()
+      return
+    }
     setStep('codigos')
   }
 
@@ -172,14 +184,14 @@ export default function MeiImportCnaesModal ({
     setSaving(true)
     try {
       const result = await criarCatalogoProdutosFromCnaes({
-        documentType: 'NFSE',
+        documentType: importDocType,
         items: pickedItems.map((c) => {
           const pick = servicoByCnae[c.codigo]
           return {
             codigo: c.codigo,
             descricao: c.descricao,
             principal: Boolean(c.principal),
-            ...(pick?.codigo ? { codigoServico: pick.codigo } : {}),
+            ...(!isNfeImport && pick?.codigo ? { codigoServico: pick.codigo } : {}),
           }
         }),
       })
@@ -187,7 +199,14 @@ export default function MeiImportCnaesModal ({
       const skipped = result.skipped?.length ?? 0
       const withCodigo = (result.created || []).filter((r) => String(r.codigo || '').trim()).length
       if (n > 0) {
-        if (withCodigo === n) {
+        if (isNfeImport) {
+          showToast(
+            n === 1
+              ? '1 CNAE importado como NF-e. Complete o NCM antes de emitir.'
+              : `${n} CNAEs importados como NF-e. Complete o NCM antes de emitir.`,
+            'success',
+          )
+        } else if (withCodigo === n) {
           showToast(
             n === 1 ? '1 serviço adicionado ao catálogo.' : `${n} serviços adicionados ao catálogo.`,
             'success',
@@ -206,7 +225,12 @@ export default function MeiImportCnaesModal ({
           )
         }
       } else if (skipped > 0) {
-        showToast('Esses CNAEs já estavam no catálogo.', 'info')
+        showToast(
+          isNfeImport
+            ? 'Esses CNAEs já estavam no catálogo de NF-e.'
+            : 'Esses CNAEs já estavam no catálogo de NFS-e.',
+          'info',
+        )
       } else {
         showToast('Nenhum CNAE importado.', 'info')
       }
@@ -270,15 +294,71 @@ export default function MeiImportCnaesModal ({
     <MeiFlowModalShell
       visible={visible}
       onClose={handleShellClose}
-      title={step === 'cnaes' ? 'Importar CNAEs' : 'Código LC 116'}
-      eyebrow={step === 'cnaes' ? 'Atividades da Receita' : 'Sugestão + lista completa'}
+      title={
+        step === 'cnaes'
+          ? 'Importar CNAEs'
+          : 'Código LC 116'
+      }
+      eyebrow={
+        step === 'cnaes'
+          ? (isFocoSimples ? 'Atividades da empresa' : 'Atividades da Receita')
+          : 'Sugestão + lista completa'
+      }
       closeIcon={step === 'codigos' ? 'arrow-back' : 'close'}
     >
       {step === 'cnaes' ? (
         <>
+          {isFocoSimples ? (
+            <View style={{ marginBottom: 14 }}>
+              <Text style={[flow.hint, { marginBottom: 8 }]}>
+                Escolha o tipo de documento do catálogo. Restaurante/bar/mercearia
+                costuma ser NF-e (produto). Serviços municipais usam NFS-e.
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {([
+                  { id: 'NFE' as const, label: 'NF-e (produto)' },
+                  { id: 'NFSE' as const, label: 'NFS-e (serviço)' },
+                ]).map((opt) => {
+                  const active = importDocType === opt.id
+                  return (
+                    <Pressable
+                      key={opt.id}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      onPress={() => setImportDocType(opt.id)}
+                      style={{
+                        flex: 1,
+                        paddingVertical: 10,
+                        paddingHorizontal: 12,
+                        borderRadius: 999,
+                        borderWidth: 1.5,
+                        borderColor: active ? theme.primary : pickBorder(false, theme, isDarkMode),
+                        backgroundColor: active
+                          ? (isDarkMode ? 'rgba(34,197,94,0.14)' : 'rgba(34,197,94,0.1)')
+                          : 'transparent',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: active ? theme.primary : theme.textSecondary,
+                          fontWeight: '700',
+                          fontSize: 13,
+                        }}
+                      >
+                        {opt.label}
+                      </Text>
+                    </Pressable>
+                  )
+                })}
+              </View>
+            </View>
+          ) : null}
+
           <Text style={[flow.hint, { marginBottom: 12 }]}>
-            Marque as atividades de serviço. No próximo passo sugerimos códigos LC 116;
-            você também pode buscar na lista completa ou deixar para depois.
+            {isNfeImport
+              ? 'Marque as atividades. Elas entram no catálogo de NF-e; complete o NCM depois.'
+              : 'Marque as atividades de serviço. No próximo passo sugerimos códigos LC 116; você também pode buscar na lista completa ou deixar para depois.'}
           </Text>
 
           <ScrollView style={{ maxHeight: 360 }} keyboardShouldPersistTaps="handled">
@@ -331,7 +411,9 @@ export default function MeiImportCnaesModal ({
             <MeiFormSheetActions
               onCancel={onClose}
               onConfirm={goToCodigosStep}
-              confirmLabel="Continuar"
+              confirmLabel={isNfeImport ? 'Importar como NF-e' : 'Continuar'}
+              loading={saving}
+              disabled={saving}
             />
           </View>
         </>

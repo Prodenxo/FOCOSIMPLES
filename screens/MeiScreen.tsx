@@ -123,6 +123,7 @@ import {
   getDefaultNfeLikeForm,
   getDefaultNfeItem,
   getNfeItemLineTotal,
+  computeNfeItemsTotal,
   mergeNfsePrestadorPrefillIntoForm,
   mergeNfeEmitentePrefillIntoForm,
   isNfsePrestadorPrefillEffectivelyEmpty,
@@ -152,7 +153,7 @@ import MeiCatalogoClientesModal from './MeiCatalogoClientesModal';
 import MeiCatalogoProdutosModal from './MeiCatalogoProdutosModal';
 import MeiImportCnaesModal from './MeiImportCnaesModal';
 import { mapCatalogProdutoToNfeItem } from '../lib/mapCatalogProdutoToNfeItem';
-import { isCatalogProdutoUsableForNfeLike } from '../lib/nfeCatalogProdutoMetadata';
+import { isCatalogProdutoUsableForNfeLike, catalogProdutoNeedsNfeCompletion } from '../lib/nfeCatalogProdutoMetadata';
 import {
   resolveMeiDocumentosPermitidos,
   meiDocTypesPermitidos,
@@ -549,6 +550,7 @@ function MeiScreenContent() {
   // Emitir nota
   const [emitirNotaVisible, setEmitirNotaVisible] = useState(false);
   const [emitirNotaType, setEmitirNotaType] = useState<NotaDocumentType>('NFSE');
+  const [nfeItemEditIndex, setNfeItemEditIndex] = useState(0);
 
   const notasParaExibir = useMemo(() => {
     if (!emitirNotaPending) return notas;
@@ -2269,7 +2271,12 @@ function MeiScreenContent() {
           setPendingImportCnaes(unified);
           setImportCnaesVisible(true);
         } else {
-          showToast('Certificado ok, mas a Receita não retornou CNAEs agora. Use “Importar CNAEs / serviços”.', 'info')
+          showToast(
+            isFocoSimplesUi
+              ? 'Certificado ok, mas a Receita não retornou CNAEs agora. Use “Importar CNAEs”.'
+              : 'Certificado ok, mas a Receita não retornou CNAEs agora. Use “Importar CNAEs / serviços”.',
+            'info',
+          )
         }
       }
     } catch (err: any) {
@@ -2417,20 +2424,25 @@ function MeiScreenContent() {
         );
       }
     } else {
-      if (!isCatalogProdutoUsableForNfeLike(item, emitirNotaType)) {
+      const incomplete = !isCatalogProdutoUsableForNfeLike(item, emitirNotaType)
+      const row = mapCatalogProdutoToNfeItem(item)
+      setNfeLikeForm((f) => {
+        const idx = Math.min(Math.max(nfeItemEditIndex, 0), Math.max(f.itens.length - 1, 0))
+        if (f.itens.length === 0) {
+          setNfeItemEditIndex(0)
+          return { ...f, itens: [row] }
+        }
+        return {
+          ...f,
+          itens: f.itens.map((it, i) => (i === idx ? row : it)),
+        }
+      })
+      if (incomplete) {
         showToast(
-          'Produto sem dados NF-e completos. Edite no catálogo (NCM, CFOP e tributos).',
-          'error',
-        );
-        return;
+          'Produto incompleto: preencha o NCM (8 dígitos) no formulário ou edite no catálogo antes de emitir.',
+          'info',
+        )
       }
-      const row = mapCatalogProdutoToNfeItem(item);
-      setNfeLikeForm((f) => ({
-        ...f,
-        itens: f.itens.length > 0
-          ? f.itens.map((it, i) => (i === 0 ? row : it))
-          : [row],
-      }));
     }
     setCatalogProdutoVisible(false);
   };
@@ -3678,16 +3690,20 @@ function MeiScreenContent() {
                 onPress={() => void openImportCnaesFromEmpresa()}
                 disabled={cnpjLookupLoading}
                 accessibilityRole="button"
-                accessibilityLabel="Importar CNAEs para o catálogo de serviços"
+                accessibilityLabel="Importar CNAEs para o catálogo"
               >
                 {cnpjLookupLoading ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Text style={styles.downloadButtonText}>Importar CNAEs / serviços</Text>
+                  <Text style={styles.downloadButtonText}>
+                    {isFocoSimplesUi ? 'Importar CNAEs' : 'Importar CNAEs / serviços'}
+                  </Text>
                 )}
               </TouchableOpacity>
               <Text style={[styles.sectionDescription, { marginTop: 8 }]}>
-                Busca as atividades do CNPJ na Receita e adiciona no catálogo (código LC 116 você completa depois).
+                {isFocoSimplesUi
+                  ? 'Busca as atividades do CNPJ na Receita. Você escolhe se entram no catálogo de NF-e ou NFS-e.'
+                  : 'Busca as atividades do CNPJ na Receita e adiciona no catálogo (código LC 116 você completa depois).'}
               </Text>
               </>
             ) : (
@@ -4506,7 +4522,8 @@ function MeiScreenContent() {
                     }}
                   />
                   <MeiFormField
-                    label="Inscrição Estadual do emitente (opcional)"
+                    label="Inscrição Estadual do emitente"
+                    required={emitirNotaType === 'NFE'}
                     placeholder="Somente números ou ISENTO"
                     value={nfeLikeForm.emitenteInscricaoEstadual}
                     onChangeText={(t) => {
@@ -4517,7 +4534,7 @@ function MeiScreenContent() {
                   />
                   <Text style={{ fontSize: 12, color: theme.textSecondary, marginBottom: mfSpacing.sm, lineHeight: 16 }}>
                     {isFocoSimplesUi
-                      ? 'IE da empresa emitente no XML. Não confunda com a IE do cliente (destinatário).'
+                      ? 'Obrigatória na NF-e de mercadoria. IE da empresa emitente no XML — não confunda com a IE do cliente.'
                       : 'IE da sua empresa MEI no XML do emitente. Não confunda com a IE do cliente (destinatário).'}
                   </Text>
                   <MeiLinkButton
@@ -4752,27 +4769,111 @@ function MeiScreenContent() {
                       void loadCatalogProdutos();
                     }}
                   />
-                  {nfeLikeForm.itens.length > 0 && (() => {
-                    const item = nfeLikeForm.itens[0];
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: mfSpacing.sm, alignItems: 'center' }}>
+                    <MeiLinkButton
+                      label="Adicionar item"
+                      onPress={() => {
+                        setNfeLikeForm((f) => {
+                          const next = [...f.itens, getDefaultNfeItem()];
+                          setNfeItemEditIndex(next.length - 1);
+                          return { ...f, itens: next };
+                        });
+                      }}
+                    />
+                    {nfeLikeForm.itens.length > 1 ? (
+                      <Text style={{ fontSize: 12, color: theme.textSecondary }}>
+                        {nfeLikeForm.itens.length} itens · total{' '}
+                        {formatCurrencyBR(computeNfeItemsTotal(nfeLikeForm.itens))}
+                      </Text>
+                    ) : null}
+                  </View>
+                  {nfeLikeForm.itens.map((item, itemIndex) => {
                     const setItem = (up: Partial<NfeItemForm>) =>
-                      setNfeLikeForm((f) => ({ ...f, itens: f.itens.map((it, i) => (i === 0 ? { ...it, ...up } : it)) }));
+                      setNfeLikeForm((f) => ({
+                        ...f,
+                        itens: f.itens.map((it, i) => (i === itemIndex ? { ...it, ...up } : it)),
+                      }));
+                    const isActive = nfeItemEditIndex === itemIndex;
                     return (
-                      <>
-                        <MeiFormField label="Código item" required placeholder="Código" value={item.codigo} onChangeText={(t) => setItem({ codigo: t })} />
-                        <MeiFormField label="Descrição" required placeholder="Descrição" value={item.descricao} onChangeText={(t) => setItem({ descricao: t })} />
+                      <View
+                        key={`nfe-item-${itemIndex}`}
+                        style={{
+                          marginBottom: mfSpacing.md,
+                          padding: 12,
+                          borderRadius: 10,
+                          borderWidth: 1,
+                          borderColor: isActive ? theme.primary : theme.border,
+                          backgroundColor: theme.surface,
+                          gap: 0,
+                        }}
+                      >
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                          <Pressable onPress={() => setNfeItemEditIndex(itemIndex)} accessibilityRole="button">
+                            <Text style={{ fontSize: 13, fontWeight: '700', color: theme.text }}>
+                              Item {itemIndex + 1}
+                              {isActive ? ' · editando' : ''}
+                            </Text>
+                          </Pressable>
+                          {nfeLikeForm.itens.length > 1 ? (
+                            <MeiLinkButton
+                              label="Remover"
+                              onPress={() => {
+                                setNfeLikeForm((f) => {
+                                  const next = f.itens.filter((_, i) => i !== itemIndex);
+                                  setNfeItemEditIndex((prev) => {
+                                    if (next.length === 0) return 0;
+                                    if (prev >= next.length) return next.length - 1;
+                                    if (prev > itemIndex) return prev - 1;
+                                    return prev;
+                                  });
+                                  return { ...f, itens: next.length > 0 ? next : [getDefaultNfeItem()] };
+                                });
+                              }}
+                            />
+                          ) : null}
+                        </View>
+                        {String(item.ncm || '').replace(/\D/g, '').length !== 8 ? (
+                          <View
+                            style={{
+                              marginBottom: 10,
+                              paddingVertical: 8,
+                              paddingHorizontal: 10,
+                              borderRadius: 8,
+                              borderWidth: 1,
+                              borderColor: theme.primary,
+                              backgroundColor: isDarkMode ? 'rgba(34,197,94,0.12)' : 'rgba(34,197,94,0.08)',
+                            }}
+                          >
+                            <Text style={{ fontSize: 12, color: theme.text, lineHeight: 17 }}>
+                              Falta o NCM (8 dígitos) deste produto. Role até o campo abaixo — o CNAE
+                              da empresa não substitui o NCM da mercadoria.
+                            </Text>
+                          </View>
+                        ) : null}
                         <MeiFormField
                           label="NCM (8 dígitos)"
                           required
-                          placeholder="00000000"
+                          placeholder="Ex.: 21069090"
+                          hint="Código da mercadoria (tabela NCM). Obrigatório na NF-e."
                           value={item.ncm}
-                          onChangeText={(t) => setItem({ ncm: t.replace(/\D/g, '').slice(0, 8) })}
+                          onChangeText={(t) => { setNfeItemEditIndex(itemIndex); setItem({ ncm: t.replace(/\D/g, '').slice(0, 8) }); }}
                           keyboardType="numeric"
                           maxLength={8}
                         />
-                        <MeiFormField label="CFOP" required placeholder="5102" value={item.cfop} onChangeText={(t) => setItem({ cfop: t.replace(/\D/g, '').slice(0, 4) })} keyboardType="numeric" maxLength={4} />
-                        <MeiFormField label="Unidade" required placeholder="UN" value={item.unidade} onChangeText={(t) => setItem({ unidade: t })} />
-                        <MeiFormField label="Quantidade" required placeholder="1" value={item.quantidade} onChangeText={(t) => setItem({ quantidade: t })} keyboardType="decimal-pad" />
-                        <MeiFormField label="Valor unitário" required placeholder="0,00" value={item.valorUnitario} onChangeText={(t) => setItem({ valorUnitario: t })} keyboardType="decimal-pad" />
+                        <MeiFormField label="Código item" required placeholder="Código" value={item.codigo} onChangeText={(t) => { setNfeItemEditIndex(itemIndex); setItem({ codigo: t }); }} />
+                        <MeiFormField label="Descrição" required placeholder="Descrição" value={item.descricao} onChangeText={(t) => { setNfeItemEditIndex(itemIndex); setItem({ descricao: t }); }} />
+                        <MeiFormField
+                          label="CEST (opcional, 7 dígitos)"
+                          placeholder="0000000"
+                          value={item.cest}
+                          onChangeText={(t) => { setNfeItemEditIndex(itemIndex); setItem({ cest: t.replace(/\D/g, '').slice(0, 7) }); }}
+                          keyboardType="numeric"
+                          maxLength={7}
+                        />
+                        <MeiFormField label="CFOP" required placeholder="5102" value={item.cfop} onChangeText={(t) => { setNfeItemEditIndex(itemIndex); setItem({ cfop: t.replace(/\D/g, '').slice(0, 4) }); }} keyboardType="numeric" maxLength={4} />
+                        <MeiFormField label="Unidade" required placeholder="UN" value={item.unidade} onChangeText={(t) => { setNfeItemEditIndex(itemIndex); setItem({ unidade: t }); }} />
+                        <MeiFormField label="Quantidade" required placeholder="1" value={item.quantidade} onChangeText={(t) => { setNfeItemEditIndex(itemIndex); setItem({ quantidade: t }); }} keyboardType="decimal-pad" />
+                        <MeiFormField label="Valor unitário" required placeholder="0,00" value={item.valorUnitario} onChangeText={(t) => { setNfeItemEditIndex(itemIndex); setItem({ valorUnitario: t }); }} keyboardType="decimal-pad" />
                         {(() => {
                           const lineTotal = getNfeItemLineTotal(item);
                           return (
@@ -4781,15 +4882,9 @@ function MeiScreenContent() {
                                 Valor total do item:{' '}
                                 {lineTotal !== null ? formatCurrencyBR(lineTotal) : '—'}
                               </Text>
-                              <Text style={{ fontSize: 12, color: theme.textSecondary, lineHeight: 16 }}>
-                                Calculado automaticamente (quantidade × unitário). Não precisa informar o total à parte.
-                              </Text>
                             </View>
                           );
                         })()}
-                        <Text style={{ fontSize: 12, color: theme.textSecondary, marginBottom: mfSpacing.sm, lineHeight: 16 }}>
-                          Tributos vêm do cadastro do produto (catálogo). Use &quot;Selecionar produto&quot; ou edite aqui se necessário.
-                        </Text>
                         <MeiFormField
                           label={isFocoSimplesUi ? 'CSOSN ICMS (Simples)' : 'CSOSN ICMS (MEI)'}
                           required
@@ -4797,6 +4892,7 @@ function MeiScreenContent() {
                           value={item.tributos.icms.csosn}
                           onChangeText={(t) => {
                             const csosn = t.replace(/\D/g, '').slice(0, 3);
+                            setNfeItemEditIndex(itemIndex);
                             setItem({
                               tributos: {
                                 ...item.tributos,
@@ -4812,14 +4908,15 @@ function MeiScreenContent() {
                           required
                           placeholder="49"
                           value={item.tributos.pis.cst}
-                          onChangeText={(t) =>
+                          onChangeText={(t) => {
+                            setNfeItemEditIndex(itemIndex);
                             setItem({
                               tributos: {
                                 ...item.tributos,
                                 pis: { ...item.tributos.pis, cst: t.replace(/\D/g, '').slice(0, 2) },
                               },
-                            })
-                          }
+                            });
+                          }}
                           keyboardType="numeric"
                           maxLength={2}
                         />
@@ -4828,20 +4925,21 @@ function MeiScreenContent() {
                           required
                           placeholder="49"
                           value={item.tributos.cofins.cst}
-                          onChangeText={(t) =>
+                          onChangeText={(t) => {
+                            setNfeItemEditIndex(itemIndex);
                             setItem({
                               tributos: {
                                 ...item.tributos,
                                 cofins: { ...item.tributos.cofins, cst: t.replace(/\D/g, '').slice(0, 2) },
                               },
-                            })
-                          }
+                            });
+                          }}
                           keyboardType="numeric"
                           maxLength={2}
                         />
-                      </>
+                      </View>
                     );
-                  })()}
+                  })}
                 </>
               )}
       </MeiFlowModalShell>
@@ -4914,30 +5012,40 @@ function MeiScreenContent() {
           </View>
         ) : (
           <FlatList
-            data={
-              emitirNotaType === 'NFSE'
-                ? catalogProdutos
-                : catalogProdutos.filter((p) => isCatalogProdutoUsableForNfeLike(p, emitirNotaType))
-            }
+            data={catalogProdutos}
             keyExtractor={(item) => item.id}
             style={meiFlow.listPad}
             ListEmptyComponent={
               <Text style={meiFlow.empty}>
                 {emitirNotaType === 'NFSE'
                   ? 'Nenhum serviço no catálogo.'
-                  : 'Nenhum produto NF-e no catálogo. Cadastre em Catálogo → Produtos (tipo NFE).'}
+                  : 'Nenhum produto NF-e no catálogo. Importe CNAEs como NF-e ou cadastre em Catálogo → +.'}
               </Text>
             }
             renderItem={({ item }) => {
-              const needsCodigo = !String(item.codigo || '').trim()
-                || String(item.codigo || '').replace(/[^0-9A-Za-z]/g, '').length < 6
+              if (emitirNotaType === 'NFSE') {
+                const needsCodigo = !String(item.codigo || '').trim()
+                  || String(item.codigo || '').replace(/[^0-9A-Za-z]/g, '').length < 6
+                return (
+                  <MeiCatalogListCard
+                    title={buildProdutoCatalogLabel(item)}
+                    meta={[
+                      item.document_type,
+                      item.cnae ? `CNAE ${item.cnae}` : null,
+                      needsCodigo ? 'Completar código LC 116' : null,
+                    ].filter(Boolean).join(' · ') || undefined}
+                    onPress={() => handleSelectCatalogProduto(item)}
+                  />
+                )
+              }
+              const needsNfe = catalogProdutoNeedsNfeCompletion(item)
               return (
                 <MeiCatalogListCard
                   title={buildProdutoCatalogLabel(item)}
                   meta={[
                     item.document_type,
                     item.cnae ? `CNAE ${item.cnae}` : null,
-                    needsCodigo ? 'Completar código LC 116' : null,
+                    needsNfe ? 'Completar NCM' : null,
                   ].filter(Boolean).join(' · ') || undefined}
                   onPress={() => handleSelectCatalogProduto(item)}
                 />

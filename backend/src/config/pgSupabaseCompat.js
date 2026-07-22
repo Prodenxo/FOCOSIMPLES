@@ -69,7 +69,12 @@ class PgQueryBuilder {
   }
 
   select(columns = '*', options = {}) {
-    this.action = this.action === 'insert' || this.action === 'update' || this.action === 'upsert'
+    // Em insert/update/upsert/delete, `.select()` só pede RETURNING (API Supabase).
+    // Não pode resetar a ação para `select` — senão DELETE vira SELECT e “apaga” nada.
+    this.action = this.action === 'insert'
+      || this.action === 'update'
+      || this.action === 'upsert'
+      || this.action === 'delete'
       ? this.action
       : 'select'
     this.columns = splitSelectColumns(columns)

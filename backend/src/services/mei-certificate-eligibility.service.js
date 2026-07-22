@@ -1,6 +1,6 @@
 import { badRequest } from '../utils/errors.js';
 import { env } from '../config/env.js';
-import { lookupCnpjBrasilApi } from './cnpj-lookup.service.js';
+import { lookupCnpjCascade } from './cnpj-lookup.service.js';
 
 export const MEI_CERT_CPF_NOT_ALLOWED = 'MEI_CERT_CPF_NOT_ALLOWED';
 export const MEI_CERT_CNPJ_NOT_MEI = 'MEI_CERT_CNPJ_NOT_MEI';
@@ -11,6 +11,17 @@ const isFocoSimplesProduct = () =>
   String(process.env.APP_PRODUCT || env.APP_PRODUCT || '')
     .trim()
     .toLowerCase() === 'focosimples';
+
+const isSimplesCertSkipEnabled = () => {
+  const raw = String(
+    process.env.FOCOSIMPLES_CERT_SKIP_SIMPLES_CHECK
+      ?? env.FOCOSIMPLES_CERT_SKIP_SIMPLES_CHECK
+      ?? '',
+  )
+    .trim()
+    .toLowerCase();
+  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'sim' || raw === 'on';
+};
 
 const isEnforceMeiCertEnabled = () => {
   // Foco Simples: não exige MEI; usa política de Simples Nacional abaixo.
@@ -191,9 +202,19 @@ export const assertMeiCertificateEligible = async (certDocument) => {
 
   let lookup;
   try {
-    lookup = await lookupCnpjBrasilApi(digits);
+    lookup = await lookupCnpjCascade(digits);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err || '');
+    if (focosimples && isSimplesCertSkipEnabled()) {
+      console.warn('[cert-eligibility] skip simples check após falha de lookup', { cnpj: digits, msg });
+      return {
+        enforced: true,
+        skipped: true,
+        signal: 'simples_check_skipped_lookup_error',
+        cnpj: digits,
+        product: 'focosimples',
+      };
+    }
     throw badRequest(
       msg || 'Falha ao consultar o CNPJ na Receita Federal. Tente novamente em instantes.',
       { code: MEI_CERT_MEI_LOOKUP_FAILED, meiEligibilitySignal: 'lookup_error' }
@@ -203,6 +224,19 @@ export const assertMeiCertificateEligible = async (certDocument) => {
   if (focosimples) {
     const verdict = classifyCnpjSimplesEligibility(lookup);
     if (!verdict.eligible) {
+      if (isSimplesCertSkipEnabled()) {
+        console.warn('[cert-eligibility] skip simples check (FOCOSIMPLES_CERT_SKIP_SIMPLES_CHECK)', {
+          cnpj: digits,
+          signal: verdict.signal,
+        });
+        return {
+          enforced: true,
+          skipped: true,
+          signal: `simples_check_skipped_${verdict.signal}`,
+          cnpj: digits,
+          product: 'focosimples',
+        };
+      }
       throw buildSimplesEligibilityError(verdict.signal);
     }
     return { enforced: true, skipped: false, signal: verdict.signal, cnpj: digits, product: 'focosimples' };

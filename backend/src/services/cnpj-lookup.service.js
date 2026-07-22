@@ -31,6 +31,30 @@ const padZeros = (value, length) => {
 
 const hasText = (value) => String(value || '').trim().length > 0;
 
+/** Normaliza flag boolean de optante (BrasilAPI / PlugNotas / aninhado). */
+export const resolveOpcaoTributariaFlag = (...candidates) => {
+  for (const value of candidates) {
+    if (value === true || value === false) return value;
+    if (value === 1 || value === '1') return true;
+    if (value === 0 || value === '0') return false;
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const nested = resolveOpcaoTributariaFlag(
+        value.optante,
+        value.opcao,
+        value.opcao_pelo_simples,
+        value.opcao_pelo_mei,
+      );
+      if (nested !== null) return nested;
+      continue;
+    }
+    const text = String(value ?? '').trim().toLowerCase();
+    if (!text || text === 'null' || text === 'undefined') continue;
+    if (text === 'sim' || text === 'true' || text === 'yes') return true;
+    if (text === 'nao' || text === 'não' || text === 'false' || text === 'no') return false;
+  }
+  return null;
+};
+
 /** Normaliza código CNAE para 7 dígitos. */
 export const normalizeCnaeCodigo = (value) => {
   const digits = String(value ?? '').replace(/\D/g, '');
@@ -256,8 +280,16 @@ export const lookupCnpjBrasilApi = async (cnpjInput) => {
       ? Number(raw.codigo_natureza_juridica)
       : null,
     capitalSocial: raw?.capital_social || null,
-    opcaoSimples: raw?.opcao_pelo_simples || null,
-    opcaoMei: raw?.opcao_pelo_mei || null,
+    opcaoSimples: resolveOpcaoTributariaFlag(
+      raw?.opcao_pelo_simples,
+      raw?.simples,
+      raw?.simples?.optante,
+    ),
+    opcaoMei: resolveOpcaoTributariaFlag(
+      raw?.opcao_pelo_mei,
+      raw?.mei,
+      raw?.mei?.optante,
+    ),
     cnaePrincipal: raw?.cnae_fiscal
       ? { codigo: String(raw.cnae_fiscal), descricao: raw?.cnae_fiscal_descricao || null }
       : null,
@@ -346,8 +378,18 @@ export const lookupCnpjPlugnotas = async (cnpjInput) => {
     situacaoCadastral: root?.situacaoCadastral || root?.descricao_situacao_cadastral || null,
     porte: root?.porte || null,
     capitalSocial: root?.capitalSocial || root?.capital_social || null,
-    opcaoSimples: root?.opcaoSimples ?? root?.opcao_pelo_simples ?? null,
-    opcaoMei: root?.opcaoMei ?? root?.opcao_pelo_mei ?? null,
+    opcaoSimples: resolveOpcaoTributariaFlag(
+      root?.opcaoSimples,
+      root?.opcao_pelo_simples,
+      root?.simples,
+      root?.simples?.optante,
+    ),
+    opcaoMei: resolveOpcaoTributariaFlag(
+      root?.opcaoMei,
+      root?.opcao_pelo_mei,
+      root?.mei,
+      root?.mei?.optante,
+    ),
     cnaePrincipal: root?.cnaePrincipal
       ? {
           codigo: String(root.cnaePrincipal.codigo || ''),

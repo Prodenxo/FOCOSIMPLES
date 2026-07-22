@@ -19,6 +19,7 @@ import {
   normalizeCnaeInput,
 } from '../lib/meiCatalogoProdutoForm'
 import {
+  catalogProdutoNeedsNfeCompletion,
   emptyNfeCatalogProdutoFormFields,
   isNfeLikeCatalogDocumentType,
   nfeCatalogProdutoFormFieldsFromMetadata,
@@ -387,17 +388,20 @@ export default function MeiCatalogoProdutosModal ({
               <Text style={flow.empty}>{emptyListMessage}</Text>
             }
             renderItem={({ item }) => {
+              const isNfeLike = isNfeLikeCatalogDocumentType(String(item.document_type || ''))
               const needsCodigo = Boolean(
                 item.metadata_json
                 && typeof item.metadata_json === 'object'
                 && (item.metadata_json as { needsServicoCodigo?: boolean }).needsServicoCodigo,
               )
               const missingCodigo = !String(item.codigo || '').trim()
+              const needsNcm = isNfeLike && catalogProdutoNeedsNfeCompletion(item)
               const tipo = catalogDocTypeLabel(item.document_type)
               const metaBits = [
                 tipo,
                 item.cnae ? `CNAE ${item.cnae}` : null,
-                needsCodigo || missingCodigo ? 'Completar código LC 116' : null,
+                !isNfeLike && (needsCodigo || missingCodigo) ? 'Completar código LC 116' : null,
+                needsNcm ? 'Completar NCM' : null,
               ].filter(Boolean)
               return (
                 <MeiCatalogListCard

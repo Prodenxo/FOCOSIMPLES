@@ -403,6 +403,12 @@ export function getNfeLikeValidationMessage(form: NfeLikeForm, documentType: Not
     return `CPF/CNPJ do destinatário da ${label} inválido.`;
   }
   if (!hasRequiredText(form.destinatarioRazaoSocial)) return `Informe a razão social do destinatário da ${label}.`;
+  if (documentType === 'NFE') {
+    const ieEmitente = String(form.emitenteInscricaoEstadual || '').trim()
+    if (!ieEmitente) {
+      return 'Informe a Inscrição Estadual do emitente (obrigatória na NF-e de mercadoria). Use ISENTO se for o caso.'
+    }
+  }
   const ieMsg = getDestinatarioIeValidationMessage(
     normalizeDestinatarioIndIeDest(form.destinatarioIndIEDest),
     form.destinatarioInscricaoEstadual,
@@ -423,6 +429,10 @@ export function getNfeLikeValidationMessage(form: NfeLikeForm, documentType: Not
     if (normalizeDoc(item.ncm).length !== 8) return `Item ${linha}: NCM deve conter 8 dígitos.`;
     if (normalizeDoc(item.cfop).length !== 4) return `Item ${linha}: CFOP deve ter 4 dígitos.`;
     if (!hasRequiredText(item.unidade)) return `Item ${linha}: informe a unidade comercial.`;
+    const cestDigits = normalizeDoc(item.cest);
+    if (cestDigits && cestDigits.length !== 7) {
+      return `Item ${linha}: CEST deve ter 7 dígitos ou ficar em branco.`;
+    }
     const quantidade = parseDecimalInput(item.quantidade);
     if (quantidade === null || quantidade <= 0) return `Item ${linha}: quantidade deve ser maior que zero.`;
     const valorUnitario = parseDecimalInput(item.valorUnitario);
@@ -536,7 +546,7 @@ function mapNfeItem(item: NfeItemForm): NfeItemInput {
   return mapNfeItemForPlugnotas(item, mapNfeTributos(item.tributos));
 }
 
-function computeNfeItemsTotal(itens: NfeItemForm[]): number {
+export function computeNfeItemsTotal(itens: NfeItemForm[]): number {
   return itens.reduce((acc, item) => acc + (getNfeItemLineTotal(item) ?? 0), 0);
 }
 

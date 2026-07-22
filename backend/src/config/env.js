@@ -122,6 +122,12 @@ export const env = {
   FRONTEND_URL: process.env.FRONTEND_URL || "https://focomei.com.br",
   /** focosimples | focomei — política de produto (notas / gates). */
   APP_PRODUCT: String(process.env.APP_PRODUCT || "focosimples").trim().toLowerCase(),
+  /** Dev/local: pula checagem de optante Simples no upload de certificado (Foco Simples). */
+  FOCOSIMPLES_CERT_SKIP_SIMPLES_CHECK: String(
+    process.env.FOCOSIMPLES_CERT_SKIP_SIMPLES_CHECK || "",
+  )
+    .trim()
+    .toLowerCase(),
   /** Resend — envio de recuperação de senha (recomendado para Hotmail/Outlook). */
   RESEND_API_KEY: normalizeEnvSecret(process.env.RESEND_API_KEY || ""),
   RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL || "",
