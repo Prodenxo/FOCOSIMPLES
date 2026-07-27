@@ -17,16 +17,16 @@ const TECHNICAL_MARKERS = [
 function rewriteKnownFiscalErrors (raw: string): string | null {
   const lower = raw.toLowerCase()
 
+  // Só reescreve erro real Serpro (ICGERENCIADOR-022). Não confundir com empty-state
+  // genérico que só menciona "procuração" de passagem.
   if (
-    lower.includes('procuração')
-    || lower.includes('procuracao')
-    || lower.includes('ecac')
-    || lower.includes('e-cac')
-    || /icgerenciador-022/i.test(raw)
+    /icgerenciador-022/i.test(raw)
+    || /n[aã]o\s+tem\s+procura[cç][aã]o\s+autorizada/i.test(raw)
+    || /acesso\s+negado[\s\S]{0,80}procura[cç][aã]o[\s\S]{0,40}ecac/i.test(raw)
   ) {
     return (
-      'Falta procuração no e-CAC: o contratante da API (escritório) ainda não está '
-      + 'autorizado a consultar o PGDAS-D deste CNPJ. Outorgue a procuração e atualize a lista.'
+      'A Receita negou o acesso (procuração e-CAC / Autentica Procurador). '
+      + 'Confira se o certificado A1 desta empresa está na aba Certificado e atualize a lista.'
     )
   }
 

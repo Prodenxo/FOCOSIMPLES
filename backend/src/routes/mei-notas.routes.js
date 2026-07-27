@@ -62,6 +62,12 @@ router.get('/catalogo/codigos-servicos', requireAuth, requireMeiEnabled, control
 router.get('/catalogo/codigos-servicos/sugerir', requireAuth, requireMeiEnabled, controller.sugerirCatalogoCodigosServicos);
 router.post('/catalogo/produtos', requireAuth, requireMeiEnabled, controller.criarCatalogoProduto);
 router.post('/catalogo/produtos/from-cnaes', requireAuth, requireMeiEnabled, controller.criarCatalogoProdutosFromCnaes);
+router.post(
+  '/catalogo/produtos/from-spreadsheet',
+  requireAuth,
+  requireMeiEnabled,
+  controller.criarCatalogoProdutosFromSpreadsheet,
+);
 router.patch('/catalogo/produtos/:id', requireAuth, requireMeiEnabled, controller.atualizarCatalogoProduto);
 router.delete('/catalogo/produtos/:id', requireAuth, requireMeiEnabled, controller.eliminarCatalogoProduto);
 router.patch('/:id', requireAuth, requireMeiEnabled, controller.atualizar);

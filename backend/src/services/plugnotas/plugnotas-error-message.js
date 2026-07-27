@@ -89,7 +89,9 @@ const collectErrorMessages = (value, fieldContext = '') => {
  */
 export const buildErrorMessageFromBody = (payload, statusText = '') => {
   if (payload === null || payload === undefined) return statusText;
-  if (typeof payload === 'string') return payload || statusText;
+  if (typeof payload === 'string') {
+    return humanizePlugnotasFiscalMessage(payload || statusText);
+  }
   const baseMessage = String(
     payload?.error?.message
     || payload?.message
@@ -117,10 +119,32 @@ export const buildErrorMessageFromBody = (payload, statusText = '') => {
     ...collectErrorMessages(payload?.problems)
   ].filter(Boolean);
   const details = [...new Set(detailMessages)].join(' | ');
+  let combined = '';
   if (baseMessage && details && !baseMessage.includes(details)) {
-    return `${baseMessage}: ${details}`;
+    combined = `${baseMessage}: ${details}`;
+  } else {
+    combined = baseMessage || details || statusText;
   }
-  return baseMessage || details || statusText;
+  return humanizePlugnotasFiscalMessage(combined);
+};
+
+/** Mensagens Plugnotas que o usuário final não entende — reescrita acionável. */
+export const humanizePlugnotasFiscalMessage = (raw) => {
+  const msg = String(raw || '').trim();
+  if (!msg) return msg;
+  if (/falha ao buscar certificado[\s\S]{0,40}id[\s\S]{0,20}inv[aá]lido/i.test(msg)) {
+    return (
+      'Certificado no emissor está inválido ou desatualizado. '
+      + 'Abra Certificado, envie o .pfx novamente e tente emitir de novo.'
+    );
+  }
+  if (/fields\.certificado|certificado:\s*preenchimento obrigat[oó]rio/i.test(msg)) {
+    return (
+      'Empresa no emissor sem certificado vinculado. '
+      + 'Abra Certificado, envie o .pfx e grave a empresa no emissor.'
+    );
+  }
+  return msg;
 };
 
 /**

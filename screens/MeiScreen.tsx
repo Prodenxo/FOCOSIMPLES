@@ -1340,7 +1340,8 @@ function MeiScreenContent() {
           setMeiPeriodsError(toMeiUserErrorMessage(data.remoteError));
         } else if (rows.length === 0) {
           setMeiPeriodsError(
-            'Nenhuma declaração PGDAS-D encontrada para este CNPJ no ano. Transmita a declaração no portal ou confira a procuração e-CAC.',
+            'Nenhuma declaração PGDAS-D encontrada para este CNPJ neste ano. '
+            + 'Se a empresa já declarou, confira o ano do filtro ou transmita no portal da Receita.',
           );
         } else {
           setMeiPeriodsError(null);

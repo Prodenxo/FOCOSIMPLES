@@ -492,6 +492,15 @@ export const criarCatalogoProdutosFromCnaes = async (req, res, next) => {
   }
 };
 
+export const criarCatalogoProdutosFromSpreadsheet = async (req, res, next) => {
+  try {
+    const data = await meiNotasService.criarCatalogoProdutosFromSpreadsheet(req.user.id, req.body);
+    return sendCreated(res, data, 'Produtos importados da planilha');
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export const atualizarCatalogoProduto = async (req, res, next) => {
   try {
     const data = await meiNotasService.atualizarCatalogoProduto(req.user.id, req.params.id, req.body);

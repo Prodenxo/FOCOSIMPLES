@@ -31,9 +31,16 @@ import type { DocumentType, NfseCatalogProduto } from '../services/meiNotasServi
 import {
   atualizarCatalogoNfseProduto,
   criarCatalogoNfseProduto,
+  criarCatalogoProdutosFromSpreadsheet,
   excluirCatalogoNfseProduto,
   listarCatalogoNfseProdutos,
 } from '../services/meiNotasService'
+import type { CatalogoProdutoSpreadsheetRow } from '../lib/catalogoProdutosSpreadsheet'
+import {
+  defaultSpreadsheetDocumentType,
+  downloadCatalogoProdutosTemplate,
+  pickAndParseCatalogoProdutosSpreadsheet,
+} from '../lib/catalogoProdutosSpreadsheet'
 import {
   MeiFlowModalShell,
   MeiFormField,
@@ -97,9 +104,10 @@ export default function MeiCatalogoProdutosModal ({
   onCatalogChanged,
   allowedDocumentTypes,
 }: MeiCatalogoProdutosModalProps) {
-  const { theme } = useMfTheme()
+  const { theme, isDarkMode } = useMfTheme()
   const flow = useMeiFlowStyles()
   const showToast = useAppToastStore((s) => s.show)
+  const isFocoSimples = resolveAppOrigin() === 'focosimples'
 
   const [items, setItems] = useState<NfseCatalogProduto[]>([])
   const [loading, setLoading] = useState(false)
@@ -128,11 +136,24 @@ export default function MeiCatalogoProdutosModal ({
   const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<NfseCatalogProduto | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [addChoiceVisible, setAddChoiceVisible] = useState(false)
+  const [importVisible, setImportVisible] = useState(false)
+  const [importBusy, setImportBusy] = useState(false)
+  const [importFileName, setImportFileName] = useState<string | null>(null)
+  const [importRowCount, setImportRowCount] = useState(0)
+  const [importRows, setImportRows] = useState<CatalogoProdutoSpreadsheetRow[]>([])
 
   const allowedDocTypes = useMemo(
     () => (allowedDocumentTypes?.length ? allowedDocumentTypes : (['NFSE', 'NFE', 'NFCE'] as MeiDocType[])),
     [allowedDocumentTypes],
   )
+
+  const canImportSpreadsheet = useMemo(
+    () => allowedDocTypes.some((t) => t === 'NFE' || t === 'NFCE'),
+    [allowedDocTypes],
+  )
+
+  const choiceBorder = isDarkMode ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)'
 
   const resetList = useCallback(() => {
     setItems([])
@@ -217,15 +238,34 @@ export default function MeiCatalogoProdutosModal ({
   }, [onCatalogChanged])
 
   const openCreate = () => {
+    setAddChoiceVisible(false)
     setEditingId(null)
     const initial = emptyForm()
     if (typeFilter !== 'ALL' && allowedDocTypes.includes(typeFilter)) {
       initial.documentType = typeFilter
+    } else if (isFocoSimples && allowedDocTypes.includes('NFE')) {
+      initial.documentType = 'NFE'
     } else {
       initial.documentType = allowedDocTypes[0] ?? 'NFSE'
     }
     setForm(initial)
     setFormVisible(true)
+  }
+
+  const openAddChoice = () => {
+    if (isFocoSimples && canImportSpreadsheet) {
+      setAddChoiceVisible(true)
+      return
+    }
+    openCreate()
+  }
+
+  const openImportSheet = () => {
+    setAddChoiceVisible(false)
+    setImportFileName(null)
+    setImportRowCount(0)
+    setImportRows([])
+    setImportVisible(true)
   }
 
   const openEdit = (item: NfseCatalogProduto) => {
@@ -319,23 +359,105 @@ export default function MeiCatalogoProdutosModal ({
     void fetchPage({ append: false, reset: true, q: searchQ })
   }
 
-  const emptyListMessage =
-    typeFilter === 'ALL'
+  const handlePickSpreadsheet = async () => {
+    setImportBusy(true)
+    try {
+      const picked = await pickAndParseCatalogoProdutosSpreadsheet()
+      if (!picked) return
+      setImportFileName(picked.fileName)
+      setImportRows(picked.rows)
+      setImportRowCount(picked.rows.length)
+      if (picked.rows.length === 0) {
+        alertDialog('Planilha', 'Nenhuma linha de produto encontrada. Baixe o modelo e preencha.')
+      }
+    } catch (e: unknown) {
+      alertDialog('Erro', e instanceof Error ? e.message : 'Falha ao ler a planilha.')
+    } finally {
+      setImportBusy(false)
+    }
+  }
+
+  const handleDownloadTemplate = async () => {
+    setImportBusy(true)
+    try {
+      await downloadCatalogoProdutosTemplate()
+      showToast('Modelo de planilha pronto.', 'success')
+    } catch (e: unknown) {
+      alertDialog('Erro', e instanceof Error ? e.message : 'Falha ao gerar o modelo.')
+    } finally {
+      setImportBusy(false)
+    }
+  }
+
+  const handleConfirmImport = async () => {
+    if (!importRows.length) {
+      alertDialog('Planilha', 'Selecione uma planilha com produtos.')
+      return
+    }
+    setImportBusy(true)
+    try {
+      const documentType = defaultSpreadsheetDocumentType(allowedDocTypes as DocumentType[])
+      const result = await criarCatalogoProdutosFromSpreadsheet({
+        documentType,
+        rows: importRows.map((r) => ({
+          line: r.line,
+          codigo: r.codigo,
+          descricao: r.descricao,
+          ncm: r.ncm,
+          cfop: r.cfop,
+          unidade: r.unidade,
+          csosn: r.csosn,
+          pisCst: r.pisCst,
+          cofinsCst: r.cofinsCst,
+          preco: r.preco,
+        })),
+      })
+      const n = result.created?.length ?? 0
+      const errN = result.errors?.length ?? 0
+      if (n > 0) {
+        showToast(
+          errN > 0
+            ? `${n} produto(s) importado(s); ${errN} linha(s) com erro.`
+            : (n === 1 ? '1 produto importado.' : `${n} produtos importados.`),
+          errN > 0 ? 'info' : 'success',
+        )
+      } else {
+        alertDialog(
+          'Nada importado',
+          errN > 0
+            ? `Todas as ${errN} linhas falharam. Verifique NCM (8 dígitos), CFOP e CSOSN.`
+            : 'Nenhuma linha válida.',
+        )
+      }
+      setImportVisible(false)
+      resetList()
+      await fetchPage({ append: false, reset: true, q: searchQ })
+      notifyChanged()
+    } catch (e: unknown) {
+      alertDialog('Erro', e instanceof Error ? e.message : 'Falha ao importar planilha.')
+    } finally {
+      setImportBusy(false)
+    }
+  }
+
+  const emptyListMessage = isFocoSimples && canImportSpreadsheet
+    ? 'Nenhum item. Toque em + para criar produto ou importar planilha.'
+    : typeFilter === 'ALL'
       ? 'Nenhum item. Toque em + para adicionar.'
       : `Nenhum item de ${typeFilter === 'NFSE' ? 'NFS-e' : typeFilter === 'NFE' ? 'NF-e' : 'NFC-e'}. Toque em + para adicionar.`
 
   const headerRight = useMemo(
     () => (
       <Pressable
-        onPress={openCreate}
+        onPress={openAddChoice}
         style={flow.headerAdd}
         accessibilityRole="button"
-        accessibilityLabel="Novo serviço"
+        accessibilityLabel="Adicionar produto ou serviço"
       >
         <Ionicons name="add" size={22} color={theme.primary} />
       </Pressable>
     ),
-    [flow.headerAdd, theme.primary, openCreate],
+    [flow.headerAdd, theme.primary],
   )
 
   return (
@@ -419,6 +541,118 @@ export default function MeiCatalogoProdutosModal ({
           Lista até {PAGE_SIZE} itens por página; deslize para carregar mais.
         </Text>
       </MeiFlowModalShell>
+
+      <MeiFormSheet
+        visible={addChoiceVisible}
+        title="Como adicionar?"
+        onClose={() => setAddChoiceVisible(false)}
+      >
+        <Text style={[flow.hint, { marginBottom: 14 }]}>
+          Produtos NF-e precisam de descrição, NCM, CFOP e CSOSN. CNAE não substitui isso.
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={openCreate}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+            padding: 14,
+            marginBottom: 10,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: choiceBorder,
+          }}
+        >
+          <Ionicons name="create-outline" size={22} color={theme.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: theme.text, fontWeight: '700', fontSize: 15 }}>Criar produto</Text>
+            <Text style={{ color: theme.textSecondary, fontSize: 12, marginTop: 2 }}>
+              Formulário completo com todos os campos fiscais
+            </Text>
+          </View>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={openImportSheet}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+            padding: 14,
+            marginBottom: 10,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: choiceBorder,
+          }}
+        >
+          <Ionicons name="document-attach-outline" size={22} color={theme.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: theme.text, fontWeight: '700', fontSize: 15 }}>Importar planilha</Text>
+            <Text style={{ color: theme.textSecondary, fontSize: 12, marginTop: 2 }}>
+              Excel/CSV com produtos já configurados
+            </Text>
+          </View>
+        </Pressable>
+      </MeiFormSheet>
+
+      <MeiFormSheet
+        visible={importVisible}
+        title="Importar planilha de produtos"
+        onClose={() => !importBusy && setImportVisible(false)}
+        footer={
+          <MeiFormSheetActions
+            onCancel={() => setImportVisible(false)}
+            onConfirm={() => void handleConfirmImport()}
+            confirmLabel={importBusy ? 'Importando…' : 'Importar'}
+            loading={importBusy}
+            disabled={importBusy || importRowCount === 0}
+          />
+        }
+      >
+        <Text style={[flow.hint, { marginBottom: 12 }]}>
+          Colunas: codigo, descricao, ncm (8 dígitos), cfop, unidade, csosn, pisCst, cofinsCst, preco.
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => void handleDownloadTemplate()}
+          disabled={importBusy}
+          style={{ marginBottom: 12 }}
+        >
+          <Text style={{ color: theme.primary, fontWeight: '700', fontSize: 14 }}>
+            Baixar modelo (.xlsx)
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => void handlePickSpreadsheet()}
+          disabled={importBusy}
+          style={{
+            padding: 14,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: choiceBorder,
+            alignItems: 'center',
+            marginBottom: 12,
+          }}
+        >
+          {importBusy ? (
+            <ActivityIndicator size="small" color={theme.primary} />
+          ) : (
+            <>
+              <Ionicons name="folder-open-outline" size={22} color={theme.primary} />
+              <Text style={{ color: theme.text, fontWeight: '600', marginTop: 8 }}>
+                Selecionar arquivo
+              </Text>
+            </>
+          )}
+        </Pressable>
+        {importFileName ? (
+          <Text style={{ color: theme.textSecondary, fontSize: 13 }}>
+            {importFileName} · {importRowCount} linha(s) pronta(s)
+          </Text>
+        ) : null}
+      </MeiFormSheet>
 
       <MeiFormSheet
         visible={formVisible}

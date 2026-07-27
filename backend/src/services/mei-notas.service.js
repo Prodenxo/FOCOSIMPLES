@@ -58,6 +58,13 @@ import {
   hydrateMeiNfeEmitenteIeFromEmpresa,
 } from './plugnotas/plugnotas-mei-nfe-emit-force.js';
 import {
+  extractNfeNumeroFromDuplicidadeMessage,
+  healEmpresaNfeNumeracaoIfDuplicidade,
+  isNfeDuplicidadeRejection,
+  readNfeNumeroFromHistoryRow,
+  syncEmpresaNfeNumeracaoBeforeEmit,
+} from './plugnotas/plugnotas-empresa-nfe-numeracao-heal.js';
+import {
   cancelarNfe,
   consultarNfe,
   consultarNfePorIdOuProtocolo,
@@ -1174,12 +1181,16 @@ const NFSE_EMIT_TERMINAL_POLL_MAX_MS = 8000;
 const NFSE_EMIT_PROCESSING_POLL_MAX_MS = 28000;
 const NFSE_EMIT_TERMINAL_POLL_INTERVAL_MS = 1000;
 const NFSE_EMIT_E0014_RETRY_MAX = 5;
+/** NF-e: SEFAZ pode devolver PROCESSANDO e só depois REJEITADO (duplicidade) — precisa poll + várias tentativas. */
+const NFE_EMIT_DUPLICIDADE_RETRY_MAX = 10;
+const NFE_EMIT_TERMINAL_POLL_MAX_MS = 20000;
+const NFE_EMIT_TERMINAL_POLL_INTERVAL_MS = 1200;
 const NFSE_PERIODO_FAST_PAGES = 6;
 const NFSE_PROCESSING_FOLLOWUP_MS = 95000;
 /** Tempo mínimo na lista principal antes de arquivar E0014 automaticamente. */
 const NFSE_E0014_VISIBLE_BEFORE_ARCHIVE_MS = 20000;
 
-/** Serializa emissões NFS-e por CNPJ prestador — evita duas requisições paralelas queimando DPS seguidos. */
+/** Serializa emissões NFS-e / NF-e por CNPJ — evita corrida no contador (estilo RPS). */
 const nfseEmitLockTailByCnpj = new Map();
 
 const withNfseEmitLock = async (cnpjPrestador, task) => {
@@ -1204,6 +1215,8 @@ const withNfseEmitLock = async (cnpjPrestador, task) => {
     }
   }
 };
+
+const withNfeEmitLock = withNfseEmitLock;
 
 const isHiddenNfseE0014RejectedRow = (row) => {
   if (normalizeDocumentType(row?.document_type || DOCUMENT_TYPE_NFSE) !== DOCUMENT_TYPE_NFSE) {
@@ -1520,6 +1533,120 @@ const emitNfseWithAutoRpsRecovery = async (
   });
 
   return { response, emitPayload };
+};
+
+/**
+ * Emite NF-e/NFC-e com sync de numeração + retry em duplicidade (mesmo padrão do RPS/E0014).
+ * Importante: o POST costuma voltar PROCESSANDO; só após poll terminal sabemos se foi duplicidade.
+ */
+const emitNfeWithAutoNumeracaoRecovery = async (
+  adapter,
+  userId,
+  cnpjEmitente,
+  basePayload,
+  documentType,
+  prep = {},
+) => {
+  const emitStartedAt = Date.now();
+  let localMax = parsePositiveIntLocal(prep.initialLocalMax, 0)
+    || parsePositiveIntLocal(await queryMaxNfeNumeroEmitted(userId, cnpjEmitente), 0);
+  let emitPayload = { ...basePayload };
+  let response;
+  let consecutiveDuplicidade = 0;
+
+  for (let attempt = 0; attempt < NFE_EMIT_DUPLICIDADE_RETRY_MAX; attempt += 1) {
+    emitPayload = { ...basePayload };
+    emitPayload.idIntegracao = buildMeiIdIntegracao(userId);
+
+    const sync = await syncEmpresaNfeNumeracaoBeforeEmit(cnpjEmitente, {
+      localMax,
+      documentType,
+    });
+    console.info('[plugnotas-nfe-num] emit baseline', {
+      attempt: attempt + 1,
+      localMax,
+      nextNumero: sync?.nextNumero ?? null,
+      syncReason: sync?.reason ?? null,
+    });
+
+    response = await adapter.emitir(emitPayload);
+    let status = extractPlugNotasStatus(response);
+    let normalized = normalizeStatus(status);
+
+    // Igual NFS-e: PROCESSANDO no POST → consulta até terminal antes de decidir retry.
+    if (normalized === 'processando') {
+      const integracaoPoll = extractIntegracaoId(response) || emitPayload.idIntegracao;
+      if (integracaoPoll && adapter.consultarPorIntegracao) {
+        response = await awaitNfseEmitTerminalResponse(adapter, {
+          initialResponse: response,
+          idIntegracao: integracaoPoll,
+          cnpjPrestador: cnpjEmitente,
+          maxWaitMs: NFE_EMIT_TERMINAL_POLL_MAX_MS,
+          intervalMs: NFE_EMIT_TERMINAL_POLL_INTERVAL_MS,
+        });
+        status = extractPlugNotasStatus(response);
+        normalized = normalizeStatus(status);
+      }
+    }
+
+    if (!isNfeDuplicidadeRejection(response) || normalized !== 'rejeitado') {
+      break;
+    }
+
+    consecutiveDuplicidade += 1;
+    const rejectedNumero = extractNfeNumeroFromDuplicidadeMessage(response);
+    await healEmpresaNfeNumeracaoIfDuplicidade(cnpjEmitente, response, {
+      documentType,
+      localMax,
+    });
+    if (rejectedNumero) {
+      // Após várias duplicidades seguidas, salta mais (série antiga na SEFAZ).
+      const jump = consecutiveDuplicidade >= 3 ? Math.min(25, consecutiveDuplicidade * 5) : 1;
+      localMax = Math.max(localMax, rejectedNumero + jump - 1);
+    }
+
+    console.warn('[plugnotas-nfe-num] duplicidade na emissão — avanço e nova tentativa', {
+      attempt: attempt + 1,
+      rejectedNumero,
+      nextLocalMax: localMax,
+      consecutiveDuplicidade,
+    });
+  }
+
+  console.info('[plugnotas-nfe-num] emit response', {
+    status: normalizeStatus(extractPlugNotasStatus(response)),
+    elapsedMs: Date.now() - emitStartedAt,
+  });
+
+  return { response, emitPayload, localMax };
+};
+
+const queryMaxNfeNumeroEmitted = async (userId, cnpjEmitente) => {
+  const cnpj = normalizeDoc(cnpjEmitente);
+  if (!userId || cnpj.length !== 14) return null;
+
+  const dbClient = getDb();
+  const { data, error } = await dbClient
+    .from(TABLE)
+    .select('payload_json, response_json, document_type, cnpj_prestador')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(2000);
+  if (error) throw badRequest(error.message);
+
+  let maxKnown = 0;
+  for (const row of data || []) {
+    const docType = row.document_type;
+    if (docType !== DOCUMENT_TYPE_NFE && docType !== DOCUMENT_TYPE_NFCE) continue;
+
+    const rowCnpj = normalizeDoc(row.cnpj_prestador)
+      || normalizeDoc(row.payload_json?.emitente?.cpfCnpj);
+    if (rowCnpj && rowCnpj !== cnpj) continue;
+
+    const numero = readNfeNumeroFromHistoryRow(row);
+    if (numero > maxKnown) maxKnown = numero;
+  }
+  return maxKnown > 0 ? maxKnown : null;
 };
 
 const queryMaxRpsNumeroEmitted = async (userId, cnpjPrestador) => {
@@ -1932,6 +2059,7 @@ export const emitirNota = async (userId, input) => {
     phase = 'plugnotas_emit';
     let cnpjPrestadorNfse = '';
     let nfseEmitPrep = null;
+    let cnpjEmitenteNfe = '';
     if (documentType === DOCUMENT_TYPE_NFSE) {
       cnpjPrestadorNfse = prestadorDoc
         || String(payload?.prestador?.cpfCnpj || payload?.emitente?.cpfCnpj || '').replace(/\D/g, '');
@@ -1949,6 +2077,10 @@ export const emitirNota = async (userId, input) => {
         };
       }
     }
+    if (documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE) {
+      cnpjEmitenteNfe = prestadorDoc
+        || normalizeDoc(emitPayload?.emitente?.cpfCnpj || payload?.emitente?.cpfCnpj || '');
+    }
     let response;
     try {
       if (documentType === DOCUMENT_TYPE_NFSE && cnpjPrestadorNfse.length === 14) {
@@ -1958,6 +2090,21 @@ export const emitirNota = async (userId, input) => {
           cnpjPrestadorNfse,
           emitPayload,
           nfseEmitPrep ?? {},
+        ));
+        response = auto.response;
+        emitPayload = auto.emitPayload;
+      } else if (
+        (documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE)
+        && cnpjEmitenteNfe.length === 14
+      ) {
+        const initialLocalMax = await queryMaxNfeNumeroEmitted(userId, cnpjEmitenteNfe);
+        const auto = await withNfeEmitLock(cnpjEmitenteNfe, () => emitNfeWithAutoNumeracaoRecovery(
+          adapter,
+          userId,
+          cnpjEmitenteNfe,
+          emitPayload,
+          documentType,
+          { initialLocalMax: initialLocalMax ?? 0 },
         ));
         response = auto.response;
         emitPayload = auto.emitPayload;
@@ -2057,6 +2204,25 @@ export const emitirNota = async (userId, input) => {
       }
       if (normalizeStatus(status) === 'processando') {
         scheduleNfseProcessandoSyncFollowUp(userId, created.id);
+      }
+    }
+
+    if (
+      (documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE)
+      && normalizeStatus(status) === 'rejeitado'
+    ) {
+      const cnpjEmitente = prestadorDoc
+        || normalizeDoc(emitPayload?.emitente?.cpfCnpj || '');
+      if (cnpjEmitente.length === 14) {
+        try {
+          await healEmpresaNfeNumeracaoIfDuplicidade(cnpjEmitente, response, {
+            documentType,
+          });
+        } catch (err) {
+          console.warn('[mei-notas] heal numeração NF-e na emissão falhou', {
+            message: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
     }
 
@@ -2788,12 +2954,18 @@ export const criarCatalogoProdutosFromCnaes = async (userId, body = {}) => {
   const documentType = normalizeDocumentType(
     body.documentType || body.document_type || DOCUMENT_TYPE_NFSE,
   );
+  if (documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE) {
+    throw badRequest(
+      'CNAE não cria produto NF-e. Cadastre o produto completo ou importe planilha com NCM/CFOP/CSOSN.',
+      { code: 'CATALOGO_CNAE_NFE_FORBIDDEN' },
+    );
+  }
+
   const rawItems = Array.isArray(body.items) ? body.items : Array.isArray(body.cnaes) ? body.cnaes : [];
   if (rawItems.length === 0) {
     throw badRequest('Informe ao menos um CNAE em items.');
   }
 
-  const isNfeLike = documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE;
   const created = [];
   const skipped = [];
 
@@ -2804,7 +2976,7 @@ export const criarCatalogoProdutosFromCnaes = async (userId, body = {}) => {
       continue;
     }
     const descricao = String(item?.descricao || item?.discriminacao || '').trim()
-      || (isNfeLike ? `Produto CNAE ${cnae}` : `Serviço CNAE ${cnae}`);
+      || `Serviço CNAE ${cnae}`;
     const codigoServico = String(
       item?.codigoServico ?? item?.servicoCodigo ?? item?.codigo_servico ?? '',
     ).trim();
@@ -2819,29 +2991,16 @@ export const criarCatalogoProdutosFromCnaes = async (userId, body = {}) => {
       continue;
     }
 
-    const metadata_json = isNfeLike
-      ? {
-          cnaeDraft: true,
-          needsNcm: true,
-          cnaeDescricao: descricao.slice(0, 500),
-          ncm: '',
-          cfop: '5102',
-          unidade: 'UN',
-          icmsCsosn: '102',
-          pisCst: '49',
-          cofinsCst: '49',
-          ...(item?.principal === true ? { cnaePrincipal: true } : {}),
-        }
-      : {
-          cnaeDraft: true,
-          needsServicoCodigo: !codigoServico,
-          cnaeDescricao: descricao.slice(0, 500),
-          ...(item?.principal === true ? { cnaePrincipal: true } : {}),
-        };
+    const metadata_json = {
+      cnaeDraft: true,
+      needsServicoCodigo: !codigoServico,
+      cnaeDescricao: descricao.slice(0, 500),
+      ...(item?.principal === true ? { cnaePrincipal: true } : {}),
+    };
 
     const row = await criarCatalogoProduto(userId, {
-      documentType,
-      codigo: isNfeLike ? (codigoServico || cnae) : codigoServico,
+      documentType: DOCUMENT_TYPE_NFSE,
+      codigo: codigoServico,
       cnae,
       discriminacao: descricao.slice(0, 500),
       aliquota: 0,
@@ -2850,7 +3009,111 @@ export const criarCatalogoProdutosFromCnaes = async (userId, body = {}) => {
     created.push(row);
   }
 
-  return { created, skipped, documentType };
+  return { created, skipped, documentType: DOCUMENT_TYPE_NFSE };
+};
+
+const onlyDigitsCatalog = (value, max) => String(value ?? '').replace(/\D/g, '').slice(0, max);
+
+/**
+ * Importa produtos NF-e/NFC-e a partir de linhas de planilha (já parseadas no cliente).
+ * Cada linha válida deve trazer descrição + NCM + CFOP + unidade + CSOSN.
+ */
+export const criarCatalogoProdutosFromSpreadsheet = async (userId, body = {}) => {
+  const documentType = normalizeDocumentType(
+    body.documentType || body.document_type || DOCUMENT_TYPE_NFE,
+  );
+  if (documentType !== DOCUMENT_TYPE_NFE && documentType !== DOCUMENT_TYPE_NFCE) {
+    throw badRequest(
+      'Importação por planilha é apenas para NF-e / NFC-e. Use o formulário ou CNAE para NFS-e.',
+      { code: 'CATALOGO_SPREADSHEET_DOC_TYPE' },
+    );
+  }
+
+  const rawRows = Array.isArray(body.rows) ? body.rows : [];
+  if (rawRows.length === 0) {
+    throw badRequest('Informe ao menos uma linha em rows.');
+  }
+  if (rawRows.length > 500) {
+    throw badRequest('Limite de 500 linhas por importação.');
+  }
+
+  const created = [];
+  const errors = [];
+
+  for (let i = 0; i < rawRows.length; i += 1) {
+    const row = rawRows[i] || {};
+    const line = Number(row.line || row.linha || i + 2);
+    const descricao = String(row.descricao || row.discriminacao || row.Descricao || '').trim();
+    const codigo = String(row.codigo || row.sku || row.Codigo || '').trim() || `IMP-${line}`;
+    const ncm = onlyDigitsCatalog(row.ncm || row.NCM, 8);
+    const cfop = onlyDigitsCatalog(row.cfop || row.CFOP, 4);
+    const unidade = String(row.unidade || row.Unidade || 'UN').trim() || 'UN';
+    const icmsCsosn = onlyDigitsCatalog(
+      row.csosn || row.icmsCsosn || row.icms_csosn || row.CSOSN,
+      3,
+    );
+    const pisCst = onlyDigitsCatalog(row.pisCst || row.pis_cst || row.PIS || '49', 2) || '49';
+    const cofinsCst = onlyDigitsCatalog(
+      row.cofinsCst || row.cofins_cst || row.COFINS || '49',
+      2,
+    ) || '49';
+    const valorRaw = row.preco ?? row.valor_sugerido ?? row.valorSugerido ?? row.Preco;
+    let valor_sugerido = null;
+    if (valorRaw != null && String(valorRaw).trim() !== '') {
+      const n = toNumber(valorRaw);
+      if (n == null || n < 0) {
+        errors.push({ line, reason: 'preco_invalido', message: 'Preço inválido.' });
+        continue;
+      }
+      valor_sugerido = n;
+    }
+
+    if (!descricao) {
+      errors.push({ line, reason: 'descricao', message: 'Descrição obrigatória.' });
+      continue;
+    }
+    if (ncm.length !== 8) {
+      errors.push({ line, reason: 'ncm', message: 'NCM deve ter 8 dígitos.' });
+      continue;
+    }
+    if (cfop.length !== 4) {
+      errors.push({ line, reason: 'cfop', message: 'CFOP deve ter 4 dígitos.' });
+      continue;
+    }
+    if (icmsCsosn.length !== 3) {
+      errors.push({ line, reason: 'csosn', message: 'CSOSN deve ter 3 dígitos.' });
+      continue;
+    }
+
+    try {
+      const createdRow = await criarCatalogoProduto(userId, {
+        documentType,
+        codigo,
+        cnae: '',
+        discriminacao: descricao.slice(0, 500),
+        aliquota: 0,
+        valor_sugerido,
+        metadata_json: {
+          ncm,
+          cfop,
+          unidade,
+          icmsCsosn,
+          pisCst,
+          cofinsCst,
+          importedFromSpreadsheet: true,
+        },
+      });
+      created.push(createdRow);
+    } catch (err) {
+      errors.push({
+        line,
+        reason: err?.errors?.code || 'create_failed',
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  return { created, errors, documentType };
 };
 
 /**
@@ -3079,6 +3342,28 @@ export const obterNota = async (userId, id, { sync = false, skipWhatsappDelivery
         updated.payload_json,
         response,
       );
+    }
+  }
+
+  if (
+    (archivedOrUpdated.document_type === DOCUMENT_TYPE_NFE
+      || archivedOrUpdated.document_type === DOCUMENT_TYPE_NFCE)
+    && normalizeStatus(status) === 'rejeitado'
+    && archivedOrUpdated.id === updated.id
+  ) {
+    const cnpjEmitente = normalizeDoc(updated.cnpj_prestador)
+      || normalizeDoc(updated.payload_json?.emitente?.cpfCnpj);
+    if (cnpjEmitente.length === 14) {
+      try {
+        await healEmpresaNfeNumeracaoIfDuplicidade(cnpjEmitente, response, {
+          documentType: archivedOrUpdated.document_type,
+        });
+      } catch (err) {
+        console.warn('[mei-notas] heal numeração NF-e após duplicidade falhou', {
+          notaId: updated.id,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
   }
 

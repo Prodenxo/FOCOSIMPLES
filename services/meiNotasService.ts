@@ -657,14 +657,48 @@ export interface CriarCatalogoFromCnaesResult {
   documentType: string;
 }
 
-/** Importa CNAEs da Receita como rascunhos de serviço (`POST /catalogo/produtos/from-cnaes`). */
+/** Importa CNAEs da Receita como rascunhos de serviço NFS-e (`POST /catalogo/produtos/from-cnaes`). */
 export async function criarCatalogoProdutosFromCnaes (
   input: CriarCatalogoFromCnaesInput
 ): Promise<CriarCatalogoFromCnaesResult> {
   return await apiClient.post<CriarCatalogoFromCnaesResult>(
     '/mei-notas/catalogo/produtos/from-cnaes',
-    input
+    { ...input, documentType: 'NFSE' },
   );
+}
+
+export interface CriarCatalogoFromSpreadsheetInput {
+  documentType?: DocumentType
+  rows: Array<{
+    line?: number
+    codigo?: string
+    descricao: string
+    ncm: string
+    cfop: string
+    unidade?: string
+    csosn?: string
+    icmsCsosn?: string
+    pisCst?: string
+    cofinsCst?: string
+    preco?: number | string | null
+    valor_sugerido?: number | string | null
+  }>
+}
+
+export interface CriarCatalogoFromSpreadsheetResult {
+  created: NfseCatalogProduto[]
+  errors: Array<{ line: number; reason: string; message?: string }>
+  documentType: string
+}
+
+/** Importa produtos NF-e a partir de linhas de planilha. */
+export async function criarCatalogoProdutosFromSpreadsheet (
+  input: CriarCatalogoFromSpreadsheetInput,
+): Promise<CriarCatalogoFromSpreadsheetResult> {
+  return await apiClient.post<CriarCatalogoFromSpreadsheetResult>(
+    '/mei-notas/catalogo/produtos/from-spreadsheet',
+    input,
+  )
 }
 
 export interface CodigoServicoReferencia {

@@ -88,7 +88,6 @@ export function ProvisionClientWizardModal ({
   }) | null>(null)
 
   const [cnpjData, setCnpjData] = useState<CnpjLookupData | null>(null)
-  const [catalogMode, setCatalogMode] = useState<'NFE' | 'NFSE'>('NFE')
   const [selectedCnaes, setSelectedCnaes] = useState<Set<string>>(new Set())
 
   const stepAnim = useRef(new Animated.Value(1)).current
@@ -331,7 +330,7 @@ export function ProvisionClientWizardModal ({
     setError('')
     try {
       await adminCriarCatalogoFromCnaes(createdUserId, {
-        documentType: catalogMode,
+        documentType: 'NFSE',
         items: items.map((c) => ({
           codigo: c.codigo,
           descricao: c.descricao,
@@ -617,30 +616,12 @@ export function ProvisionClientWizardModal ({
             {step === 'catalogo' ? (
               <>
                 <Text style={styles.hint}>
-                  Opcional: marque atividades para rascunho no catálogo. Pode pular e importar depois por planilha.
+                  Opcional: importe CNAEs como serviços NFS-e (código LC 116 depois).
+                  Produtos NF-e o cliente cadastra no catálogo (formulário completo ou planilha).
                 </Text>
-                <View style={styles.chipRow}>
-                  {([
-                    { id: 'NFE' as const, label: 'Venda (NF-e)' },
-                    { id: 'NFSE' as const, label: 'Serviço (NFS-e)' },
-                  ]).map((opt) => {
-                    const active = catalogMode === opt.id
-                    return (
-                      <Pressable
-                        key={opt.id}
-                        onPress={() => setCatalogMode(opt.id)}
-                        style={[styles.chip, active && styles.chipActive]}
-                      >
-                        <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                          {opt.label}
-                        </Text>
-                      </Pressable>
-                    )
-                  })}
-                </View>
                 {cnaes.length === 0 ? (
                   <Text style={styles.hint}>
-                    Nenhum CNAE na confirmação. Pule e cadastre produtos/serviços depois.
+                    Nenhum CNAE na confirmação. Pule e cadastre produtos/serviços depois no catálogo.
                   </Text>
                 ) : (
                   cnaes.map((item) => {

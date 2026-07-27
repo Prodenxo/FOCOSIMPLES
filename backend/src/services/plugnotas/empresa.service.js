@@ -608,6 +608,30 @@ const tryUpdateEmpresa = async (cnpj, payload) => {
   return { response: null, attempt: null, lastError, failures };
 };
 
+/**
+ * PATCH direto em /empresa/:cnpj sem política "apenas NFS-e" / documentosAtivos.
+ * Uso interno: heal de numeração NF-e, vínculo de certificado, etc.
+ * @param {string} cnpjInput
+ * @param {Record<string, unknown>} payload
+ */
+export const patchEmpresaPlugNotasDireto = async (cnpjInput, payload) => {
+  const cnpj = normalizeDoc(cnpjInput);
+  if (cnpj.length !== 14) {
+    throw badRequest('CNPJ inválido para PATCH direto no emissor.');
+  }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw badRequest('Payload inválido para PATCH direto no emissor.');
+  }
+  const body = { ...payload, cpfCnpj: cnpj };
+  delete body.cnpj;
+  delete body.documentosAtivos;
+  const updateResult = await tryUpdateEmpresa(cnpj, body);
+  if (updateResult.response) return updateResult.response;
+  const err = updateResult.lastError;
+  if (err) throw err;
+  throw badRequest('Falha ao atualizar empresa no emissor (PATCH direto).');
+};
+
 /** POST /certificado retorna 409 quando o .pfx já foi cadastrado na conta. */
 const isCertificadoDuplicado409 = (error) => {
   if (Number(error?.status) !== 409) return false;
@@ -644,9 +668,8 @@ const extractCertificadoIdFromEmpresaPayload = (payload) => {
 
 /**
  * Resolve o ID do certificado existente no PlugNotas por CNPJ.
- * Tenta GET /empresa/{cnpj} e GET /certificado?cpfCnpj=... + GET /certificado.
- * Usado após 409 no POST /certificado E como fallback quando o ID não está salvo localmente.
- * Logs estruturados por etapa: US-MEI-FISC-04 (`PLUGNOTAS_CERT_409_RESOLVE_LOG_LEVEL`).
+ * Prefere listagem/filtro (IDs vivos) e só usa o ID gravado na empresa por último —
+ * empresa pode apontar para certificado apagado/inválido.
  * @param {string|undefined} cpfCnpjInput
  * @returns {Promise<string|null>}
  */
@@ -654,15 +677,17 @@ export const resolverCertificadoIdPorCnpj = async (cpfCnpjInput) => {
   const cnpj = normalizeDoc(cpfCnpjInput || '');
   if (cnpj.length !== 14) return null;
 
+  let fromEmpresa = null;
   try {
     const emp = await requestJson('GET', `/empresa/${encodeURIComponent(cnpj)}`);
-    const fromEmp = extractCertificadoIdFromEmpresaPayload(emp);
-    if (fromEmp) return fromEmp;
-    logPlugnotasCertificado409Resolve({
-      step: PLUGNOTAS_CERT_409_RESOLVE_STEPS.EMPRESA_GET,
-      cpfCnpj14: cnpj,
-      outcome: 'no_certificado_id_in_payload'
-    });
+    fromEmpresa = extractCertificadoIdFromEmpresaPayload(emp);
+    if (!fromEmpresa) {
+      logPlugnotasCertificado409Resolve({
+        step: PLUGNOTAS_CERT_409_RESOLVE_STEPS.EMPRESA_GET,
+        cpfCnpj14: cnpj,
+        outcome: 'no_certificado_id_in_payload'
+      });
+    }
   } catch (err) {
     if (err?.status !== 404 && err?.status !== 400) throw err;
     logPlugnotasCertificado409Resolve({
@@ -702,6 +727,18 @@ export const resolverCertificadoIdPorCnpj = async (cpfCnpjInput) => {
     const fromList = extrairCertificadoIdDeListagem(list, cnpj);
     if (fromList) return fromList;
     const items = normalizeCertificadoListItems(list);
+    // Se a empresa aponta um ID que ainda existe na listagem geral, aceita.
+    if (fromEmpresa) {
+      const ids = items
+        .map((item) => {
+          if (!item || typeof item !== 'object') return null;
+          return normalizeCertificadoIdCandidate(
+            item.id ?? item._id ?? item.uuid ?? item.certificadoId ?? item.idCertificado
+          );
+        })
+        .filter(Boolean);
+      if (ids.includes(fromEmpresa)) return fromEmpresa;
+    }
     const first = items[0] && typeof items[0] === 'object' ? items[0] : null;
     logPlugnotasCertificado409Resolve({
       step: PLUGNOTAS_CERT_409_RESOLVE_STEPS.PARSE_LISTAGEM,
@@ -718,12 +755,57 @@ export const resolverCertificadoIdPorCnpj = async (cpfCnpjInput) => {
         outcome: 'http_error',
         httpStatus: 404
       });
-      return null;
+      return fromEmpresa || null;
     }
     throw err;
   }
 
-  return null;
+  // Último recurso: ID da empresa (pode estar inválido — quem chama deve re-vincular se emissão falhar)
+  return fromEmpresa || null;
+};
+
+/**
+ * Vincula um certificado válido à empresa no PlugNotas (PATCH mínimo preservando IE/docs).
+ * @param {string} cnpjInput
+ * @param {string} certificadoId
+ * @param {Record<string, unknown>|null|undefined} [empresa]
+ */
+export const vincularCertificadoEmpresaPlugNotas = async (
+  cnpjInput,
+  certificadoId,
+  empresa = null,
+) => {
+  const cnpj = normalizeDoc(cnpjInput);
+  const cert = String(certificadoId || '').trim();
+  if (cnpj.length !== 14) {
+    throw badRequest('CNPJ inválido para vincular certificado.');
+  }
+  if (!cert) {
+    throw badRequest('ID do certificado é obrigatório.');
+  }
+
+  let emp = empresa && typeof empresa === 'object' ? empresa : null;
+  if (!emp) {
+    try {
+      emp = unwrapPlugnotasEmpresaRecord(await consultarEmpresaPlugNotas(cnpj)) || {};
+    } catch {
+      emp = {};
+    }
+  }
+
+  const ie = String(emp.inscricaoEstadual || '').trim();
+  const payload = {
+    cpfCnpj: cnpj,
+    certificado: cert,
+    regimeTributario: Number(emp.regimeTributario) || 1,
+    simplesNacional: true,
+  };
+  if (ie) payload.inscricaoEstadual = ie;
+  if (emp.nfe) payload.nfe = emp.nfe;
+  if (emp.nfse) payload.nfse = emp.nfse;
+  if (emp.nfce) payload.nfce = emp.nfce;
+
+  return atualizarEmpresaPlugNotas(payload);
 };
 
 /**
@@ -750,6 +832,11 @@ export const ensureMeiRegimeEspecialPlugnotasEmpresa = async (cpfCnpjInput, cert
   const cnpj = normalizeDoc(cpfCnpjInput || '');
   if (cnpj.length !== 14) {
     return { ok: false, patched: false, reason: 'invalid_cnpj' };
+  }
+
+  // Foco Simples = Simples Nacional sem forçar MEI/IE ISENTO (quebra NF-e com IE real).
+  if (String(env.APP_PRODUCT || '').trim().toLowerCase() === 'focosimples') {
+    return { ok: true, patched: false, reason: 'focosimples_skip_mei_regime' };
   }
 
   let empresaRaw;
