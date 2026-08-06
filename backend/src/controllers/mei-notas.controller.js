@@ -1,6 +1,10 @@
 import { env } from '../config/env.js';
 import * as meiNotasService from '../services/mei-notas.service.js';
 import {
+  buscarNcmsCatalogo,
+  sugerirNcmsPorTexto,
+} from '../services/ncm-catalog.service.js';
+import {
   consultarEmpresaAndReconcileMirror,
   persistDocumentosAtivosMirrorAfterEmpresa
 } from '../services/mei-notas-documentos-mirror.js';
@@ -428,6 +432,28 @@ export const sugerirCatalogoCodigosServicos = async (req, res, next) => {
     const limit = parseCatalogLimit(req.query?.limit);
     const data = await meiNotasService.sugerirCodigosServicosPorTexto({ texto, limit });
     return sendSuccess(res, data, 'Sugestões de códigos de serviço');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const listarCatalogoNcms = async (req, res, next) => {
+  try {
+    const q = String(req.query?.q || '').trim();
+    const limit = parseCatalogLimit(req.query?.limit);
+    const data = await buscarNcmsCatalogo({ q, limit });
+    return sendSuccess(res, data, 'NCMs listados');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const sugerirCatalogoNcms = async (req, res, next) => {
+  try {
+    const texto = String(req.query?.texto || req.query?.q || '').trim();
+    const limit = parseCatalogLimit(req.query?.limit);
+    const data = await sugerirNcmsPorTexto({ texto, limit });
+    return sendSuccess(res, data, 'Sugestões de NCM');
   } catch (error) {
     return next(error);
   }

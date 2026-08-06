@@ -142,10 +142,22 @@ export const ensureCalendarChecklistTable = async (options = {}) => {
   }
 };
 
+export const NCMS_SCHEMA_SQL = `
+create table if not exists public.ncms (
+  code varchar(8) primary key,
+  description text not null,
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_ncms_description_lower
+  on public.ncms (lower(description));
+`;
+
 const ensureDasSchema = async (client) => {
   await client.query(DAS_STATUS_SCHEMA_SQL);
   await client.query(DAS_JOB_RUNS_SCHEMA_SQL);
   await client.query(CALENDAR_AGENDA_WHATSAPP_SQL);
+  await client.query(NCMS_SCHEMA_SQL);
 };
 
 export const bootstrapDatabase = async (options = {}) => {

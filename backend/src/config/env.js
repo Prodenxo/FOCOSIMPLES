@@ -328,6 +328,7 @@ export const env = {
    * `true`: após `emit_nfse` pelo OpenClaw, agenda envio do PDF via Z-API (cron
    * `/api/cron/nfse-whatsapp-pending`). Requer Z-API outbound (não usa n8n).
    */
+  NCM_SYNC_ENABLED: process.env.NCM_SYNC_ENABLED || 'true',
   OPENCLAW_NFSE_AUTO_WHATSAPP_ENABLED:
     process.env.OPENCLAW_NFSE_AUTO_WHATSAPP_ENABLED || "false",
   /**

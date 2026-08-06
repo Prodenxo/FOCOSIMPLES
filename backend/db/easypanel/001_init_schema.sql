@@ -364,6 +364,14 @@ CREATE TABLE public.codigosservicos (
   descricao text
 );
 
+CREATE TABLE public.ncms (
+  code varchar(8) PRIMARY KEY,
+  description text NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_ncms_description_lower ON public.ncms (lower(description));
+
 CREATE TABLE public.das_mei (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   created_at timestamptz NOT NULL DEFAULT now(),

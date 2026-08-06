@@ -2,6 +2,7 @@ import Constants from 'expo-constants';
 import { fetch as expoFetch } from 'expo/fetch';
 import { supabase } from './supabase';
 import { mimeFromFilename, persistBinaryDownload } from './platformDownload';
+import { formatApiNetworkError, isApiNetworkError } from './apiNetworkError';
 import { getMeiApiBaseUrl } from './runtimeEnv';
 
 function resolveApiUrl(): string {
@@ -79,14 +80,23 @@ const requestJson = async <T>(path: string, options: RequestInit = {}): Promise<
       : undefined
   );
 
-  const response = await fetch(url, {
-    ...options,
-    cache: 'no-store',
-    headers: {
-      ...headers,
-      ...(options.headers || {})
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      cache: 'no-store',
+      headers: {
+        ...headers,
+        ...(options.headers || {})
+      }
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Falha na requisição.';
+    if (isApiNetworkError(message)) {
+      throw new Error(formatApiNetworkError(message));
     }
-  });
+    throw error;
+  }
 
   if (response.status === 304) {
     throw new Error(

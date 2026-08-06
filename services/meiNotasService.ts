@@ -740,6 +740,43 @@ export async function sugerirCatalogoCodigosServicos (options: {
   );
 }
 
+export interface NcmReferencia {
+  code: string
+  description: string
+  label: string
+}
+
+/** Lista NCMs de referência (`GET /catalogo/ncms`). */
+export async function listarCatalogoNcms (options: {
+  q?: string
+  limit?: number
+} = {}): Promise<NcmReferencia[]> {
+  const query = new URLSearchParams({
+    ...(options.q ? { q: options.q } : {}),
+    ...(typeof options.limit === 'number' && Number.isFinite(options.limit)
+      ? { limit: String(Math.trunc(options.limit)) }
+      : {}),
+  })
+  const suffix = query.toString() ? `?${query.toString()}` : ''
+  return await apiClient.get<NcmReferencia[]>(`/mei-notas/catalogo/ncms${suffix}`)
+}
+
+/** Sugestões de NCM a partir do nome do produto (`GET /catalogo/ncms/sugerir`). */
+export async function sugerirCatalogoNcms (options: {
+  texto: string
+  limit?: number
+}): Promise<NcmReferencia[]> {
+  const query = new URLSearchParams({
+    texto: String(options.texto || '').trim(),
+    ...(typeof options.limit === 'number' && Number.isFinite(options.limit)
+      ? { limit: String(Math.trunc(options.limit)) }
+      : { limit: '12' }),
+  })
+  return await apiClient.get<NcmReferencia[]>(
+    `/mei-notas/catalogo/ncms/sugerir?${query.toString()}`,
+  )
+}
+
 /** Atualiza item (`PATCH /mei-notas/catalogo/produtos/:id`). */
 export async function atualizarCatalogoNfseProduto(
   id: string,

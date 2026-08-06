@@ -9,6 +9,7 @@ import {
   runAgendaWhatsappReminders,
 } from '../services/agenda-reminders.service.js';
 import { runOpenclawNfseWhatsappDeliveryJob } from '../services/nfse-whatsapp-delivery.service.js';
+import { syncNcmCatalogFromBrasilApi, ensureNcmCatalogSynced } from '../services/ncm-catalog.service.js';
 import { badRequest } from '../utils/errors.js';
 
 const router = Router();
@@ -146,6 +147,19 @@ router.get('/nfse-whatsapp-pending', requireCronSecret, async (req, res, next) =
       message:
         'Entrega NFSe WhatsApp em processamento. Para aguardar o lote, use ?sync=1.',
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** Sincroniza catálogo NCM (BrasilAPI → tabela `ncms`). Agendar 1x/mês ou após deploy. */
+router.get('/ncm-sync', requireCronSecret, async (req, res, next) => {
+  try {
+    const force = String(req.query.force || '').trim() === '1';
+    const result = force
+      ? await syncNcmCatalogFromBrasilApi()
+      : await ensureNcmCatalogSynced({ force: true });
+    res.json({ ok: true, result });
   } catch (error) {
     next(error);
   }

@@ -57,10 +57,12 @@ import {
   type MeiDocType,
   type MeiCatalogDocFilter,
 } from '../components/mei/meiFlowUi'
+import { NcmAutocompleteField } from '../components/mei/NcmAutocompleteField'
 import { useMfTheme } from '../components/ui/useMfTheme'
 import { alertDialog } from '../lib/confirmDialog'
+import { formatApiNetworkError } from '../lib/apiNetworkError'
 import { useAppToastStore } from '../store/appToastStore'
-import { NCM_OBRIGATORIO_HINT, CFOP_VENDA_ESTADUAL } from '../lib/nfeEmissaoLeigo'
+import { CFOP_VENDA_ESTADUAL } from '../lib/nfeEmissaoLeigo'
 
 const PAGE_SIZE = 50
 
@@ -331,7 +333,8 @@ export default function MeiCatalogoProdutosModal ({
       await fetchPage({ append: false, reset: true, q: searchQ })
       notifyChanged()
     } catch (e: unknown) {
-      alertDialog('Erro', e instanceof Error ? e.message : 'Falha ao salvar serviço.')
+      const raw = e instanceof Error ? e.message : 'Falha ao salvar serviço.'
+      alertDialog('Erro', formatApiNetworkError(raw))
     } finally {
       setSaving(false)
     }
@@ -708,17 +711,13 @@ export default function MeiCatalogoProdutosModal ({
               multiline
               style={{ minHeight: 72, textAlignVertical: 'top' }}
             />
-            <MeiFormField
-              label="NCM (8 dígitos)"
+            <NcmAutocompleteField
               required
-              placeholder="22011000"
-              hint={NCM_OBRIGATORIO_HINT}
               value={form.nfe.ncm}
-              onChangeText={(t) =>
-                setForm((f) => ({ ...f, nfe: { ...f.nfe, ncm: t.replace(/\D/g, '').slice(0, 8) } }))
+              productHint={form.discriminacao}
+              onChange={(ncm) =>
+                setForm((f) => ({ ...f, nfe: { ...f.nfe, ncm } }))
               }
-              keyboardType="numeric"
-              maxLength={8}
             />
             <MeiFormField
               label="Preço de venda (opcional)"

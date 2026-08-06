@@ -60,6 +60,8 @@ router.delete('/catalogo/clientes/:id', requireAuth, requireMeiEnabled, controll
 router.get('/catalogo/produtos', requireAuth, requireMeiEnabled, controller.listarCatalogoProdutos);
 router.get('/catalogo/codigos-servicos', requireAuth, requireMeiEnabled, controller.listarCatalogoCodigosServicos);
 router.get('/catalogo/codigos-servicos/sugerir', requireAuth, requireMeiEnabled, controller.sugerirCatalogoCodigosServicos);
+router.get('/catalogo/ncms', requireAuth, requireMeiEnabled, controller.listarCatalogoNcms);
+router.get('/catalogo/ncms/sugerir', requireAuth, requireMeiEnabled, controller.sugerirCatalogoNcms);
 router.post('/catalogo/produtos', requireAuth, requireMeiEnabled, controller.criarCatalogoProduto);
 router.post('/catalogo/produtos/from-cnaes', requireAuth, requireMeiEnabled, controller.criarCatalogoProdutosFromCnaes);
 router.post(
