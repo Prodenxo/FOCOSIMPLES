@@ -344,10 +344,13 @@ export const lookupCnpj = async (req, res, next) => {
 /** Preenche endereço fiscal (logradouro, cidade, UF, IBGE) a partir do CEP — mesma lógica do OpenClaw. */
 export const lookupCep = async (req, res, next) => {
   try {
-    const cep = String(req.params?.cep || '').trim();
+    const cep = String(req.params?.cep || '').replace(/\D/g, '').slice(0, 8);
+    if (cep.length !== 8) {
+      return next(badRequest('CEP deve ter 8 dígitos (inclua zeros à esquerda).'));
+    }
     const endereco = await enderecoFromCepLookupNfse(cep);
     if (!endereco) {
-      return next(badRequest('CEP inválido ou não encontrado.'));
+      return next(badRequest('CEP não encontrado — confira os 8 dígitos.'));
     }
     return sendSuccess(res, endereco, 'Endereço consultado pelo CEP');
   } catch (error) {

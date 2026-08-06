@@ -60,6 +60,7 @@ import {
 import { useMfTheme } from '../components/ui/useMfTheme'
 import { alertDialog } from '../lib/confirmDialog'
 import { useAppToastStore } from '../store/appToastStore'
+import { NCM_OBRIGATORIO_HINT, CFOP_VENDA_ESTADUAL } from '../lib/nfeEmissaoLeigo'
 
 const PAGE_SIZE = 50
 
@@ -142,6 +143,7 @@ export default function MeiCatalogoProdutosModal ({
   const [importFileName, setImportFileName] = useState<string | null>(null)
   const [importRowCount, setImportRowCount] = useState(0)
   const [importRows, setImportRows] = useState<CatalogoProdutoSpreadsheetRow[]>([])
+  const [nfeAdvancedOpen, setNfeAdvancedOpen] = useState(false)
 
   const allowedDocTypes = useMemo(
     () => (allowedDocumentTypes?.length ? allowedDocumentTypes : (['NFSE', 'NFE', 'NFCE'] as MeiDocType[])),
@@ -249,6 +251,7 @@ export default function MeiCatalogoProdutosModal ({
       initial.documentType = allowedDocTypes[0] ?? 'NFSE'
     }
     setForm(initial)
+    setNfeAdvancedOpen(false)
     setFormVisible(true)
   }
 
@@ -279,6 +282,7 @@ export default function MeiCatalogoProdutosModal ({
       documentType: (item.document_type as DocumentType) || 'NFSE',
       nfe: nfeCatalogProdutoFormFieldsFromMetadata(item.metadata_json),
     })
+    setNfeAdvancedOpen(false)
     setFormVisible(true)
   }
 
@@ -685,29 +689,30 @@ export default function MeiCatalogoProdutosModal ({
         {isNfeLikeCatalogDocumentType(form.documentType) ? (
           <>
             <MeiFormBanner>
-              Cadastre aqui NCM, CFOP e tributos do produto. Na emissão de NF-e, basta escolher este item no catálogo.
+              Cadastre nome, NCM e preço. Na emissão, o app ajusta CFOP (5102/6102) e tributos
+              automaticamente conforme o estado do cliente.
             </MeiFormBanner>
-            <MeiFormSectionLabel>Dados do produto (NF-e / NFC-e)</MeiFormSectionLabel>
+            <MeiFormSectionLabel>Dados do produto</MeiFormSectionLabel>
             <MeiFormField
               label="Código / SKU"
-              required
-              placeholder="Ex.: AGUA20L"
+              placeholder="Opcional — ex.: AGUA20L"
               value={form.codigo}
               onChangeText={(t) => setForm((f) => ({ ...f, codigo: t }))}
             />
             <MeiFormField
-              label="Descrição"
+              label="Nome do produto"
               required
-              placeholder="Descrição do produto"
+              placeholder="Ex.: Água mineral 20L"
               value={form.discriminacao}
               onChangeText={(t) => setForm((f) => ({ ...f, discriminacao: t }))}
               multiline
-              style={{ minHeight: 80, textAlignVertical: 'top' }}
+              style={{ minHeight: 72, textAlignVertical: 'top' }}
             />
             <MeiFormField
               label="NCM (8 dígitos)"
               required
               placeholder="22011000"
+              hint={NCM_OBRIGATORIO_HINT}
               value={form.nfe.ncm}
               onChangeText={(t) =>
                 setForm((f) => ({ ...f, nfe: { ...f.nfe, ncm: t.replace(/\D/g, '').slice(0, 8) } }))
@@ -716,66 +721,86 @@ export default function MeiCatalogoProdutosModal ({
               maxLength={8}
             />
             <MeiFormField
-              label="CFOP"
-              required
-              placeholder="5102"
-              value={form.nfe.cfop}
-              onChangeText={(t) =>
-                setForm((f) => ({ ...f, nfe: { ...f.nfe, cfop: t.replace(/\D/g, '').slice(0, 4) } }))
-              }
-              keyboardType="numeric"
-              maxLength={4}
-            />
-            <MeiFormField
-              label="Unidade"
-              required
-              placeholder="UN"
-              value={form.nfe.unidade}
-              onChangeText={(t) => setForm((f) => ({ ...f, nfe: { ...f.nfe, unidade: t } }))}
-            />
-            <MeiFormField
-              label={resolveAppOrigin() === 'focosimples' ? 'CSOSN ICMS (Simples)' : 'CSOSN ICMS (MEI)'}
-              required
-              placeholder="102"
-              value={form.nfe.icmsCsosn}
-              onChangeText={(t) =>
-                setForm((f) => ({
-                  ...f,
-                  nfe: { ...f.nfe, icmsCsosn: t.replace(/\D/g, '').slice(0, 3) },
-                }))
-              }
-              keyboardType="numeric"
-              maxLength={3}
-            />
-            <MeiFormField
-              label="CST PIS"
-              required
-              placeholder="49"
-              value={form.nfe.pisCst}
-              onChangeText={(t) =>
-                setForm((f) => ({ ...f, nfe: { ...f.nfe, pisCst: t.replace(/\D/g, '').slice(0, 2) } }))
-              }
-              keyboardType="numeric"
-              maxLength={2}
-            />
-            <MeiFormField
-              label="CST COFINS"
-              required
-              placeholder="49"
-              value={form.nfe.cofinsCst}
-              onChangeText={(t) =>
-                setForm((f) => ({ ...f, nfe: { ...f.nfe, cofinsCst: t.replace(/\D/g, '').slice(0, 2) } }))
-              }
-              keyboardType="numeric"
-              maxLength={2}
-            />
-            <MeiFormField
-              label="Valor sugerido"
-              placeholder="Opcional — ex.: 100,00"
+              label="Preço de venda (opcional)"
+              placeholder="Ex.: 12,50"
+              hint="Pré-preenche o valor na hora de emitir a nota."
               value={form.valorSugerido}
               onChangeText={(t) => setForm((f) => ({ ...f, valorSugerido: t }))}
               keyboardType="decimal-pad"
             />
+
+            <Pressable
+              onPress={() => setNfeAdvancedOpen((v) => !v)}
+              accessibilityRole="button"
+              accessibilityLabel={
+                nfeAdvancedOpen ? 'Ocultar configurações avançadas' : 'Mostrar configurações avançadas'
+              }
+              style={{ marginTop: 4, marginBottom: nfeAdvancedOpen ? 8 : 0 }}
+            >
+              <Text style={{ fontSize: 13, fontWeight: '600', color: theme.primary }}>
+                {nfeAdvancedOpen
+                  ? '▾ Ocultar configurações avançadas (contador)'
+                  : '▸ Configurações avançadas (contador)'}
+              </Text>
+            </Pressable>
+
+            {nfeAdvancedOpen ? (
+              <>
+                <Text style={{ ...flow.hint, marginBottom: 8 }}>
+                  Padrão Simples Nacional: CFOP {CFOP_VENDA_ESTADUAL} (seu estado), CSOSN 102, PIS/COFINS 49.
+                  Na emissão interestadual o CFOP vira 6102 automaticamente.
+                </Text>
+                <MeiFormField
+                  label="CFOP (venda no seu estado)"
+                  placeholder={CFOP_VENDA_ESTADUAL}
+                  value={form.nfe.cfop}
+                  onChangeText={(t) =>
+                    setForm((f) => ({ ...f, nfe: { ...f.nfe, cfop: t.replace(/\D/g, '').slice(0, 4) } }))
+                  }
+                  keyboardType="numeric"
+                  maxLength={4}
+                />
+                <MeiFormField
+                  label="Unidade"
+                  placeholder="UN"
+                  value={form.nfe.unidade}
+                  onChangeText={(t) => setForm((f) => ({ ...f, nfe: { ...f.nfe, unidade: t } }))}
+                />
+                <MeiFormField
+                  label={resolveAppOrigin() === 'focosimples' ? 'CSOSN ICMS (Simples)' : 'CSOSN ICMS (MEI)'}
+                  placeholder="102"
+                  value={form.nfe.icmsCsosn}
+                  onChangeText={(t) =>
+                    setForm((f) => ({
+                      ...f,
+                      nfe: { ...f.nfe, icmsCsosn: t.replace(/\D/g, '').slice(0, 3) },
+                    }))
+                  }
+                  keyboardType="numeric"
+                  maxLength={3}
+                />
+                <MeiFormField
+                  label="CST PIS"
+                  placeholder="49"
+                  value={form.nfe.pisCst}
+                  onChangeText={(t) =>
+                    setForm((f) => ({ ...f, nfe: { ...f.nfe, pisCst: t.replace(/\D/g, '').slice(0, 2) } }))
+                  }
+                  keyboardType="numeric"
+                  maxLength={2}
+                />
+                <MeiFormField
+                  label="CST COFINS"
+                  placeholder="49"
+                  value={form.nfe.cofinsCst}
+                  onChangeText={(t) =>
+                    setForm((f) => ({ ...f, nfe: { ...f.nfe, cofinsCst: t.replace(/\D/g, '').slice(0, 2) } }))
+                  }
+                  keyboardType="numeric"
+                  maxLength={2}
+                />
+              </>
+            ) : null}
           </>
         ) : (
           <>

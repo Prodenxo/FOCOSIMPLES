@@ -76,6 +76,7 @@ import {
   emitirNfce,
   listarCatalogoNfseClientes,
   listarCatalogoNfseProdutos,
+  lookupNfseEnderecoPorCep,
   cadastrarPlugNotasCertificado,
   cadastrarPlugNotasEmpresa,
   atualizarPlugNotasEmpresa,
@@ -142,8 +143,26 @@ import {
   catalogClienteHasNfeEndereco,
   catalogClienteHasTomadorEndereco,
   isTomadorEnderecoComplete,
+  mergeEnderecoFromCepLookup,
   resolveNfseTomadorByCnpj,
 } from '../lib/meiCatalogClienteFiscal';
+import {
+  applyCfopLocalizacaoToNfeItens,
+  applySimplesNacionalDefaultsToNfeItem,
+  detectNfeVendaLocalizacao,
+  getNfeLocalizacaoBanner,
+  NFE_CEP_LOOKUP_HINT,
+  normalizeUf,
+  normalizeCepForLookup,
+  resolveCfopByLocalizacao,
+  resolveIndIeDestFromDocument,
+  shouldShowDestinatarioIeOptions,
+  shouldShowDestinatarioInscricaoEstadual,
+  isCpfDocument,
+} from '../lib/nfeEmissaoLeigo';
+import { mapCatalogProdutoToNfeItem } from '../lib/mapCatalogProdutoToNfeItem';
+import { isCatalogProdutoUsableForNfeLike, catalogProdutoNeedsNfeCompletion } from '../lib/nfeCatalogProdutoMetadata';
+import NfeEmitItemLeigoCard from '../components/mei/NfeEmitItemLeigoCard';
 import { getDefaultNfeDestinatarioEndereco } from '../lib/meiNfeDestinatarioEndereco';
 import { fetchNfsePrestadorPrefill } from '../services/meiPrestadorPrefillService';
 import { empresaFiscalToPrestadorPrefill } from '../lib/nfsePrestadorPrefillDto';
@@ -152,8 +171,6 @@ import { canAccessMeiArea } from '../lib/meiAccess';
 import MeiCatalogoClientesModal from './MeiCatalogoClientesModal';
 import MeiCatalogoProdutosModal from './MeiCatalogoProdutosModal';
 import MeiImportCnaesModal from './MeiImportCnaesModal';
-import { mapCatalogProdutoToNfeItem } from '../lib/mapCatalogProdutoToNfeItem';
-import { isCatalogProdutoUsableForNfeLike, catalogProdutoNeedsNfeCompletion } from '../lib/nfeCatalogProdutoMetadata';
 import {
   resolveMeiDocumentosPermitidos,
   meiDocTypesPermitidos,
@@ -627,6 +644,42 @@ function MeiScreenContent() {
   const nfeEmitentePrefillBannerOutcomeRef = useRef<'unset' | 'empty' | 'error' | 'ok'>('unset');
   const [nfeEmitentePrefillLoading, setNfeEmitentePrefillLoading] = useState(false);
   const [nfeEmitentePrefillBanner, setNfeEmitentePrefillBanner] = useState<string | null>(null);
+  const [nfeDestinatarioCepLoading, setNfeDestinatarioCepLoading] = useState(false);
+  const [nfeDestinatarioCnpjLookupLoading, setNfeDestinatarioCnpjLookupLoading] = useState(false);
+  const nfeDestinatarioIeUserEditedRef = useRef(false);
+  const lastNfeDestinatarioLookupDocRef = useRef('');
+
+  const nfeEmitenteUf = useMemo(
+    () => normalizeUf(empresaFiscal?.endereco?.estado ?? ''),
+    [empresaFiscal?.endereco?.estado],
+  );
+  const nfeDestinatarioUf = useMemo(
+    () => normalizeUf(nfeLikeForm.destinatarioEndereco.estado),
+    [nfeLikeForm.destinatarioEndereco.estado],
+  );
+  const nfeVendaLocalizacao = useMemo(
+    () => detectNfeVendaLocalizacao(nfeEmitenteUf, nfeDestinatarioUf),
+    [nfeEmitenteUf, nfeDestinatarioUf],
+  );
+  const nfeCfopAuto = useMemo(
+    () => resolveCfopByLocalizacao(nfeEmitenteUf, nfeDestinatarioUf),
+    [nfeEmitenteUf, nfeDestinatarioUf],
+  );
+  const nfeLocalizacaoBanner = useMemo(
+    () => getNfeLocalizacaoBanner(nfeEmitenteUf, nfeDestinatarioUf, nfeVendaLocalizacao, nfeCfopAuto),
+    [nfeEmitenteUf, nfeDestinatarioUf, nfeVendaLocalizacao, nfeCfopAuto],
+  );
+
+  useEffect(() => {
+    if (!emitirNotaVisible || emitirNotaType !== 'NFE') return;
+    if (!nfeCfopAuto) return;
+    setNfeLikeForm((f) => {
+      const nextItens = applyCfopLocalizacaoToNfeItens(f.itens, nfeEmitenteUf, nfeDestinatarioUf);
+      const changed = nextItens.some((it, i) => it.cfop !== f.itens[i]?.cfop);
+      if (!changed) return f;
+      return { ...f, itens: nextItens };
+    });
+  }, [emitirNotaVisible, emitirNotaType, nfeCfopAuto, nfeEmitenteUf, nfeDestinatarioUf]);
 
   const touchNfsePrestadorFields = useCallback(() => {
     nfsePrestadorUserEditedRef.current = true;
@@ -2363,6 +2416,98 @@ function MeiScreenContent() {
     }
   }, [catalogClientes, showToast]);
 
+  const lookupNfeDestinatarioCep = useCallback(async (cepRaw: string) => {
+    const cep = normalizeCepForLookup(cepRaw);
+    if (cep.length !== 8) {
+      if (normalizeDoc(cepRaw).length >= 7) {
+        showToast(
+          'CEP incompleto — faltou 1 dígito. Use 8 números (ex.: 50010000 PE, 01310100 SP).',
+          'error',
+        );
+      }
+      return;
+    }
+    setNfeDestinatarioCepLoading(true);
+    try {
+      const data = await lookupNfseEnderecoPorCep(cep);
+      setNfeLikeForm((f) => ({
+        ...f,
+        destinatarioEndereco: mergeEnderecoFromCepLookup({ ...f.destinatarioEndereco, cep }, data),
+      }));
+      showToast('Endereço preenchido pelo CEP.', 'success');
+    } catch (e: unknown) {
+      showToast(e instanceof Error ? e.message : 'CEP não encontrado.', 'error');
+    } finally {
+      setNfeDestinatarioCepLoading(false);
+    }
+  }, [showToast]);
+
+  const lookupNfeDestinatarioByCnpj = useCallback(async (cnpjMasked: string) => {
+    const digits = normalizeDoc(cnpjMasked);
+    if (digits.length !== 14) return;
+    if (lastNfeDestinatarioLookupDocRef.current === digits) return;
+
+    const fromCatalog = catalogClientes.find(
+      (item) => normalizeDoc(item.documento || '') === digits,
+    );
+    if (fromCatalog && catalogClienteHasNfeEndereco(fromCatalog)) {
+      const prefill = applyCatalogClienteToNfeForm(fromCatalog);
+      setNfeLikeForm((f) => ({
+        ...f,
+        destinatarioCpfCnpj: formatDocument(digits),
+        destinatarioRazaoSocial: f.destinatarioRazaoSocial?.trim() || prefill.destinatarioRazaoSocial,
+        destinatarioEmail: f.destinatarioEmail?.trim() || prefill.destinatarioEmail,
+        destinatarioIndIEDest: prefill.destinatarioIndIEDest,
+        destinatarioEndereco: prefill.destinatarioEndereco,
+      }));
+      lastNfeDestinatarioLookupDocRef.current = digits;
+      return;
+    }
+
+    setNfeDestinatarioCnpjLookupLoading(true);
+    try {
+      const prefill = await resolveNfseTomadorByCnpj(cnpjMasked, catalogClientes, lookupCnpj);
+      if (!prefill) return;
+      setNfeLikeForm((f) => ({
+        ...f,
+        destinatarioCpfCnpj: formatDocument(digits),
+        destinatarioRazaoSocial: f.destinatarioRazaoSocial?.trim() || prefill.tomadorRazaoSocial,
+        destinatarioEmail: f.destinatarioEmail?.trim() || prefill.tomadorEmail,
+        destinatarioIndIEDest: nfeDestinatarioIeUserEditedRef.current
+          ? f.destinatarioIndIEDest
+          : '1',
+        destinatarioEndereco: prefill.tomadorEndereco,
+      }));
+      lastNfeDestinatarioLookupDocRef.current = digits;
+      showToast('Cliente preenchido pela Receita Federal.', 'success');
+    } catch (e: unknown) {
+      showToast(
+        e instanceof Error ? e.message : 'Não foi possível consultar o CNPJ do cliente.',
+        'error',
+      );
+    } finally {
+      setNfeDestinatarioCnpjLookupLoading(false);
+    }
+  }, [catalogClientes, showToast]);
+
+  const handleNfeDestinatarioDocChange = useCallback((masked: string) => {
+    const digits = normalizeDoc(masked);
+    setNfeLikeForm((f) => {
+      const next = { ...f, destinatarioCpfCnpj: formatDocument(masked) };
+      if (!nfeDestinatarioIeUserEditedRef.current) {
+        const autoIe = resolveIndIeDestFromDocument(digits);
+        if (autoIe) {
+          next.destinatarioIndIEDest = autoIe;
+          if (autoIe !== '1') next.destinatarioInscricaoEstadual = '';
+        }
+      }
+      return next;
+    });
+    if (digits.length === 14) {
+      void lookupNfeDestinatarioByCnpj(masked);
+    }
+  }, [lookupNfeDestinatarioByCnpj]);
+
   const handleSelectCatalogCliente = (item: NfseCatalogCliente) => {
     if (emitirNotaType === 'NFSE') {
       const prefill = applyCatalogClienteToNfseForm(item);
@@ -2384,6 +2529,8 @@ function MeiScreenContent() {
       }
     } else {
       const prefill = applyCatalogClienteToNfeForm(item);
+      nfeDestinatarioIeUserEditedRef.current = false;
+      lastNfeDestinatarioLookupDocRef.current = normalizeDoc(prefill.destinatarioCpfCnpj);
       setNfeLikeForm((f) => ({
         ...f,
         destinatarioCpfCnpj: prefill.destinatarioCpfCnpj
@@ -2393,6 +2540,11 @@ function MeiScreenContent() {
         destinatarioEmail: prefill.destinatarioEmail,
         destinatarioIndIEDest: prefill.destinatarioIndIEDest,
         destinatarioEndereco: prefill.destinatarioEndereco,
+        itens: applyCfopLocalizacaoToNfeItens(
+          f.itens,
+          nfeEmitenteUf,
+          normalizeUf(prefill.destinatarioEndereco.estado),
+        ),
       }));
       if (emitirNotaType === 'NFE' && !catalogClienteHasNfeEndereco(item)) {
         showToast(
@@ -2426,7 +2578,10 @@ function MeiScreenContent() {
       }
     } else {
       const incomplete = !isCatalogProdutoUsableForNfeLike(item, emitirNotaType)
-      const row = mapCatalogProdutoToNfeItem(item)
+      const row = mapCatalogProdutoToNfeItem(item, {
+        emitenteUf: nfeEmitenteUf,
+        destinatarioUf: nfeDestinatarioUf,
+      })
       setNfeLikeForm((f) => {
         const idx = Math.min(Math.max(nfeItemEditIndex, 0), Math.max(f.itens.length - 1, 0))
         if (f.itens.length === 0) {
@@ -2612,6 +2767,8 @@ function MeiScreenContent() {
   const openEmitirNotaModal = () => {
     setEmitirNotaError(null);
     resetFiscalEmitentePrefillState();
+    nfeDestinatarioIeUserEditedRef.current = false;
+    lastNfeDestinatarioLookupDocRef.current = '';
     setNfeLikeForm(getDefaultNfeLikeForm());
     setEmitirNotaVisible(true);
   };
@@ -4546,6 +4703,9 @@ function MeiScreenContent() {
                       if (empresaFiscal) handleStartEditEmpresa();
                     }}
                   />
+                  {emitirNotaType === 'NFE' && nfeLocalizacaoBanner ? (
+                    <MeiFormBanner>{nfeLocalizacaoBanner}</MeiFormBanner>
+                  ) : null}
                   <MeiLinkButton
                     label="Selecionar destinatário do catálogo"
                     onPress={() => {
@@ -4554,83 +4714,95 @@ function MeiScreenContent() {
                     }}
                   />
                   <MeiFormField
-                    label="CPF/CNPJ destinatário"
+                    label="CPF/CNPJ do cliente"
                     required
                     placeholder="CPF ou CNPJ"
                     value={nfeLikeForm.destinatarioCpfCnpj}
-                    onChangeText={(t) => setNfeLikeForm((f) => ({ ...f, destinatarioCpfCnpj: formatDocument(t) }))}
+                    onChangeText={handleNfeDestinatarioDocChange}
                     keyboardType="numeric"
                     maxLength={18}
                   />
+                  {nfeDestinatarioCnpjLookupLoading ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <ActivityIndicator size="small" color={theme.primary} />
+                      <Text style={{ color: theme.placeholder, fontSize: 12 }}>Buscando dados do cliente…</Text>
+                    </View>
+                  ) : null}
                   <MeiFormField
-                    label="Razão social destinatário"
+                    label="Nome / Razão social do cliente"
                     required
-                    placeholder="Razão social"
+                    placeholder="Nome completo ou razão social"
                     value={nfeLikeForm.destinatarioRazaoSocial}
                     onChangeText={(t) => setNfeLikeForm((f) => ({ ...f, destinatarioRazaoSocial: t }))}
                   />
-                  <View style={{ marginBottom: mfSpacing.sm, gap: 8 }}>
-                    <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>
-                      Situação de IE do destinatário
-                      <Text style={{ color: theme.error }}> *</Text>
-                    </Text>
-                    <Text style={{ fontSize: 12, color: theme.textSecondary, lineHeight: 16 }}>
-                      {DESTINATARIO_IE_SECTION_HINT}
-                    </Text>
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                      {DESTINATARIO_IE_OPTIONS.map((opt) => {
-                        const selected = nfeLikeForm.destinatarioIndIEDest === opt.value;
-                        return (
-                          <Pressable
-                            key={opt.value}
-                            accessibilityRole="button"
-                            accessibilityState={{ selected }}
-                            accessibilityLabel={opt.label}
-                            onPress={() =>
-                              setNfeLikeForm((f) => ({
-                                ...f,
-                                destinatarioIndIEDest: opt.value as DestinatarioIndIeDest,
-                                ...(opt.value !== '1' ? { destinatarioInscricaoEstadual: '' } : {}),
-                              }))
-                            }
-                            style={{
-                              paddingHorizontal: 12,
-                              paddingVertical: 8,
-                              borderRadius: 8,
-                              borderWidth: 1,
-                              borderColor: selected ? theme.primary : theme.border,
-                              backgroundColor: selected ? `${theme.primary}18` : theme.surface,
-                            }}
-                          >
-                            <Text
+                  {shouldShowDestinatarioIeOptions(nfeLikeForm.destinatarioCpfCnpj) ? (
+                    <View style={{ marginBottom: mfSpacing.sm, gap: 8 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>
+                        Tipo de cliente (CNPJ)
+                        <Text style={{ color: theme.error }}> *</Text>
+                      </Text>
+                      <Text style={{ fontSize: 12, color: theme.textSecondary, lineHeight: 16 }}>
+                        {DESTINATARIO_IE_SECTION_HINT}
+                      </Text>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                        {DESTINATARIO_IE_OPTIONS.map((opt) => {
+                          const selected = nfeLikeForm.destinatarioIndIEDest === opt.value;
+                          return (
+                            <Pressable
+                              key={opt.value}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected }}
+                              accessibilityLabel={opt.label}
+                              onPress={() => {
+                                nfeDestinatarioIeUserEditedRef.current = true;
+                                setNfeLikeForm((f) => ({
+                                  ...f,
+                                  destinatarioIndIEDest: opt.value as DestinatarioIndIeDest,
+                                  ...(opt.value !== '1' ? { destinatarioInscricaoEstadual: '' } : {}),
+                                }));
+                              }}
                               style={{
-                                fontSize: 12,
-                                fontWeight: selected ? '700' : '500',
-                                color: selected ? theme.primary : theme.text,
+                                paddingHorizontal: 12,
+                                paddingVertical: 8,
+                                borderRadius: 8,
+                                borderWidth: 1,
+                                borderColor: selected ? theme.primary : theme.border,
+                                backgroundColor: selected ? `${theme.primary}18` : theme.surface,
                               }}
                             >
-                              {opt.label}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
+                              <Text
+                                style={{
+                                  fontSize: 12,
+                                  fontWeight: selected ? '700' : '500',
+                                  color: selected ? theme.primary : theme.text,
+                                }}
+                              >
+                                {opt.label}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                      <Text style={{ fontSize: 11, color: theme.textSecondary, lineHeight: 15 }}>
+                        {
+                          DESTINATARIO_IE_OPTIONS.find((o) => o.value === nfeLikeForm.destinatarioIndIEDest)
+                            ?.hint
+                        }
+                      </Text>
                     </View>
-                    <Text style={{ fontSize: 11, color: theme.textSecondary, lineHeight: 15 }}>
-                      {
-                        DESTINATARIO_IE_OPTIONS.find((o) => o.value === nfeLikeForm.destinatarioIndIEDest)
-                          ?.hint
-                      }
-                    </Text>
-                  </View>
-                  {nfeLikeForm.destinatarioIndIEDest === '1' ? (
+                  ) : isCpfDocument(nfeLikeForm.destinatarioCpfCnpj) ? (
+                    <MeiFormBanner>
+                      Pessoa física (CPF): tratada automaticamente como consumidor final — não contribuinte de ICMS.
+                    </MeiFormBanner>
+                  ) : null}
+                  {shouldShowDestinatarioInscricaoEstadual(
+                    nfeLikeForm.destinatarioIndIEDest,
+                    nfeLikeForm.destinatarioCpfCnpj,
+                  ) ? (
                     <MeiFormField
-                      label="Inscrição Estadual do destinatário (cliente)"
+                      label="Inscrição Estadual do cliente"
                       required
-                      placeholder={
-                        isFocoSimplesUi
-                          ? 'Somente números — IE do cliente, não a da emitente'
-                          : 'Somente números — não use a IE do seu MEI'
-                      }
+                      placeholder="Somente números — IE do cliente"
                       value={nfeLikeForm.destinatarioInscricaoEstadual}
                       onChangeText={(t) =>
                         setNfeLikeForm((f) => ({
@@ -4648,22 +4820,31 @@ function MeiScreenContent() {
                         <Text style={{ color: theme.error }}> *</Text>
                       </Text>
                       <Text style={{ fontSize: 12, color: theme.textSecondary, marginBottom: 8, lineHeight: 16 }}>
-                        Obrigatório na NF-e. Use o endereço de entrega ou sede do condomínio/cliente.
+                        {NFE_CEP_LOOKUP_HINT}
                       </Text>
+                      {nfeDestinatarioCepLoading ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                          <ActivityIndicator size="small" color={theme.primary} />
+                          <Text style={{ color: theme.placeholder, fontSize: 12 }}>Buscando endereço…</Text>
+                        </View>
+                      ) : null}
                       <MeiFormField
                         label="CEP"
                         required
                         placeholder="00000000"
                         value={nfeLikeForm.destinatarioEndereco.cep}
-                        onChangeText={(t) =>
+                        onChangeText={(t) => {
+                          const cep = t.replace(/\D/g, '').slice(0, 8);
                           setNfeLikeForm((f) => ({
                             ...f,
                             destinatarioEndereco: {
                               ...f.destinatarioEndereco,
-                              cep: t.replace(/\D/g, '').slice(0, 8),
+                              cep,
                             },
-                          }))
-                        }
+                          }));
+                          if (cep.length === 8) void lookupNfeDestinatarioCep(cep);
+                        }}
+                        onBlur={() => void lookupNfeDestinatarioCep(nfeLikeForm.destinatarioEndereco.cep)}
                         keyboardType="numeric"
                         maxLength={8}
                       />
@@ -4715,24 +4896,6 @@ function MeiScreenContent() {
                         }
                       />
                       <MeiFormField
-                        label="Código IBGE (7 dígitos)"
-                        required
-                        placeholder="3550308"
-                        hint="Código da cidade na Receita — consulte em ibge.gov.br se necessário."
-                        value={nfeLikeForm.destinatarioEndereco.codigoCidade}
-                        onChangeText={(t) =>
-                          setNfeLikeForm((f) => ({
-                            ...f,
-                            destinatarioEndereco: {
-                              ...f.destinatarioEndereco,
-                              codigoCidade: t.replace(/\D/g, '').slice(0, 7),
-                            },
-                          }))
-                        }
-                        keyboardType="numeric"
-                        maxLength={7}
-                      />
-                      <MeiFormField
                         label="Cidade"
                         required
                         placeholder="São Paulo"
@@ -4745,7 +4908,7 @@ function MeiScreenContent() {
                         }
                       />
                       <MeiFormField
-                        label="UF"
+                        label="UF (estado)"
                         required
                         placeholder="SP"
                         value={nfeLikeForm.destinatarioEndereco.estado}
@@ -4761,6 +4924,15 @@ function MeiScreenContent() {
                         maxLength={2}
                         autoCapitalize="characters"
                       />
+                      {String(nfeLikeForm.destinatarioEndereco.codigoCidade || '').replace(/\D/g, '').length === 7 ? (
+                        <Text style={{ fontSize: 11, color: theme.textSecondary, marginBottom: mfSpacing.sm, lineHeight: 16 }}>
+                          Código IBGE da cidade preenchido automaticamente ({nfeLikeForm.destinatarioEndereco.codigoCidade}).
+                        </Text>
+                      ) : (
+                        <Text style={{ fontSize: 11, color: theme.error, marginBottom: mfSpacing.sm, lineHeight: 16 }}>
+                          Informe um CEP válido para preencher o código IBGE automaticamente.
+                        </Text>
+                      )}
                     </>
                   ) : null}
                   <MeiLinkButton
@@ -4772,23 +4944,69 @@ function MeiScreenContent() {
                   />
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: mfSpacing.sm, alignItems: 'center' }}>
                     <MeiLinkButton
-                      label="Adicionar item"
+                      label="Adicionar produto"
                       onPress={() => {
                         setNfeLikeForm((f) => {
-                          const next = [...f.itens, getDefaultNfeItem()];
-                          setNfeItemEditIndex(next.length - 1);
-                          return { ...f, itens: next };
-                        });
+                          const cfop = resolveCfopByLocalizacao(nfeEmitenteUf, nfeDestinatarioUf)
+                          const novo = applySimplesNacionalDefaultsToNfeItem({
+                            ...getDefaultNfeItem(),
+                            ...(cfop ? { cfop } : {}),
+                          })
+                          const next = [...f.itens, novo]
+                          setNfeItemEditIndex(next.length - 1)
+                          return { ...f, itens: next }
+                        })
                       }}
                     />
                     {nfeLikeForm.itens.length > 1 ? (
                       <Text style={{ fontSize: 12, color: theme.textSecondary }}>
-                        {nfeLikeForm.itens.length} itens · total{' '}
+                        {nfeLikeForm.itens.length} produtos · total{' '}
                         {formatCurrencyBR(computeNfeItemsTotal(nfeLikeForm.itens))}
                       </Text>
                     ) : null}
                   </View>
-                  {nfeLikeForm.itens.map((item, itemIndex) => {
+                  {emitirNotaType === 'NFE'
+                    ? nfeLikeForm.itens.map((item, itemIndex) => (
+                      <NfeEmitItemLeigoCard
+                        key={`nfe-item-${itemIndex}`}
+                        item={item}
+                        itemIndex={itemIndex}
+                        isActive={nfeItemEditIndex === itemIndex}
+                        cfopAuto={nfeCfopAuto}
+                        showRemove={nfeLikeForm.itens.length > 1}
+                        isFocoSimplesUi={isFocoSimplesUi}
+                        isDarkMode={isDarkMode}
+                        theme={theme}
+                        mfSpacing={mfSpacing}
+                        formatCurrencyBR={formatCurrencyBR}
+                        onSelect={() => setNfeItemEditIndex(itemIndex)}
+                        onChange={(up) => {
+                          setNfeItemEditIndex(itemIndex)
+                          setNfeLikeForm((f) => ({
+                            ...f,
+                            itens: f.itens.map((it, i) => (i === itemIndex ? { ...it, ...up } : it)),
+                          }))
+                        }}
+                        onRemove={() => {
+                          setNfeLikeForm((f) => {
+                            const next = f.itens.filter((_, i) => i !== itemIndex)
+                            setNfeItemEditIndex((prev) => {
+                              if (next.length === 0) return 0
+                              if (prev >= next.length) return next.length - 1
+                              if (prev > itemIndex) return prev - 1
+                              return prev
+                            })
+                            const cfop = resolveCfopByLocalizacao(nfeEmitenteUf, nfeDestinatarioUf)
+                            const fallback = applySimplesNacionalDefaultsToNfeItem({
+                              ...getDefaultNfeItem(),
+                              ...(cfop ? { cfop } : {}),
+                            })
+                            return { ...f, itens: next.length > 0 ? next : [fallback] }
+                          })
+                        }}
+                      />
+                    ))
+                    : nfeLikeForm.itens.map((item, itemIndex) => {
                     const setItem = (up: Partial<NfeItemForm>) =>
                       setNfeLikeForm((f) => ({
                         ...f,
@@ -4797,7 +5015,7 @@ function MeiScreenContent() {
                     const isActive = nfeItemEditIndex === itemIndex;
                     return (
                       <View
-                        key={`nfe-item-${itemIndex}`}
+                        key={`nfce-item-${itemIndex}`}
                         style={{
                           marginBottom: mfSpacing.md,
                           padding: 12,
@@ -4805,139 +5023,12 @@ function MeiScreenContent() {
                           borderWidth: 1,
                           borderColor: isActive ? theme.primary : theme.border,
                           backgroundColor: theme.surface,
-                          gap: 0,
                         }}
                       >
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                          <Pressable onPress={() => setNfeItemEditIndex(itemIndex)} accessibilityRole="button">
-                            <Text style={{ fontSize: 13, fontWeight: '700', color: theme.text }}>
-                              Item {itemIndex + 1}
-                              {isActive ? ' · editando' : ''}
-                            </Text>
-                          </Pressable>
-                          {nfeLikeForm.itens.length > 1 ? (
-                            <MeiLinkButton
-                              label="Remover"
-                              onPress={() => {
-                                setNfeLikeForm((f) => {
-                                  const next = f.itens.filter((_, i) => i !== itemIndex);
-                                  setNfeItemEditIndex((prev) => {
-                                    if (next.length === 0) return 0;
-                                    if (prev >= next.length) return next.length - 1;
-                                    if (prev > itemIndex) return prev - 1;
-                                    return prev;
-                                  });
-                                  return { ...f, itens: next.length > 0 ? next : [getDefaultNfeItem()] };
-                                });
-                              }}
-                            />
-                          ) : null}
-                        </View>
-                        {String(item.ncm || '').replace(/\D/g, '').length !== 8 ? (
-                          <View
-                            style={{
-                              marginBottom: 10,
-                              paddingVertical: 8,
-                              paddingHorizontal: 10,
-                              borderRadius: 8,
-                              borderWidth: 1,
-                              borderColor: theme.primary,
-                              backgroundColor: isDarkMode ? 'rgba(34,197,94,0.12)' : 'rgba(34,197,94,0.08)',
-                            }}
-                          >
-                            <Text style={{ fontSize: 12, color: theme.text, lineHeight: 17 }}>
-                              Falta o NCM (8 dígitos) deste produto. Role até o campo abaixo — o CNAE
-                              da empresa não substitui o NCM da mercadoria.
-                            </Text>
-                          </View>
-                        ) : null}
-                        <MeiFormField
-                          label="NCM (8 dígitos)"
-                          required
-                          placeholder="Ex.: 21069090"
-                          hint="Código da mercadoria (tabela NCM). Obrigatório na NF-e."
-                          value={item.ncm}
-                          onChangeText={(t) => { setNfeItemEditIndex(itemIndex); setItem({ ncm: t.replace(/\D/g, '').slice(0, 8) }); }}
-                          keyboardType="numeric"
-                          maxLength={8}
-                        />
-                        <MeiFormField label="Código item" required placeholder="Código" value={item.codigo} onChangeText={(t) => { setNfeItemEditIndex(itemIndex); setItem({ codigo: t }); }} />
-                        <MeiFormField label="Descrição" required placeholder="Descrição" value={item.descricao} onChangeText={(t) => { setNfeItemEditIndex(itemIndex); setItem({ descricao: t }); }} />
-                        <MeiFormField
-                          label="CEST (opcional, 7 dígitos)"
-                          placeholder="0000000"
-                          value={item.cest}
-                          onChangeText={(t) => { setNfeItemEditIndex(itemIndex); setItem({ cest: t.replace(/\D/g, '').slice(0, 7) }); }}
-                          keyboardType="numeric"
-                          maxLength={7}
-                        />
-                        <MeiFormField label="CFOP" required placeholder="5102" value={item.cfop} onChangeText={(t) => { setNfeItemEditIndex(itemIndex); setItem({ cfop: t.replace(/\D/g, '').slice(0, 4) }); }} keyboardType="numeric" maxLength={4} />
-                        <MeiFormField label="Unidade" required placeholder="UN" value={item.unidade} onChangeText={(t) => { setNfeItemEditIndex(itemIndex); setItem({ unidade: t }); }} />
-                        <MeiFormField label="Quantidade" required placeholder="1" value={item.quantidade} onChangeText={(t) => { setNfeItemEditIndex(itemIndex); setItem({ quantidade: t }); }} keyboardType="decimal-pad" />
-                        <MeiFormField label="Valor unitário" required placeholder="0,00" value={item.valorUnitario} onChangeText={(t) => { setNfeItemEditIndex(itemIndex); setItem({ valorUnitario: t }); }} keyboardType="decimal-pad" />
-                        {(() => {
-                          const lineTotal = getNfeItemLineTotal(item);
-                          return (
-                            <View style={{ marginBottom: mfSpacing.sm, gap: 2 }}>
-                              <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>
-                                Valor total do item:{' '}
-                                {lineTotal !== null ? formatCurrencyBR(lineTotal) : '—'}
-                              </Text>
-                            </View>
-                          );
-                        })()}
-                        <MeiFormField
-                          label={isFocoSimplesUi ? 'CSOSN ICMS (Simples)' : 'CSOSN ICMS (MEI)'}
-                          required
-                          placeholder="102"
-                          value={item.tributos.icms.csosn}
-                          onChangeText={(t) => {
-                            const csosn = t.replace(/\D/g, '').slice(0, 3);
-                            setNfeItemEditIndex(itemIndex);
-                            setItem({
-                              tributos: {
-                                ...item.tributos,
-                                icms: { ...item.tributos.icms, csosn, cst: '' },
-                              },
-                            });
-                          }}
-                          keyboardType="numeric"
-                          maxLength={3}
-                        />
-                        <MeiFormField
-                          label="CST PIS"
-                          required
-                          placeholder="49"
-                          value={item.tributos.pis.cst}
-                          onChangeText={(t) => {
-                            setNfeItemEditIndex(itemIndex);
-                            setItem({
-                              tributos: {
-                                ...item.tributos,
-                                pis: { ...item.tributos.pis, cst: t.replace(/\D/g, '').slice(0, 2) },
-                              },
-                            });
-                          }}
-                          keyboardType="numeric"
-                          maxLength={2}
-                        />
-                        <MeiFormField
-                          label="CST COFINS"
-                          required
-                          placeholder="49"
-                          value={item.tributos.cofins.cst}
-                          onChangeText={(t) => {
-                            setNfeItemEditIndex(itemIndex);
-                            setItem({
-                              tributos: {
-                                ...item.tributos,
-                                cofins: { ...item.tributos.cofins, cst: t.replace(/\D/g, '').slice(0, 2) },
-                              },
-                            });
-                          }}
-                          keyboardType="numeric"
-                          maxLength={2}
-                        />
+                        <MeiFormField label="Descrição" required value={item.descricao} onChangeText={(t) => { setNfeItemEditIndex(itemIndex); setItem({ descricao: t }); }} />
+                        <MeiFormField label="NCM" required value={item.ncm} onChangeText={(t) => { setNfeItemEditIndex(itemIndex); setItem({ ncm: t.replace(/\D/g, '').slice(0, 8) }); }} keyboardType="numeric" maxLength={8} />
+                        <MeiFormField label="Quantidade" required value={item.quantidade} onChangeText={(t) => { setNfeItemEditIndex(itemIndex); setItem({ quantidade: t }); }} keyboardType="decimal-pad" />
+                        <MeiFormField label="Valor unitário" required value={item.valorUnitario} onChangeText={(t) => { setNfeItemEditIndex(itemIndex); setItem({ valorUnitario: t }); }} keyboardType="decimal-pad" />
                       </View>
                     );
                   })}

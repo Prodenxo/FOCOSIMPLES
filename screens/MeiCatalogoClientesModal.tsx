@@ -50,6 +50,7 @@ import {
 import { useMfTheme } from '../components/ui/useMfTheme'
 import { alertDialog } from '../lib/confirmDialog'
 import { useAppToastStore } from '../store/appToastStore'
+import { normalizeCepForLookup, NFE_CEP_LOOKUP_HINT } from '../lib/nfeEmissaoLeigo'
 
 const PAGE_SIZE = 50
 const CLIENTE_DOC_TYPES: MeiDocType[] = ['NFSE', 'NFE', 'NFCE']
@@ -131,6 +132,7 @@ export default function MeiCatalogoClientesModal ({
   const loadingMoreRef = useRef(loadingMore)
   const refreshingRef = useRef(refreshing)
   const fetchGenRef = useRef(0)
+  const lastCepLookupRef = useRef('')
 
   searchQRef.current = searchQ
   hasMoreRef.current = hasMore
@@ -221,6 +223,7 @@ export default function MeiCatalogoClientesModal ({
   const openCreate = () => {
     setEditingDocumento(null)
     setForm(emptyForm())
+    lastCepLookupRef.current = ''
     setFormVisible(true)
   }
 
@@ -237,6 +240,7 @@ export default function MeiCatalogoClientesModal ({
       indIEDest: fiscal.indIEDest ?? DEFAULT_DESTINATARIO_IND_IE_DEST,
       endereco: fiscal.endereco ?? getDefaultNfeDestinatarioEndereco(),
     })
+    lastCepLookupRef.current = ''
     setFormVisible(true)
 
     try {
@@ -292,15 +296,26 @@ export default function MeiCatalogoClientesModal ({
     }
   }
 
-  const lookupCepEndereco = async () => {
-    const cep = normalizeDoc(form.endereco.cep)
-    if (cep.length !== 8) return
+  const lookupCepEndereco = async (cepRaw?: string) => {
+    const cep = normalizeCepForLookup(cepRaw ?? form.endereco.cep)
+    if (cep.length !== 8) {
+      const partial = normalizeDoc(form.endereco.cep)
+      if (partial.length >= 7) {
+        showToast(
+          'CEP incompleto — faltou 1 dígito. Use 8 números (ex.: 50010000 PE, 01310100 SP).',
+          'error',
+        )
+      }
+      return
+    }
+    if (lastCepLookupRef.current === cep) return
     setCepLookupLoading(true)
     try {
       const data = await lookupNfseEnderecoPorCep(cep)
+      lastCepLookupRef.current = cep
       setForm((f) => ({
         ...f,
-        endereco: mergeEnderecoFromCepLookup(f.endereco, data),
+        endereco: mergeEnderecoFromCepLookup({ ...f.endereco, cep }, data),
       }))
       showToast('Endereço e código IBGE preenchidos pelo CEP.', 'success')
     } catch (e: unknown) {
@@ -543,11 +558,8 @@ export default function MeiCatalogoClientesModal ({
           <>
             <MeiFormSectionLabel>{enderecoSectionTitle}</MeiFormSectionLabel>
             <Text style={[flow.hint, { marginBottom: 8 }]}>
-              {wantsNfeLike
-                ? 'Ao informar CNPJ, buscamos logradouro e IBGE automaticamente. Confira o número se vier vazio.'
-                : enderecoObrigatorio
-                  ? 'Informe o CEP para preencher logradouro, cidade, UF e código IBGE.'
-                  : 'Opcional para pessoa física. Se informar o CEP, preenchemos o restante automaticamente.'}
+              {NFE_CEP_LOOKUP_HINT}
+              {wantsNfeLike ? ' CNPJ da Receita também preenche o endereço.' : ''}
             </Text>
             {cepLookupLoading ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -558,13 +570,17 @@ export default function MeiCatalogoClientesModal ({
             <MeiFormField
               label="CEP"
               required={enderecoObrigatorio}
+              placeholder="00000000"
+              hint="8 dígitos — inclua zeros à esquerda (ex.: 50010000)."
               value={form.endereco.cep}
-              onChangeText={(t) =>
+              onChangeText={(t) => {
+                const cep = t.replace(/\D/g, '').slice(0, 8)
                 setForm((f) => ({
                   ...f,
-                  endereco: { ...f.endereco, cep: t.replace(/\D/g, '').slice(0, 8) },
+                  endereco: { ...f.endereco, cep },
                 }))
-              }
+                if (cep.length === 8) void lookupCepEndereco(cep)
+              }}
               onBlur={() => void lookupCepEndereco()}
               keyboardType="numeric"
               maxLength={8}

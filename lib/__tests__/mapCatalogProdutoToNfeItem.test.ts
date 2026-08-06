@@ -32,6 +32,19 @@ describe('mapCatalogProdutoToNfeItem', () => {
     expect(row.ncm).toBe('22011000')
     expect(row.cfop).toBe('5102')
   })
+
+  it('usa CFOP 6102 quando destinatário é de outro estado', () => {
+    const row = mapCatalogProdutoToNfeItem(
+      {
+        id: 'p2',
+        codigo: 'SKU',
+        discriminacao: 'Produto',
+        metadata_json: { ncm: '22011000', cfop: '5102', icmsCsosn: '102', pisCst: '49', cofinsCst: '49' },
+      },
+      { emitenteUf: 'RJ', destinatarioUf: 'ES' },
+    )
+    expect(row.cfop).toBe('6102')
+  })
 })
 
 describe('nfeCatalogProdutoMetadata', () => {

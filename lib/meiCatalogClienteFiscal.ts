@@ -5,6 +5,7 @@ import {
   normalizeDestinatarioIndIeDest,
   type DestinatarioIndIeDest,
 } from './meiNfeDestinatarioIe';
+import { resolveIndIeDestForDestinatario } from './nfeEmissaoLeigo';
 import {
   getDefaultNfeDestinatarioEndereco,
   getDestinatarioEnderecoValidationMessage,
@@ -183,7 +184,7 @@ export function applyCatalogClienteToNfeForm(
     destinatarioCpfCnpj: docDigits,
     destinatarioRazaoSocial: String(item.nome ?? '').trim(),
     destinatarioEmail: String(item.email ?? '').trim(),
-    destinatarioIndIEDest: meta.indIEDest ?? DEFAULT_DESTINATARIO_IND_IE_DEST,
+    destinatarioIndIEDest: resolveIndIeDestForDestinatario(docDigits, meta.indIEDest),
     destinatarioEndereco: meta.endereco ?? getDefaultNfeDestinatarioEndereco(),
   };
 }

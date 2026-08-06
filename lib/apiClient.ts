@@ -218,25 +218,48 @@ const parseApiErrorPayload = (payload: unknown): { message: string; code?: strin
   return { message: row.message || 'Falha no download', code: code || undefined };
 };
 
-const assertPdfBytes = (bytes: Uint8Array) => {
-  if (!bytes?.length) {
-    throw buildDownloadError('O servidor retornou um arquivo vazio.');
+const inferDownloadKind = (defaultFilename: string, contentType: string): 'pdf' | 'xml' | 'any' => {
+  const lower = defaultFilename.toLowerCase();
+  if (contentType.includes('xml') || lower.endsWith('.xml')) return 'xml';
+  if (contentType.includes('pdf') || lower.endsWith('.pdf')) return 'pdf';
+  return 'any';
+};
+
+const throwIfJsonErrorPayload = (bytes: Uint8Array, invalidKindMessage: string) => {
+  const snippet = new TextDecoder().decode(bytes.slice(0, 400)).trim();
+  if (!snippet.startsWith('{') && !snippet.startsWith('[')) {
+    throw buildDownloadError(invalidKindMessage);
   }
-  const isPdf =
-    bytes.length >= 4
-    && bytes[0] === 0x25
-    && bytes[1] === 0x50
-    && bytes[2] === 0x44
-    && bytes[3] === 0x46;
-  if (isPdf) return;
-  const snippet = new TextDecoder().decode(bytes.slice(0, 400));
   try {
     const json = JSON.parse(snippet) as { message?: string; errors?: { code?: string } };
     const parsed = parseApiErrorPayload(json);
     throw buildDownloadError(parsed.message, parsed.code);
   } catch (parseErr) {
     if (parseErr instanceof Error && 'code' in parseErr) throw parseErr;
-    throw buildDownloadError('A resposta não é um PDF válido. Tente novamente ou abra o PGMEI.');
+    throw buildDownloadError(invalidKindMessage);
+  }
+};
+
+const assertDownloadBytes = (bytes: Uint8Array, kind: 'pdf' | 'xml' | 'any') => {
+  if (!bytes?.length) {
+    throw buildDownloadError('O servidor retornou um arquivo vazio.');
+  }
+
+  if (kind === 'pdf') {
+    const isPdf =
+      bytes.length >= 4
+      && bytes[0] === 0x25
+      && bytes[1] === 0x50
+      && bytes[2] === 0x44
+      && bytes[3] === 0x46;
+    if (isPdf) return;
+    throwIfJsonErrorPayload(bytes, 'A resposta não é um PDF válido. Tente novamente.');
+  }
+
+  if (kind === 'xml') {
+    const snippet = new TextDecoder().decode(bytes.slice(0, 400)).trim();
+    if (snippet.startsWith('<?xml') || snippet.startsWith('<')) return;
+    throwIfJsonErrorPayload(bytes, 'A resposta não é um XML válido. Tente novamente.');
   }
 };
 
@@ -271,7 +294,8 @@ export async function downloadToFile(
     throw buildDownloadError(parsed.message, parsed.code);
   }
 
-  assertPdfBytes(bytes);
+  const downloadKind = inferDownloadKind(filename, contentType);
+  assertDownloadBytes(bytes, downloadKind);
 
   return persistBinaryDownload(bytes, filename, mimeFromFilename(filename));
 }

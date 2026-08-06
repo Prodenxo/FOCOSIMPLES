@@ -9,6 +9,7 @@ export type NfeCatalogProdutoItemMetadata = {
   icmsCsosn?: string
   pisCst?: string
   cofinsCst?: string
+  cest?: string
 }
 
 export type NfeCatalogProdutoFormFields = {
@@ -49,6 +50,7 @@ export function readNfeCatalogProdutoMetadata(raw: unknown): NfeCatalogProdutoIt
     icmsCsosn: str('icmsCsosn') ?? str('icms_csosn'),
     pisCst: str('pisCst') ?? str('pis_cst'),
     cofinsCst: str('cofinsCst') ?? str('cofins_cst'),
+    cest: str('cest'),
   }
 }
 
