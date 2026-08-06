@@ -3,14 +3,23 @@
  * @see lib/nfeItemTaxEngine.ts
  */
 
+import { normalizeBusinessType, DEFAULT_BUSINESS_TYPE } from './empresa-business-type.js';
+
 export const CSOSN_TRIBUTADO_SN = '102';
 export const CSOSN_ST = '500';
 
-export const CFOP_VENDA_ESTADUAL = '5102';
-export const CFOP_VENDA_ESTADUAL_ST = '5405';
-export const CFOP_VENDA_INTERESTADUAL = '6102';
+export const CFOP_VENDA_ESTADUAL_RESELLER = '5102';
+export const CFOP_VENDA_INTERESTADUAL_RESELLER = '6102';
+export const CFOP_VENDA_ESTADUAL_MANUFACTURER = '5101';
+export const CFOP_VENDA_INTERESTADUAL_MANUFACTURER = '6101';
+export const CFOP_VENDA_ESTADUAL_ST_RESELLER = '5405';
+export const CFOP_VENDA_ESTADUAL_ST_MANUFACTURER = '5401';
 export const CFOP_VENDA_INTERESTADUAL_ST = '6105';
 export const CFOP_VENDA_INTERESTADUAL_ST_ALT = '6403';
+
+export const CFOP_VENDA_ESTADUAL = CFOP_VENDA_ESTADUAL_RESELLER;
+export const CFOP_VENDA_INTERESTADUAL = CFOP_VENDA_INTERESTADUAL_RESELLER;
+export const CFOP_VENDA_ESTADUAL_ST = CFOP_VENDA_ESTADUAL_ST_RESELLER;
 
 const onlyDigits = (value, max) => String(value ?? '').replace(/\D/g, '').slice(0, max);
 
@@ -27,8 +36,8 @@ export const detectNfeVendaLocalizacao = (emitenteUf, destinatarioUf) => {
 
 export const productHasCest = (product) => onlyDigits(product?.cest, 7).length === 7;
 
-export const resolveEstadualHasSt = (product, stateRule) =>
-  productHasCest(product) || Boolean(stateRule?.hasSt);
+export const resolveEstadualHasSt = (_product, stateRule) =>
+  Boolean(stateRule?.hasSt);
 
 const resolveInterestadualStCfop = (rule) => {
   const cfop = onlyDigits(rule?.cfopSt ?? rule?.cfop_st, 4);
@@ -37,15 +46,38 @@ const resolveInterestadualStCfop = (rule) => {
   return CFOP_VENDA_INTERESTADUAL_ST;
 };
 
+const resolveCfopWithoutSt = (scope, businessType) => {
+  const type = normalizeBusinessType(businessType);
+  if (scope === 'estadual') {
+    return type === 'MANUFACTURER'
+      ? CFOP_VENDA_ESTADUAL_MANUFACTURER
+      : CFOP_VENDA_ESTADUAL_RESELLER;
+  }
+  return type === 'MANUFACTURER'
+    ? CFOP_VENDA_INTERESTADUAL_MANUFACTURER
+    : CFOP_VENDA_INTERESTADUAL_RESELLER;
+};
+
+const resolveCfopEstadualSt = (businessType) =>
+  normalizeBusinessType(businessType) === 'MANUFACTURER'
+    ? CFOP_VENDA_ESTADUAL_ST_MANUFACTURER
+    : CFOP_VENDA_ESTADUAL_ST_RESELLER;
+
 /**
  * @param {object} product
- * @param {string} [product.ncm]
- * @param {string} [product.cest]
  * @param {string|null|undefined} originUf
  * @param {string|null|undefined} destinationUf
  * @param {{ hasSt?: boolean, cfopSt?: string|null, cfop_st?: string|null }|null|undefined} stateRule
+ * @param {string|null|undefined} [businessType]
  */
-export const calculateItemTax = (product, originUf, destinationUf, stateRule = null) => {
+export const calculateItemTax = (
+  product,
+  originUf,
+  destinationUf,
+  stateRule = null,
+  businessType = DEFAULT_BUSINESS_TYPE,
+) => {
+  const empresaType = normalizeBusinessType(businessType);
   const scope = detectNfeVendaLocalizacao(originUf, destinationUf);
   if (scope === 'unknown') {
     return {
@@ -61,7 +93,7 @@ export const calculateItemTax = (product, originUf, destinationUf, stateRule = n
     const hasSt = resolveEstadualHasSt(product, stateRule);
     if (hasSt) {
       return {
-        cfop: CFOP_VENDA_ESTADUAL_ST,
+        cfop: resolveCfopEstadualSt(empresaType),
         csosn: CSOSN_ST,
         hasSt: true,
         scope,
@@ -69,7 +101,7 @@ export const calculateItemTax = (product, originUf, destinationUf, stateRule = n
       };
     }
     return {
-      cfop: CFOP_VENDA_ESTADUAL,
+      cfop: resolveCfopWithoutSt(scope, empresaType),
       csosn: CSOSN_TRIBUTADO_SN,
       hasSt: false,
       scope,
@@ -89,7 +121,7 @@ export const calculateItemTax = (product, originUf, destinationUf, stateRule = n
   }
 
   return {
-    cfop: CFOP_VENDA_INTERESTADUAL,
+    cfop: resolveCfopWithoutSt(scope, empresaType),
     csosn: CSOSN_TRIBUTADO_SN,
     hasSt: false,
     scope,

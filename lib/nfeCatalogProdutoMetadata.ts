@@ -78,11 +78,7 @@ export function buildNfeCatalogProdutoMetadata(
   return {
     ...base,
     ncm: onlyDigits(fields.ncm, 8),
-    cfop: onlyDigits(fields.cfop, 4),
     unidade: String(fields.unidade || 'UN').trim() || 'UN',
-    icmsCsosn: onlyDigits(fields.icmsCsosn, 3),
-    pisCst: onlyDigits(fields.pisCst, 2),
-    cofinsCst: onlyDigits(fields.cofinsCst, 2),
   }
 }
 
@@ -91,15 +87,6 @@ export function validateNfeCatalogProdutoFormFields(
 ): string | null {
   const ncm = onlyDigits(fields.ncm, 8)
   if (ncm.length !== 8) return 'Informe o NCM com 8 dígitos.'
-  const cfop = onlyDigits(fields.cfop, 4)
-  if (cfop.length !== 4) return 'Informe o CFOP com 4 dígitos.'
-  if (!String(fields.unidade || '').trim()) return 'Informe a unidade (ex.: UN).'
-  const csosn = onlyDigits(fields.icmsCsosn, 3)
-  if (csosn.length !== 3) return 'Informe o CSOSN do ICMS com 3 dígitos (ex.: 102).'
-  const pis = onlyDigits(fields.pisCst, 2)
-  if (!pis) return 'Informe o CST do PIS (ex.: 49).'
-  const cofins = onlyDigits(fields.cofinsCst, 2)
-  if (!cofins) return 'Informe o CST do COFINS (ex.: 49).'
   return null
 }
 

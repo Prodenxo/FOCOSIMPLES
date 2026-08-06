@@ -118,20 +118,20 @@ export function getNfeLocalizacaoBanner(
   emitenteUf: string,
   destinatarioUf: string,
   localizacao: NfeVendaLocalizacao,
-  cfop: string | null,
+  _cfop: string | null,
 ): string | null {
-  if (localizacao === 'unknown' || !cfop) return null
+  if (localizacao === 'unknown') return null
   const orig = normalizeUf(emitenteUf)
   const dest = normalizeUf(destinatarioUf)
   if (localizacao === 'interestadual') {
     return (
-      `Venda para outro estado (${orig} → ${dest}). CFOP ${cfop} aplicado automaticamente. ` +
-      'Os impostos são calculados pelo emissor fiscal.'
+      `Venda para outro estado (${orig} → ${dest}). ` +
+      'Os impostos e códigos fiscais são calculados automaticamente pelo sistema.'
     )
   }
   return (
-    `Venda dentro do estado (${orig}). CFOP ${cfop} aplicado automaticamente. ` +
-    'Os impostos são calculados pelo emissor fiscal.'
+    `Venda dentro do estado (${orig}). ` +
+    'Os impostos e códigos fiscais são calculados automaticamente pelo sistema.'
   )
 }
 

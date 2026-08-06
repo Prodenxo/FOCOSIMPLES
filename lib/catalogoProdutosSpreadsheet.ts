@@ -9,11 +9,7 @@ export type CatalogoProdutoSpreadsheetRow = {
   codigo?: string
   descricao: string
   ncm: string
-  cfop: string
   unidade: string
-  csosn: string
-  pisCst?: string
-  cofinsCst?: string
   preco?: number | string | null
 }
 
@@ -21,11 +17,7 @@ const TEMPLATE_HEADERS = [
   'codigo',
   'descricao',
   'ncm',
-  'cfop',
   'unidade',
-  'csosn',
-  'pisCst',
-  'cofinsCst',
   'preco',
 ] as const
 
@@ -33,11 +25,7 @@ const TEMPLATE_EXAMPLE = {
   codigo: 'SKU-001',
   descricao: 'Produto exemplo',
   ncm: '22030000',
-  cfop: '5102',
   unidade: 'UN',
-  csosn: '102',
-  pisCst: '49',
-  cofinsCst: '49',
   preco: '10.00',
 }
 
@@ -104,20 +92,14 @@ export function parseCatalogoProdutosSheetRows (
     }
     const descricao = String(normalized.descricao ?? '').trim()
     const ncm = String(normalized.ncm ?? '').replace(/\D/g, '')
-    const cfop = String(normalized.cfop ?? '').replace(/\D/g, '')
     const unidade = String(normalized.unidade ?? 'UN').trim() || 'UN'
-    const csosn = String(normalized.csosn ?? '').replace(/\D/g, '')
-    if (!descricao && !ncm && !cfop && !csosn) continue
+    if (!descricao && !ncm) continue
     rows.push({
       line: i + 2,
       codigo: String(normalized.codigo ?? '').trim() || undefined,
       descricao,
       ncm,
-      cfop,
       unidade,
-      csosn,
-      pisCst: String(normalized.pisCst ?? '').trim() || undefined,
-      cofinsCst: String(normalized.cofinsCst ?? '').trim() || undefined,
       preco: normalized.preco == null || String(normalized.preco).trim() === ''
         ? null
         : normalized.preco as string | number,

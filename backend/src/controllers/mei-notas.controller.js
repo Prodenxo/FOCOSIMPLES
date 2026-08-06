@@ -6,6 +6,12 @@ import {
 } from '../services/ncm-catalog.service.js';
 import { calculateItemsTax } from '../services/nfe-item-tax.service.js';
 import {
+  extractBusinessTypeFromPayload,
+  stripBusinessTypeFromPayload,
+} from '../lib/empresa-business-type.js';
+import { persistBusinessTypeMirror, getBusinessTypeMirror } from '../services/empresa-business-type.service.js';
+import { unwrapPlugnotasEmpresaRecord } from '../services/mei-emitente-empresa-sync.js';
+import {
   consultarEmpresaAndReconcileMirror,
   persistDocumentosAtivosMirrorAfterEmpresa
 } from '../services/mei-notas-documentos-mirror.js';
@@ -279,12 +285,15 @@ export const cadastrarPlugNotasEmpresa = async (req, res, next) => {
       );
     }
     const payload = getEmpresaPayloadFromRequest(req);
+    const businessType = extractBusinessTypeFromPayload(payload);
+    stripBusinessTypeFromPayload(payload);
     const { certId, diagnostics } = await injectCertificadoIdIntoEmpresaPayload(req.user?.id, payload);
     if (!certId) {
       req._certResolutionDiagnostics = diagnostics;
     }
     const data = await cadastrarEmpresaPlugNotas(payload);
     await persistDocumentosAtivosMirrorAfterEmpresa(req.user?.id, payload);
+    await persistBusinessTypeMirror(req.user?.id, businessType);
     return sendSuccess(res, data, 'Empresa configurada no serviço de emissão fiscal');
   } catch (error) {
     if (error?.errors?.plugnotasCode === 'certificado_nao_configurado' && req._certResolutionDiagnostics) {
@@ -314,7 +323,10 @@ export const cadastrarPlugNotasEmitenteComposite = async (req, res, next) => {
     });
 
     const mirrorPayload = { ...empresaPayload, certificado: data.certificado.id };
+    const businessType = extractBusinessTypeFromPayload(mirrorPayload);
+    stripBusinessTypeFromPayload(mirrorPayload);
     await persistDocumentosAtivosMirrorAfterEmitenteComposite(req.user?.id, mirrorPayload);
+    await persistBusinessTypeMirror(req.user?.id, businessType);
 
     return sendSuccess(res, data, 'Certificado e empresa configurados no serviço de emissão fiscal');
   } catch (error) {
@@ -326,7 +338,12 @@ export const consultarPlugNotasEmpresa = async (req, res, next) => {
   try {
     const cpfCnpj = String(req.query?.cpfCnpj || req.query?.cnpj || '').trim();
     const data = await consultarEmpresaAndReconcileMirror(req.user?.id, cpfCnpj);
-    return sendSuccess(res, data, 'Empresa consultada no serviço de emissão fiscal');
+    const businessType = await getBusinessTypeMirror(req.user?.id);
+    const empresa = unwrapPlugnotasEmpresaRecord(data);
+    const enriched = empresa
+      ? { ...empresa, businessType }
+      : (data && typeof data === 'object' ? { ...data, businessType } : { businessType });
+    return sendSuccess(res, enriched, 'Empresa consultada no serviço de emissão fiscal');
   } catch (error) {
     if (error?.errors?.plugnotasCode === 'empresa_nao_cadastrada') {
       return sendSuccess(res, null, 'Empresa ainda não cadastrada no emissor fiscal');
@@ -366,6 +383,8 @@ export const lookupCep = async (req, res, next) => {
 export const atualizarPlugNotasEmpresa = async (req, res, next) => {
   try {
     const payload = getEmpresaPayloadFromRequest(req);
+    const businessType = extractBusinessTypeFromPayload(payload);
+    stripBusinessTypeFromPayload(payload);
     const { certId, diagnostics } = await injectCertificadoIdIntoEmpresaPayload(req.user?.id, payload);
     if (!certId) {
       req._certResolutionDiagnostics = diagnostics;
@@ -376,6 +395,7 @@ export const atualizarPlugNotasEmpresa = async (req, res, next) => {
     }
     const data = await atualizarEmpresaPlugNotas(payload);
     await persistDocumentosAtivosMirrorAfterEmpresa(req.user?.id, payload);
+    await persistBusinessTypeMirror(req.user?.id, businessType);
     return sendSuccess(res, data, 'Empresa atualizada no serviço de emissão fiscal');
   } catch (error) {
     if (error?.errors?.plugnotasCode === 'certificado_nao_configurado' && req._certResolutionDiagnostics) {
@@ -464,8 +484,9 @@ export const calcularTributacaoItensNfe = async (req, res, next) => {
   try {
     const originUf = String(req.body?.originUf || req.body?.origin_uf || '').trim();
     const destinationUf = String(req.body?.destinationUf || req.body?.destination_uf || '').trim();
+    const businessType = String(req.body?.businessType || req.body?.business_type || '').trim();
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
-    const taxes = await calculateItemsTax({ originUf, destinationUf, items });
+    const taxes = await calculateItemsTax({ originUf, destinationUf, items, businessType });
     return sendSuccess(res, { items: taxes }, 'Tributação calculada');
   } catch (error) {
     return next(error);

@@ -53,11 +53,51 @@ export function NcmAutocompleteField ({
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastProductHintRef = useRef('')
+  const handleSelectRef = useRef<(option: NcmReferencia) => void>(() => {})
 
   const normalizedValue = normalizeNcmCode(value)
 
+  const handleSelect = useCallback((option: NcmReferencia) => {
+    const code = normalizeNcmCode(option.code)
+    setSelectedLabel(option.label || formatNcmLabel(code, option.description))
+    setQuery('')
+    setResults([])
+    setDropdownOpen(false)
+    onChange(code, option)
+  }, [onChange])
+
+  handleSelectRef.current = handleSelect
+
   const runSearch = useCallback(async (text: string) => {
     const trimmed = text.trim()
+    const digitsOnly = trimmed.replace(/\D/g, '')
+
+    if (digitsOnly.length === 8) {
+      setLoading(true)
+      setSearchError(null)
+      try {
+        const data = await listarCatalogoNcms({ q: digitsOnly, limit: 1 })
+        const match = data[0]
+        if (match) {
+          handleSelectRef.current?.(match)
+        } else {
+          const code = normalizeNcmCode(digitsOnly)
+          setSelectedLabel(formatNcmLabel(code, ''))
+          setQuery('')
+          setResults([])
+          setDropdownOpen(false)
+          onChange(code)
+        }
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : 'Não foi possível validar o NCM.'
+        setSearchError(message)
+        showToast(message, 'error')
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
     if (trimmed.length < 2) {
       setResults([])
       setDropdownOpen(false)
@@ -67,13 +107,13 @@ export function NcmAutocompleteField ({
     setLoading(true)
     setSearchError(null)
     try {
-      const data = trimmed.length >= 3 && /[a-zA-ZÀ-ÿ]/.test(trimmed)
+      const data = trimmed.length >= 2 && /[a-zA-ZÀ-ÿ]/.test(trimmed)
         ? await sugerirCatalogoNcms({ texto: trimmed, limit: 12 })
         : await listarCatalogoNcms({ q: trimmed, limit: 12 })
       setResults(data)
       setDropdownOpen(data.length > 0)
       if (data.length === 0) {
-        setSearchError('Nenhum NCM encontrado — tente outro termo (ex.: peixe, caderno).')
+        setSearchError('Nenhum NCM encontrado — tente outro termo (ex.: refrigerante, cerveja).')
       }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'Não foi possível buscar NCM.'
@@ -84,7 +124,7 @@ export function NcmAutocompleteField ({
     } finally {
       setLoading(false)
     }
-  }, [showToast])
+  }, [showToast, onChange])
 
   const scheduleSearch = useCallback((text: string) => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -113,15 +153,6 @@ export function NcmAutocompleteField ({
     setQuery(hint)
     scheduleSearch(hint)
   }, [productHint, normalizedValue.length, scheduleSearch])
-
-  const handleSelect = (option: NcmReferencia) => {
-    const code = normalizeNcmCode(option.code)
-    setSelectedLabel(option.label || formatNcmLabel(code, option.description))
-    setQuery('')
-    setResults([])
-    setDropdownOpen(false)
-    onChange(code, option)
-  }
 
   const showHelp = () => {
     Alert.alert('O que é NCM?', NCM_HELP_TOOLTIP)
@@ -155,11 +186,17 @@ export function NcmAutocompleteField ({
 
       <TextInput
         style={flow.input}
-        placeholder="Ex.: caderno, camisa, parafuso…"
+        placeholder="Ex.: refrigerante, cerveja ou 2202.10.00"
         placeholderTextColor={theme.placeholder}
         value={query}
         onChangeText={(t) => {
           setQuery(t)
+          const digits = t.replace(/\D/g, '')
+          if (digits.length === 8) {
+            if (debounceRef.current) clearTimeout(debounceRef.current)
+            void runSearch(t)
+            return
+          }
           scheduleSearch(t)
         }}
         onFocus={() => {
@@ -258,7 +295,7 @@ export function NcmAutocompleteField ({
       ) : (
         !searchError && !loading ? (
         <Text style={[flow.hint, { color: theme.textSecondary, marginTop: 8 }]}>
-          Selecione uma opção na lista para preencher o código de 8 dígitos.
+          Digite o nome do produto ou os 8 dígitos do NCM (ex.: 22021000).
         </Text>
         ) : null
       )}

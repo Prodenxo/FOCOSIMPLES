@@ -5,6 +5,7 @@ import {
 import {
   calculateItemTax,
 } from './nfeItemTaxEngine'
+import { normalizeEmpresaBusinessType } from './empresaBusinessType'
 import {
   getDefaultNfeItem,
   type NfeItemForm,
@@ -25,6 +26,7 @@ function formatValorUnitario(valor: number | null | undefined): string {
 export type MapCatalogProdutoToNfeItemOptions = {
   emitenteUf?: string
   destinatarioUf?: string
+  businessType?: string
 }
 
 /** Catálogo produto (NFE/NFCE) → linha do formulário NF-e / NFC-e no App. */
@@ -39,9 +41,11 @@ export function mapCatalogProdutoToNfeItem(
   const descricao = String(produto.discriminacao ?? '').trim()
   const vu = formatValorUnitario(produto.valor_sugerido ?? null)
   const tax = calculateItemTax(
-    { ncm: fields.ncm, cest: meta.cest },
+    { ncm: fields.ncm },
     options.emitenteUf,
     options.destinatarioUf,
+    null,
+    normalizeEmpresaBusinessType(options.businessType),
   )
 
   const row = applySimplesNacionalDefaultsToNfeItem({

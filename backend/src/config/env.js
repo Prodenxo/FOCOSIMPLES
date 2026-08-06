@@ -374,4 +374,10 @@ export const env = {
    * Por defeito `true` para o limite na plataforma acompanhar o contratado na Stripe. Defina `false` para só ajustar limite à mão.
    */
   STRIPE_SYNC_MAX_MEI: process.env.STRIPE_SYNC_MAX_MEI || "true",
+  /**
+   * Token IBPT (De Olho no Imposto) para transparência fiscal Lei 12.741/2012 na NF-e.
+   * Cadastro: https://deolhonoimposto.ibpt.org.br/
+   */
+  IBPT_API_TOKEN: normalizeEnvSecret(process.env.IBPT_API_TOKEN || ""),
+  IBPT_TIMEOUT_MS: Number(process.env.IBPT_TIMEOUT_MS || "3000"),
 };

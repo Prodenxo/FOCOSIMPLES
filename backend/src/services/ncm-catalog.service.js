@@ -3,6 +3,12 @@ import { createSupabaseClient } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import { badRequest } from '../utils/errors.js';
 import { NCMS_SCHEMA_SQL } from './db-bootstrap.service.js';
+import {
+  buildRetailAliasLabel,
+  isRetailNcmChapter,
+  resolveRetailNcmAliasCodes,
+  scoreIndustrialMedicalPenalty,
+} from '../lib/ncm-retail-aliases.js';
 
 const NCMS_TABLE = 'ncms';
 const BRASILAPI_NCM_URL = 'https://brasilapi.com.br/api/ncm/v1';
@@ -283,6 +289,8 @@ export const rankNcmRows = (rows, tokens) => {
       if (desc.includes(token)) score += token.length >= 5 ? 4 : 2;
       if (code.includes(token) || codeDisplay.includes(token)) score += 3;
     }
+    if (isRetailNcmChapter(code)) score += 3;
+    score -= scoreIndustrialMedicalPenalty(row?.description, tokens);
     return { row, score };
   });
 
@@ -292,6 +300,37 @@ export const rankNcmRows = (rows, tokens) => {
   });
 
   return scored.filter((s) => s.score > 0).map((s) => mapNcmRow(s.row));
+};
+
+const fetchNcmsByCodes = async (dbClient, codes, { limit = 12 } = {}) => {
+  const unique = [...new Set((codes || []).map(normalizeNcmCode).filter((c) => c.length === 8))];
+  if (!unique.length) return [];
+
+  const { data, error } = await dbClient
+    .from(NCMS_TABLE)
+    .select('code, description')
+    .in('code', unique.slice(0, limit));
+  if (error) throw badRequest(error.message);
+
+  const byCode = new Map((data || []).map((row) => [normalizeNcmCode(row.code), row]));
+  return unique
+    .map((code) => byCode.get(code) || { code, description: '' })
+    .slice(0, limit);
+};
+
+const mapRetailAliasResults = (rows, aliasCodes) => {
+  const aliasSet = new Set(aliasCodes);
+  return (rows || []).map((row) => {
+    const code = normalizeNcmCode(row?.code);
+    if (!aliasSet.has(code)) return mapNcmRow(row);
+    const desc = cleanNcmDescription(row?.description);
+    return {
+      code,
+      description: desc || buildRetailAliasLabel(code, '').replace(/ \(varejo\)$/, ''),
+      label: desc ? formatNcmLabel(code, desc) : buildRetailAliasLabel(code, 'Sugestão varejo'),
+      retailAlias: true,
+    };
+  });
 };
 
 /** Busca NCM no catálogo local (prioritário). */
@@ -312,6 +351,30 @@ export const buscarNcmsCatalogo = async ({ q = '', limit = 12 } = {}) => {
   const dbClient = getDb();
 
   const digits = query.replace(/\D/g, '');
+  if (digits.length === 8) {
+    const exact = await fetchNcmsByCodes(dbClient, [digits], { limit: 1 });
+    if (exact.length > 0) return exact.map(mapNcmRow);
+    return [{
+      code: digits,
+      description: '',
+      label: formatNcmCodeDisplay(digits),
+    }];
+  }
+
+  const aliasCodes = resolveRetailNcmAliasCodes(query);
+  if (aliasCodes.length > 0) {
+    const aliasRows = await fetchNcmsByCodes(dbClient, aliasCodes, { limit: safeLimit });
+    if (aliasRows.length > 0) {
+      return mapRetailAliasResults(aliasRows, aliasCodes);
+    }
+    return aliasCodes.slice(0, safeLimit).map((code) => ({
+      code,
+      description: '',
+      label: buildRetailAliasLabel(code, 'Sugestão varejo'),
+      retailAlias: true,
+    }));
+  }
+
   if (digits.length >= 4) {
     const { data, error } = await dbClient
       .from(NCMS_TABLE)

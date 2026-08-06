@@ -698,10 +698,29 @@ export const saveDocumentosAtivosMirror = async (userId, selection, deps = {}) =
   const resolveSupabase = deps.getSupabase ?? getSupabase;
 
   if (!userId || !selection || typeof selection !== 'object') return;
+  let preservedBusinessType = null;
+  try {
+    const supabase = resolveSupabase();
+    const { data: existingMeta } = await supabase
+      .from(TABLE)
+      .select('documentos_ativos')
+      .eq('user_id', userId)
+      .maybeSingle();
+    const raw = existingMeta?.documentos_ativos;
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      const bt = raw.business_type ?? raw.businessType;
+      if (bt) preservedBusinessType = String(bt).trim().toUpperCase();
+    }
+  } catch {
+    // ignore — segue só com flags
+  }
   const json = {
     nfse: Boolean(selection.nfse),
     nfe: Boolean(selection.nfe),
-    nfce: Boolean(selection.nfce)
+    nfce: Boolean(selection.nfce),
+    ...(preservedBusinessType === 'MANUFACTURER' || preservedBusinessType === 'RESELLER'
+      ? { business_type: preservedBusinessType }
+      : {}),
   };
   if (!json.nfse && !json.nfe && !json.nfce) return;
   try {

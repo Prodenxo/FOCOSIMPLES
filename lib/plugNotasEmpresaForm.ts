@@ -4,6 +4,11 @@
  */
 
 import { resolveAppOrigin } from './appOrigin';
+import {
+  DEFAULT_EMPRESA_BUSINESS_TYPE,
+  normalizeEmpresaBusinessType,
+  type EmpresaBusinessType,
+} from './empresaBusinessType';
 
 const normalizeDoc = (value: string) => value.replace(/\D/g, '');
 const hasRequiredText = (value: unknown) => String(value || '').trim().length > 0;
@@ -37,6 +42,8 @@ export interface PlugNotasCompanyForm {
   email: string;
   regimeTributario: PlugNotasRegimeTributario;
   simplesNacional: boolean;
+  /** Comércio (5102/6102) ou indústria (5101/6101) — default RESELLER */
+  businessType: EmpresaBusinessType;
   cep: string;
   tipoLogradouro: string;
   logradouro: string;
@@ -110,6 +117,7 @@ export function empresaFiscalToCompanyForm(empresa: any): PlugNotasCompanyForm {
     rpsSerie: String(
       empresa?.rps?.numeracao?.[0]?.serie ?? empresa?.nfse?.config?.rps?.serie ?? '1'
     ).trim() || '1',
+    businessType: normalizeEmpresaBusinessType(empresa?.businessType ?? empresa?.business_type),
   };
 }
 
@@ -138,6 +146,7 @@ export function getDefaultPlugNotasCompanyForm(): PlugNotasCompanyForm {
     rpsLote: 1,
     rpsNumero: 1,
     rpsSerie: '1',
+    businessType: DEFAULT_EMPRESA_BUSINESS_TYPE,
   };
 }
 
@@ -254,6 +263,7 @@ export function buildPlugNotasEmpresaPayload({
       nfe: Boolean(form.nfeAtivo),
       nfce: Boolean(form.nfceAtivo),
     },
+    businessType: normalizeEmpresaBusinessType(form.businessType),
     rps: {
       lote: clampRpsInt(form.rpsLote, 1),
       numeracao: [

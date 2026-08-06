@@ -52,6 +52,7 @@ import {
   extractNfeItemValorUnitario,
   normalizePlugnotasNfePayload,
 } from './plugnotas/plugnotas-nfe-payload.js';
+import { applyIbptTransparenciaToNfePayload, logIbptTransparenciaEmit } from '../lib/ibpt-transparencia-nfe.js';
 import {
   applyMeiNfeEmitForcePolicy,
   ensureMeiNfePlugnotasCadastroBeforeEmit,
@@ -2046,11 +2047,23 @@ export const emitirNota = async (userId, input) => {
       assertNfsePrestadorEmailOrThrow(emitPayload);
     }
     if (documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE) {
-      emitPayload = normalizePlugnotasNfePayload(payload);
       const cnpjEmitente = prestadorDoc
         || String(payload?.emitente?.cpfCnpj || payload?.prestador?.cpfCnpj || '').replace(/\D/g, '');
+      let empresaPlugnotas = null;
       if (cnpjEmitente.length === 14) {
-        const empresaPlugnotas = await ensureMeiNfePlugnotasCadastroBeforeEmit(cnpjEmitente);
+        empresaPlugnotas = await ensureMeiNfePlugnotasCadastroBeforeEmit(cnpjEmitente);
+      }
+      const ibptResult = await applyIbptTransparenciaToNfePayload(payload, {
+        cnpj: cnpjEmitente,
+        empresaPlugnotas,
+      });
+      logIbptTransparenciaEmit(ibptResult.ibpt, {
+        cnpjEmitente,
+        documentType,
+      });
+      emitPayload = ibptResult.payload;
+      emitPayload = normalizePlugnotasNfePayload(emitPayload);
+      if (cnpjEmitente.length === 14 && empresaPlugnotas) {
         emitPayload = hydrateMeiNfeEmitenteIeFromEmpresa(emitPayload, empresaPlugnotas);
       }
       emitPayload = applyMeiNfeEmitForcePolicy(emitPayload);
@@ -3016,7 +3029,8 @@ const onlyDigitsCatalog = (value, max) => String(value ?? '').replace(/\D/g, '')
 
 /**
  * Importa produtos NF-e/NFC-e a partir de linhas de planilha (já parseadas no cliente).
- * Cada linha válida deve trazer descrição + NCM + CFOP + unidade + CSOSN.
+ * Cada linha válida deve trazer descrição + NCM (8 dígitos).
+ * CFOP/CSOSN são calculados na emissão com base no NCM e UF.
  */
 export const criarCatalogoProdutosFromSpreadsheet = async (userId, body = {}) => {
   const documentType = normalizeDocumentType(
@@ -3046,17 +3060,7 @@ export const criarCatalogoProdutosFromSpreadsheet = async (userId, body = {}) =>
     const descricao = String(row.descricao || row.discriminacao || row.Descricao || '').trim();
     const codigo = String(row.codigo || row.sku || row.Codigo || '').trim() || `IMP-${line}`;
     const ncm = onlyDigitsCatalog(row.ncm || row.NCM, 8);
-    const cfop = onlyDigitsCatalog(row.cfop || row.CFOP, 4);
     const unidade = String(row.unidade || row.Unidade || 'UN').trim() || 'UN';
-    const icmsCsosn = onlyDigitsCatalog(
-      row.csosn || row.icmsCsosn || row.icms_csosn || row.CSOSN,
-      3,
-    );
-    const pisCst = onlyDigitsCatalog(row.pisCst || row.pis_cst || row.PIS || '49', 2) || '49';
-    const cofinsCst = onlyDigitsCatalog(
-      row.cofinsCst || row.cofins_cst || row.COFINS || '49',
-      2,
-    ) || '49';
     const valorRaw = row.preco ?? row.valor_sugerido ?? row.valorSugerido ?? row.Preco;
     let valor_sugerido = null;
     if (valorRaw != null && String(valorRaw).trim() !== '') {
@@ -3076,14 +3080,6 @@ export const criarCatalogoProdutosFromSpreadsheet = async (userId, body = {}) =>
       errors.push({ line, reason: 'ncm', message: 'NCM deve ter 8 dígitos.' });
       continue;
     }
-    if (cfop.length !== 4) {
-      errors.push({ line, reason: 'cfop', message: 'CFOP deve ter 4 dígitos.' });
-      continue;
-    }
-    if (icmsCsosn.length !== 3) {
-      errors.push({ line, reason: 'csosn', message: 'CSOSN deve ter 3 dígitos.' });
-      continue;
-    }
 
     try {
       const createdRow = await criarCatalogoProduto(userId, {
@@ -3095,11 +3091,7 @@ export const criarCatalogoProdutosFromSpreadsheet = async (userId, body = {}) =>
         valor_sugerido,
         metadata_json: {
           ncm,
-          cfop,
           unidade,
-          icmsCsosn,
-          pisCst,
-          cofinsCst,
           importedFromSpreadsheet: true,
         },
       });

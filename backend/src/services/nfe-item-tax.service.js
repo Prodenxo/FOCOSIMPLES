@@ -127,7 +127,7 @@ export const lookupTaxRulesStateBatch = async ({
  * Calcula CSOSN/CFOP para vários itens (formulário NF-e).
  * @param {{ originUf: string, destinationUf: string, items: Array<{ ncm?: string, cest?: string }> }} input
  */
-export const calculateItemsTax = async ({ originUf, destinationUf, items }) => {
+export const calculateItemsTax = async ({ originUf, destinationUf, items, businessType }) => {
   const orig = normalizeUf(originUf);
   const dest = normalizeUf(destinationUf);
   const list = Array.isArray(items) ? items : [];
@@ -143,6 +143,6 @@ export const calculateItemsTax = async ({ originUf, destinationUf, items }) => {
   return list.map((product) => {
     const ncm = normalizeNcm(product?.ncm);
     const stateRule = ncm ? rulesMap.get(ncm) ?? null : null;
-    return calculateItemTax(product, orig, dest, stateRule);
+    return calculateItemTax(product, orig, dest, stateRule, businessType);
   });
 };

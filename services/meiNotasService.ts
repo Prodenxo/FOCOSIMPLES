@@ -1,4 +1,5 @@
 import { apiClient, downloadToFile } from '../lib/apiClient';
+import type { EmpresaBusinessType } from '../lib/empresaBusinessType';
 
 export type DocumentType = 'NFSE' | 'NFE' | 'NFCE' | 'CTE';
 
@@ -58,6 +59,8 @@ export interface NfeTributosInput {
   ipi?: NfeIpiInput;
   pis?: NfePisInput;
   cofins?: NfeCofinsInput;
+  /** Lei 12.741/2012 — preenchido automaticamente via IBPT na emissão. */
+  valorAproximadoTributos?: string | number;
 }
 
 export interface NfeItemInput {
@@ -411,6 +414,8 @@ export interface EmpresaFiscalData {
   telefone?: { ddd?: string | null; numero?: string | null } | string | null;
   inscricaoMunicipal?: string | null;
   inscricaoEstadual?: string | null;
+  /** RESELLER (comércio) ou MANUFACTURER (indústria) — espelho local */
+  businessType?: EmpresaBusinessType | string | null;
   endereco?: EmpresaFiscalEndereco | null;
   nfse?: { ativo?: boolean } | null;
   nfe?: { ativo?: boolean } | null;
@@ -789,6 +794,7 @@ export type NfeItemTaxResult = {
 export async function calcularTributacaoItensNfe(input: {
   originUf: string
   destinationUf: string
+  businessType?: EmpresaBusinessType | string
   items: Array<{ ncm?: string; cest?: string }>
 }): Promise<{ items: NfeItemTaxResult[] }> {
   return await apiClient.post<{ items: NfeItemTaxResult[] }>(

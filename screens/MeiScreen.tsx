@@ -159,8 +159,13 @@ import {
   shouldShowDestinatarioInscricaoEstadual,
   isCpfDocument,
 } from '../lib/nfeEmissaoLeigo';
-import { buildNfeTaxItemsKey } from '../lib/nfeItemTaxEngine';
+import { buildNfeTaxItemsKey, calculateItemTax } from '../lib/nfeItemTaxEngine';
 import { recalculateNfeItemsTax } from '../lib/recalculateNfeItemsTax';
+import {
+  EMPRESA_BUSINESS_TYPE_OPTIONS,
+  getEmpresaBusinessTypeLabel,
+  normalizeEmpresaBusinessType,
+} from '../lib/empresaBusinessType';
 import { mapCatalogProdutoToNfeItem } from '../lib/mapCatalogProdutoToNfeItem';
 import { isCatalogProdutoUsableForNfeLike, catalogProdutoNeedsNfeCompletion } from '../lib/nfeCatalogProdutoMetadata';
 import NfeEmitItemLeigoCard from '../components/mei/NfeEmitItemLeigoCard';
@@ -437,6 +442,14 @@ function EmpresaFiscalCard({ empresa, theme, onEdit }: { empresa: EmpresaFiscalD
             <Text style={labelStyle}>IE {empresa.inscricaoEstadual}</Text>
           </View>
         ) : null}
+        {nfeAtivo ? (
+          <View style={rowStyle}>
+            <Ionicons name="storefront-outline" size={16} color={iconColor} style={{ marginTop: 2 }} />
+            <Text style={labelStyle}>
+              Operação: {getEmpresaBusinessTypeLabel(empresa.businessType)}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       {temBadge ? (
@@ -658,13 +671,17 @@ function MeiScreenContent() {
     () => normalizeUf(nfeLikeForm.destinatarioEndereco.estado),
     [nfeLikeForm.destinatarioEndereco.estado],
   );
+  const nfeEmitenteBusinessType = useMemo(
+    () => normalizeEmpresaBusinessType(empresaFiscal?.businessType),
+    [empresaFiscal?.businessType],
+  );
   const nfeVendaLocalizacao = useMemo(
     () => detectNfeVendaLocalizacao(nfeEmitenteUf, nfeDestinatarioUf),
     [nfeEmitenteUf, nfeDestinatarioUf],
   );
   const nfeCfopAuto = useMemo(
-    () => resolveCfopByLocalizacao(nfeEmitenteUf, nfeDestinatarioUf),
-    [nfeEmitenteUf, nfeDestinatarioUf],
+    () => calculateItemTax({}, nfeEmitenteUf, nfeDestinatarioUf, null, nfeEmitenteBusinessType).cfop,
+    [nfeEmitenteUf, nfeDestinatarioUf, nfeEmitenteBusinessType],
   );
   const nfeLocalizacaoBanner = useMemo(
     () => getNfeLocalizacaoBanner(nfeEmitenteUf, nfeDestinatarioUf, nfeVendaLocalizacao, nfeCfopAuto),
@@ -688,6 +705,7 @@ function MeiScreenContent() {
         nfeItensRef.current,
         nfeEmitenteUf,
         nfeDestinatarioUf,
+        nfeEmitenteBusinessType,
       );
       if (cancelled) return;
       setNfeLikeForm((f) => {
@@ -709,6 +727,7 @@ function MeiScreenContent() {
     nfeEmitenteUf,
     nfeDestinatarioUf,
     nfeTaxItemsKey,
+    nfeEmitenteBusinessType,
   ]);
 
   const touchNfsePrestadorFields = useCallback(() => {
@@ -2606,6 +2625,7 @@ function MeiScreenContent() {
       const row = mapCatalogProdutoToNfeItem(item, {
         emitenteUf: nfeEmitenteUf,
         destinatarioUf: nfeDestinatarioUf,
+        businessType: nfeEmitenteBusinessType,
       })
       setNfeLikeForm((f) => {
         const idx = Math.min(Math.max(nfeItemEditIndex, 0), Math.max(f.itens.length - 1, 0))
@@ -4184,6 +4204,42 @@ function MeiScreenContent() {
                 </View>
 
                 {documentosPermitidos.nfe ? (
+                  <>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.label}>Tipo de operação</Text>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+                        {EMPRESA_BUSINESS_TYPE_OPTIONS.map((opt) => {
+                          const selected = plugNotasCompanyForm.businessType === opt.value;
+                          return (
+                            <Pressable
+                              key={opt.value}
+                              onPress={() => updatePlugNotasCompanyForm({ businessType: opt.value })}
+                              accessibilityRole="button"
+                              accessibilityState={{ selected }}
+                              style={{
+                                paddingVertical: 10,
+                                paddingHorizontal: 12,
+                                borderRadius: 10,
+                                borderWidth: 1,
+                                borderColor: selected ? theme.primary : theme.border,
+                                backgroundColor: selected
+                                  ? (isDarkMode ? 'rgba(34,197,94,0.15)' : 'rgba(34,197,94,0.08)')
+                                  : theme.surface,
+                                flexGrow: 1,
+                                minWidth: 140,
+                              }}
+                            >
+                              <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>
+                                {opt.label}
+                              </Text>
+                              <Text style={{ fontSize: 11, color: theme.textSecondary, marginTop: 4, lineHeight: 15 }}>
+                                {opt.hint}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </View>
                   <View style={styles.inputGroup}>
                     <Text style={styles.label}>Inscrição estadual (IE)</Text>
                     <TextInput
@@ -4198,6 +4254,7 @@ function MeiScreenContent() {
                       Obrigatória para NF-e de produtos. Use ISENTO se não tiver inscrição estadual.
                     </Text>
                   </View>
+                  </>
                 ) : null}
 
                 <TouchableOpacity
@@ -4398,7 +4455,7 @@ function MeiScreenContent() {
                 <MeiFormBanner>
                   {emitirNotaType === 'NFSE'
                     ? 'Checklist NFS-e: certificado e-CNPJ · empresa no emissor · IM e RPS · código de serviço/CNAE corretos.'
-                    : 'Checklist NF-e: certificado e-CNPJ · NF-e ativa na empresa · IE quando exigida · NCM, CFOP e CSOSN do item.'}
+                    : 'Checklist NF-e: certificado e-CNPJ · NF-e ativa na empresa · IE quando exigida · NCM do produto.'}
                 </MeiFormBanner>
               ) : null}
               {emitirNotaType === 'NFSE' && (
@@ -4997,10 +5054,7 @@ function MeiScreenContent() {
                         item={item}
                         itemIndex={itemIndex}
                         isActive={nfeItemEditIndex === itemIndex}
-                        cfopAuto={nfeCfopAuto}
-                        csosnAuto={item.tributos.icms.csosn || '102'}
                         showRemove={nfeLikeForm.itens.length > 1}
-                        isFocoSimplesUi={isFocoSimplesUi}
                         isDarkMode={isDarkMode}
                         theme={theme}
                         mfSpacing={mfSpacing}

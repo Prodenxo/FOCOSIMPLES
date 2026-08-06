@@ -169,12 +169,32 @@ create index if not exists idx_tax_rules_state_lookup
   on public.tax_rules_state (ncm, origin_uf, destination_uf);
 `;
 
+export const IBPT_NCM_CACHE_SCHEMA_SQL = `
+create table if not exists public.ibpt_ncm_cache (
+  cache_key text primary key,
+  ncm varchar(8) not null,
+  uf char(2) not null,
+  ex varchar(3) not null default '0',
+  nacional numeric(8, 4) not null default 0,
+  estadual numeric(8, 4) not null default 0,
+  importado numeric(8, 4) not null default 0,
+  municipal numeric(8, 4) not null default 0,
+  fonte text,
+  versao text,
+  fetched_at timestamptz not null default now()
+);
+
+create index if not exists idx_ibpt_ncm_cache_lookup
+  on public.ibpt_ncm_cache (ncm, uf, ex);
+`;
+
 const ensureDasSchema = async (client) => {
   await client.query(DAS_STATUS_SCHEMA_SQL);
   await client.query(DAS_JOB_RUNS_SCHEMA_SQL);
   await client.query(CALENDAR_AGENDA_WHATSAPP_SQL);
   await client.query(NCMS_SCHEMA_SQL);
   await client.query(TAX_RULES_STATE_SCHEMA_SQL);
+  await client.query(IBPT_NCM_CACHE_SCHEMA_SQL);
 };
 
 export const bootstrapDatabase = async (options = {}) => {

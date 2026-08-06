@@ -13,7 +13,8 @@
     "test:activation": "node --test tests/activation.service.test.js tests/users-activation-routes.contract.test.js",
     "test:openclaw:salario": "node scripts/test-openclaw-transaction.mjs",
     "test:openclaw:nfse": "node scripts/test-openclaw-nfse.mjs",
-    "test:openclaw:nfse:local": "node scripts/test-openclaw-nfse.mjs --local"
+    "test:openclaw:nfse:local": "node scripts/test-openclaw-nfse.mjs --local",
+    "seed:tax-rules-rj": "node scripts/one-time/seed-tax-rules-state-rj-retail.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.7",
