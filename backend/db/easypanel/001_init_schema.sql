@@ -372,6 +372,20 @@ CREATE TABLE public.ncms (
 
 CREATE INDEX idx_ncms_description_lower ON public.ncms (lower(description));
 
+CREATE TABLE public.tax_rules_state (
+  id bigserial PRIMARY KEY,
+  ncm varchar(8) NOT NULL,
+  origin_uf char(2) NOT NULL,
+  destination_uf char(2) NOT NULL,
+  has_st boolean NOT NULL DEFAULT false,
+  cfop_st varchar(4),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT tax_rules_state_unique_route UNIQUE (ncm, origin_uf, destination_uf)
+);
+
+CREATE INDEX idx_tax_rules_state_lookup
+  ON public.tax_rules_state (ncm, origin_uf, destination_uf);
+
 CREATE TABLE public.das_mei (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   created_at timestamptz NOT NULL DEFAULT now(),

@@ -2,7 +2,9 @@ import type { NfseCatalogProduto } from '../services/meiNotasService'
 import {
   applySimplesNacionalDefaultsToNfeItem,
 } from './nfeEmissaoLeigo'
-import { resolveCfopByLocalizacao } from './nfeEmissaoLeigo'
+import {
+  calculateItemTax,
+} from './nfeItemTaxEngine'
 import {
   getDefaultNfeItem,
   type NfeItemForm,
@@ -36,14 +38,18 @@ export function mapCatalogProdutoToNfeItem(
   const codigo = String(produto.codigo ?? '').trim()
   const descricao = String(produto.discriminacao ?? '').trim()
   const vu = formatValorUnitario(produto.valor_sugerido ?? null)
-  const cfopAuto = resolveCfopByLocalizacao(options.emitenteUf, options.destinatarioUf)
+  const tax = calculateItemTax(
+    { ncm: fields.ncm, cest: meta.cest },
+    options.emitenteUf,
+    options.destinatarioUf,
+  )
 
   const row = applySimplesNacionalDefaultsToNfeItem({
     ...base,
     codigo: codigo || 'CAT',
     descricao: descricao || codigo || 'Produto do catálogo',
     ncm: fields.ncm,
-    cfop: cfopAuto ?? fields.cfop,
+    cfop: tax.cfop ?? fields.cfop,
     unidade: (meta.unidade ?? fields.unidade).trim() || 'UN',
     quantidade: '1',
     valorUnitario: vu || '',
@@ -52,7 +58,7 @@ export function mapCatalogProdutoToNfeItem(
       ...base.tributos,
       icms: {
         ...base.tributos.icms,
-        csosn: fields.icmsCsosn,
+        csosn: tax.csosn ?? fields.icmsCsosn,
         cst: '',
       },
       pis: { ...base.tributos.pis, cst: fields.pisCst },

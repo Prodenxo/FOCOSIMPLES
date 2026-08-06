@@ -4,6 +4,7 @@ import {
   buscarNcmsCatalogo,
   sugerirNcmsPorTexto,
 } from '../services/ncm-catalog.service.js';
+import { calculateItemsTax } from '../services/nfe-item-tax.service.js';
 import {
   consultarEmpresaAndReconcileMirror,
   persistDocumentosAtivosMirrorAfterEmpresa
@@ -454,6 +455,18 @@ export const sugerirCatalogoNcms = async (req, res, next) => {
     const limit = parseCatalogLimit(req.query?.limit);
     const data = await sugerirNcmsPorTexto({ texto, limit });
     return sendSuccess(res, data, 'Sugestões de NCM');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const calcularTributacaoItensNfe = async (req, res, next) => {
+  try {
+    const originUf = String(req.body?.originUf || req.body?.origin_uf || '').trim();
+    const destinationUf = String(req.body?.destinationUf || req.body?.destination_uf || '').trim();
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    const taxes = await calculateItemsTax({ originUf, destinationUf, items });
+    return sendSuccess(res, { items: taxes }, 'Tributação calculada');
   } catch (error) {
     return next(error);
   }

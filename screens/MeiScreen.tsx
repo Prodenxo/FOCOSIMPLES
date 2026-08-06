@@ -147,7 +147,6 @@ import {
   resolveNfseTomadorByCnpj,
 } from '../lib/meiCatalogClienteFiscal';
 import {
-  applyCfopLocalizacaoToNfeItens,
   applySimplesNacionalDefaultsToNfeItem,
   detectNfeVendaLocalizacao,
   getNfeLocalizacaoBanner,
@@ -160,6 +159,8 @@ import {
   shouldShowDestinatarioInscricaoEstadual,
   isCpfDocument,
 } from '../lib/nfeEmissaoLeigo';
+import { buildNfeTaxItemsKey } from '../lib/nfeItemTaxEngine';
+import { recalculateNfeItemsTax } from '../lib/recalculateNfeItemsTax';
 import { mapCatalogProdutoToNfeItem } from '../lib/mapCatalogProdutoToNfeItem';
 import { isCatalogProdutoUsableForNfeLike, catalogProdutoNeedsNfeCompletion } from '../lib/nfeCatalogProdutoMetadata';
 import NfeEmitItemLeigoCard from '../components/mei/NfeEmitItemLeigoCard';
@@ -669,17 +670,46 @@ function MeiScreenContent() {
     () => getNfeLocalizacaoBanner(nfeEmitenteUf, nfeDestinatarioUf, nfeVendaLocalizacao, nfeCfopAuto),
     [nfeEmitenteUf, nfeDestinatarioUf, nfeVendaLocalizacao, nfeCfopAuto],
   );
+  const nfeTaxItemsKey = useMemo(
+    () => buildNfeTaxItemsKey(nfeLikeForm.itens),
+    [nfeLikeForm.itens],
+  );
+  const nfeItensRef = useRef(nfeLikeForm.itens);
+  nfeItensRef.current = nfeLikeForm.itens;
 
   useEffect(() => {
     if (!emitirNotaVisible || emitirNotaType !== 'NFE') return;
-    if (!nfeCfopAuto) return;
-    setNfeLikeForm((f) => {
-      const nextItens = applyCfopLocalizacaoToNfeItens(f.itens, nfeEmitenteUf, nfeDestinatarioUf);
-      const changed = nextItens.some((it, i) => it.cfop !== f.itens[i]?.cfop);
-      if (!changed) return f;
-      return { ...f, itens: nextItens };
-    });
-  }, [emitirNotaVisible, emitirNotaType, nfeCfopAuto, nfeEmitenteUf, nfeDestinatarioUf]);
+    if (!nfeEmitenteUf || !nfeDestinatarioUf) return;
+
+    let cancelled = false;
+
+    void (async () => {
+      const nextItens = await recalculateNfeItemsTax(
+        nfeItensRef.current,
+        nfeEmitenteUf,
+        nfeDestinatarioUf,
+      );
+      if (cancelled) return;
+      setNfeLikeForm((f) => {
+        const changed = nextItens.some((it, i) =>
+          it.cfop !== f.itens[i]?.cfop
+          || it.tributos.icms.csosn !== f.itens[i]?.tributos.icms.csosn,
+        );
+        if (!changed) return f;
+        return { ...f, itens: nextItens };
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    emitirNotaVisible,
+    emitirNotaType,
+    nfeEmitenteUf,
+    nfeDestinatarioUf,
+    nfeTaxItemsKey,
+  ]);
 
   const touchNfsePrestadorFields = useCallback(() => {
     nfsePrestadorUserEditedRef.current = true;
@@ -2540,11 +2570,6 @@ function MeiScreenContent() {
         destinatarioEmail: prefill.destinatarioEmail,
         destinatarioIndIEDest: prefill.destinatarioIndIEDest,
         destinatarioEndereco: prefill.destinatarioEndereco,
-        itens: applyCfopLocalizacaoToNfeItens(
-          f.itens,
-          nfeEmitenteUf,
-          normalizeUf(prefill.destinatarioEndereco.estado),
-        ),
       }));
       if (emitirNotaType === 'NFE' && !catalogClienteHasNfeEndereco(item)) {
         showToast(
@@ -4973,6 +4998,7 @@ function MeiScreenContent() {
                         itemIndex={itemIndex}
                         isActive={nfeItemEditIndex === itemIndex}
                         cfopAuto={nfeCfopAuto}
+                        csosnAuto={item.tributos.icms.csosn || '102'}
                         showRemove={nfeLikeForm.itens.length > 1}
                         isFocoSimplesUi={isFocoSimplesUi}
                         isDarkMode={isDarkMode}

@@ -62,6 +62,7 @@ router.get('/catalogo/codigos-servicos', requireAuth, requireMeiEnabled, control
 router.get('/catalogo/codigos-servicos/sugerir', requireAuth, requireMeiEnabled, controller.sugerirCatalogoCodigosServicos);
 router.get('/catalogo/ncms', requireAuth, requireMeiEnabled, controller.listarCatalogoNcms);
 router.get('/catalogo/ncms/sugerir', requireAuth, requireMeiEnabled, controller.sugerirCatalogoNcms);
+router.post('/tax/calculate-items', requireAuth, requireMeiEnabled, controller.calcularTributacaoItensNfe);
 router.post('/catalogo/produtos', requireAuth, requireMeiEnabled, controller.criarCatalogoProduto);
 router.post('/catalogo/produtos/from-cnaes', requireAuth, requireMeiEnabled, controller.criarCatalogoProdutosFromCnaes);
 router.post(

@@ -777,6 +777,26 @@ export async function sugerirCatalogoNcms (options: {
   )
 }
 
+export type NfeItemTaxResult = {
+  cfop: string | null
+  csosn: string | null
+  hasSt: boolean
+  scope: 'estadual' | 'interestadual' | 'unknown'
+  reason: string
+}
+
+/** Motor tributário — CSOSN/CFOP por item (`POST /tax/calculate-items`). */
+export async function calcularTributacaoItensNfe(input: {
+  originUf: string
+  destinationUf: string
+  items: Array<{ ncm?: string; cest?: string }>
+}): Promise<{ items: NfeItemTaxResult[] }> {
+  return await apiClient.post<{ items: NfeItemTaxResult[] }>(
+    '/mei-notas/tax/calculate-items',
+    input,
+  )
+}
+
 /** Atualiza item (`PATCH /mei-notas/catalogo/produtos/:id`). */
 export async function atualizarCatalogoNfseProduto(
   id: string,

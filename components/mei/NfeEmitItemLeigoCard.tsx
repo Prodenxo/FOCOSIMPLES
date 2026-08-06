@@ -10,6 +10,7 @@ export type NfeEmitItemLeigoCardProps = {
   itemIndex: number
   isActive: boolean
   cfopAuto: string | null
+  csosnAuto: string | null
   showRemove: boolean
   isFocoSimplesUi: boolean
   isDarkMode: boolean
@@ -33,6 +34,7 @@ export function NfeEmitItemLeigoCard({
   itemIndex,
   isActive,
   cfopAuto,
+  csosnAuto,
   showRemove,
   isFocoSimplesUi,
   isDarkMode,
@@ -128,7 +130,10 @@ export function NfeEmitItemLeigoCard({
         </Text>
         {cfopAuto ? (
           <Text style={{ fontSize: 11, color: theme.textSecondary, lineHeight: 16 }}>
-            CFOP {cfopAuto} — definido automaticamente pela UF do cliente.
+            CFOP {item.cfop || cfopAuto}
+            {csosnAuto ? ` · CSOSN ${item.tributos.icms.csosn || csosnAuto}` : ''}
+            {' — '}preenchido automaticamente pela UF do cliente
+            {item.cest ? ' e ST/CEST do produto' : ''}.
           </Text>
         ) : null}
       </View>
@@ -179,6 +184,7 @@ export function NfeEmitItemLeigoCard({
           <MeiFormField
             label={isFocoSimplesUi ? 'CSOSN ICMS (Simples)' : 'CSOSN ICMS (MEI)'}
             placeholder="102"
+            hint="Normalmente preenchido automaticamente. Altere só se seu contador orientar."
             value={item.tributos.icms.csosn}
             onChangeText={(t) => {
               const csosn = t.replace(/\D/g, '').slice(0, 3)
