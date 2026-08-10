@@ -9,6 +9,19 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+const APP_PRODUCT_LABELS = {
+  focosimples: 'Foco Simples',
+  focomei: 'FocoMEI',
+  financeiro: 'Meu Financeiro',
+}
+
+function resolveBootSplashLabel() {
+  const product = String(process.env.EXPO_PUBLIC_APP_PRODUCT || 'focosimples')
+    .trim()
+    .toLowerCase()
+  return APP_PRODUCT_LABELS[product] || APP_PRODUCT_LABELS.focosimples
+}
+
 function loadShellFromTs() {
   const source = readFileSync(path.join(__dirname, '../lib/webShellDocument.ts'), 'utf8')
   const stylesMatch = source.match(
@@ -49,7 +62,7 @@ function patchIndexHtml(html, { styles, footer, boot }) {
   const bodyInject = `
     <div id="mf-boot-splash" aria-live="polite" aria-busy="true">
       <div style="width:36px;height:36px;border:3px solid #e2e8f0;border-top-color:#2563eb;border-radius:50%;animation:mf-spin 0.8s linear infinite"></div>
-      <span>Carregando FocoMEI…</span>
+      <span>Carregando ${resolveBootSplashLabel()}…</span>
     </div>
     <div id="mf-portal-root"></div>`
 

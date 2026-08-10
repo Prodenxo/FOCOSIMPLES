@@ -235,6 +235,12 @@ export const env = {
     process.env.PLUGNOTAS_NFE_CANCEL_PATH || "/nfe/:id/cancelamento",
   PLUGNOTAS_NFCE_CANCEL_PATH:
     process.env.PLUGNOTAS_NFCE_CANCEL_PATH || "/nfce/:id/cancelamento",
+  /** NF-e/NFC-e — responsável técnico (infRespTec). Se vazio, usa padrão PlugNotas/Tecnospeed. */
+  NFE_RESPONSAVEL_TECNICO_CNPJ: (process.env.NFE_RESPONSAVEL_TECNICO_CNPJ || "").trim(),
+  NFE_RESPONSAVEL_TECNICO_NOME: (process.env.NFE_RESPONSAVEL_TECNICO_NOME || "").trim(),
+  NFE_RESPONSAVEL_TECNICO_EMAIL: (process.env.NFE_RESPONSAVEL_TECNICO_EMAIL || "").trim(),
+  NFE_RESPONSAVEL_TECNICO_DDD: (process.env.NFE_RESPONSAVEL_TECNICO_DDD || "").trim(),
+  NFE_RESPONSAVEL_TECNICO_TELEFONE: (process.env.NFE_RESPONSAVEL_TECNICO_TELEFONE || "").trim(),
   N8N_WHATSAPP_WEBHOOK_URL: process.env.N8N_WHATSAPP_WEBHOOK_URL || "",
   N8N_WHATSAPP_WEBHOOK_SECRET: process.env.N8N_WHATSAPP_WEBHOOK_SECRET || "",
   /** Instância Z-API (ID na URL `/instances/{id}/token/...`). */

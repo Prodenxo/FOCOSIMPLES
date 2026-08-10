@@ -6,6 +6,7 @@
 import {
   resolveItemCestForPlugnotas,
 } from '../../lib/nfe-cest.js';
+import { resolveNfeResponsavelTecnicoForPlugnotas } from '../../lib/nfe-responsavel-tecnico.js';
 
 const toObject = (value) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
@@ -201,7 +202,11 @@ export const normalizePlugnotasNfePayload = (payload) => {
     ? payload.itens.map(normalizeNfeItemForPlugnotasEmit)
     : payload.itens;
   const pagamentos = normalizeNfePagamentosForPlugnotas(payload.pagamentos);
-  return normalizePlugnotasNfeIdeForEmit({ ...payload, itens, pagamentos });
+  const withIde = normalizePlugnotasNfeIdeForEmit({ ...payload, itens, pagamentos });
+  const responsavelTecnico = resolveNfeResponsavelTecnicoForPlugnotas(
+    withIde.responsavelTecnico,
+  );
+  return { ...withIde, responsavelTecnico };
 };
 
 const normalizeNfePagamentosForPlugnotas = (pagamentos) => {

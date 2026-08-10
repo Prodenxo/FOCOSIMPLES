@@ -8,6 +8,14 @@ export EXPO_PUBLIC_MEI_API_URL="${EXPO_PUBLIC_MEI_API_URL:-${VITE_API_URL:-}}"
 export EXPO_PUBLIC_APP_PRODUCT="${EXPO_PUBLIC_APP_PRODUCT:-focosimples}"
 export EXPO_PUBLIC_AUTH_MODE="${EXPO_PUBLIC_AUTH_MODE:-local}"
 
+resolve_product_label() {
+  case "$(printf '%s' "$EXPO_PUBLIC_APP_PRODUCT" | tr '[:upper:]' '[:lower:]')" in
+    focomei) printf '%s' "FocoMEI" ;;
+    financeiro) printf '%s' "Meu Financeiro" ;;
+    *) printf '%s' "Foco Simples" ;;
+  esac
+}
+
 HTML_ROOT="/usr/share/nginx/html"
 ENV_JS="${HTML_ROOT}/env-config.js"
 
@@ -47,6 +55,9 @@ if [ -f "$INDEX" ] && ! grep -q 'env-config.js' "$INDEX"; then
   if ! grep -q 'env-config.js' "$INDEX"; then
     sed -i '0,/<script/{s|<script|<script src="/env-config.js"></script><script|}' "$INDEX" 2>/dev/null || true
   fi
+  PRODUCT_LABEL="$(resolve_product_label)"
+  sed -i "s|>Carregando FocoMEI…</span>|>Carregando ${PRODUCT_LABEL}…</span>|g" "$INDEX" 2>/dev/null || true
+  sed -i "s|>Carregando Foco Simples…</span>|>Carregando ${PRODUCT_LABEL}…</span>|g" "$INDEX" 2>/dev/null || true
 fi
 
 if [ "$EXPO_PUBLIC_AUTH_MODE" != "local" ]; then
