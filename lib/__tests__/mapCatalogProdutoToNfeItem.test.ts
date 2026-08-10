@@ -29,17 +29,25 @@ describe('mapCatalogProdutoToNfeItem', () => {
     expect(row.cfop).toBe('5102')
   })
 
-  it('usa CFOP 6102 quando destinatário é de outro estado', () => {
+  it('sempre inicia com CSOSN 102 e sem CEST — tributação vem do backend', () => {
     const row = mapCatalogProdutoToNfeItem(
       {
-        id: 'p2',
-        codigo: 'SKU',
-        discriminacao: 'Produto',
-        metadata_json: { ncm: '22011000', cfop: '5102', icmsCsosn: '102', pisCst: '49', cofinsCst: '49' },
+        id: 'p4',
+        codigo: 'CAM',
+        discriminacao: 'Camiseta algodão',
+        metadata_json: {
+          ncm: '61091000',
+          icmsCsosn: '500',
+          cest: '0300100',
+          pisCst: '49',
+          cofinsCst: '49',
+        },
       },
-      { emitenteUf: 'RJ', destinatarioUf: 'ES' },
+      { emitenteUf: 'RJ', destinatarioUf: 'SP', destinatarioDoc: '52998224725' },
     )
-    expect(row.cfop).toBe('6102')
+    expect(row.tributos.icms.csosn).toBe('102')
+    expect(row.cest).toBe('')
+    expect(row.cfop).toBe('5102')
   })
 })
 

@@ -17,3 +17,6 @@ export function canAccessMeiArea(role: UserRole | null, mei: boolean | null): bo
 export function canAccessNotasArea(role: UserRole | null, mei: boolean | null): boolean {
   return canAccessMeiArea(role, mei);
 }
+
+/** @deprecated use canAccessNotasArea */
+export const canAccessSimplesArea = canAccessNotasArea;

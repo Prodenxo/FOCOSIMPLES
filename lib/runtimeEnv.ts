@@ -81,6 +81,11 @@ export function hasPublicEnv(keys: ExpoPublicEnvKey[]): boolean {
  * No browser em localhost, usa backend local (3333) — não Easypanel.
  */
 export function getMeiApiBaseUrl(): string {
+  return getSimplesApiBaseUrl();
+}
+
+/** URL do backend Foco Simples (alias preferido). */
+export function getSimplesApiBaseUrl(): string {
   const production =
     (
       getPublicEnv('EXPO_PUBLIC_MEI_API_URL') ||

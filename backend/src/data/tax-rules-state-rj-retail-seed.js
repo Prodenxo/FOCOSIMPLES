@@ -112,19 +112,10 @@ export const TAX_RULES_RJ_RETAIL_ST_ENTRIES = [
   { ncm: '90189099', segment: 'farmacia', label: 'Instrumentos médicos diversos' },
   { ncm: '39262090', segment: 'farmacia', label: 'Vestuário e acessórios de plástico (luvas)' },
 
-  // Papelaria e informática básica
+  // Papelaria
   { ncm: '48201000', segment: 'papelaria', label: 'Cadernos' },
   { ncm: '48202000', segment: 'papelaria', label: 'Cadernetas e blocos' },
   { ncm: '96081000', segment: 'papelaria', label: 'Canetas esferográficas' },
-  { ncm: '84713012', segment: 'informatica', label: 'Notebooks/portáteis' },
-  { ncm: '85171231', segment: 'informatica', label: 'Telefones celulares' },
-  { ncm: '84716053', segment: 'informatica', label: 'Unidades de entrada (teclados/mouses)' },
-
-  // Vestuário e calçados (varejo comum)
-  { ncm: '61091000', segment: 'vestuario', label: 'Camisetas de malha' },
-  { ncm: '62034200', segment: 'vestuario', label: 'Calças de algodão (masculino)' },
-  { ncm: '64039990', segment: 'vestuario', label: 'Calçados com sola de borracha/plástico' },
-  { ncm: '61103000', segment: 'vestuario', label: 'Suéteres e pulôveres' },
 ];
 
 export const TAX_RULES_RJ_UF = 'RJ';

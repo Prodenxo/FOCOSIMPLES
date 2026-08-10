@@ -24,7 +24,24 @@ import {
 import { formatApiNetworkError } from '../lib/apiNetworkError';
 import { alertDialog } from '../lib/confirmDialog';
 import { APP_BRAND_NAME } from '../lib/appBrand';
-import { resolveAppOrigin } from '../lib/appOrigin';
+import {
+  DAS_PAGE_DESC,
+  DAS_PAGE_TITLE,
+  DAS_PORTAL_LABEL,
+  DAS_PORTAL_URL,
+  DAS_PERIODO_INDISPONIVEL_HINT,
+  DAS_TAB_LABEL,
+  CERT_PREFILL_MISSING,
+  NOTAS_ACCESS_DENIED,
+  NOTAS_AREA_SUBTITLE,
+  NOTAS_AREA_TITLE,
+  NOTAS_PAYWALL,
+  PARCELAMENTOS_SUBTITLE,
+  PLAN_PAYWALL_TITLE,
+} from '../lib/fiscalBranding';
+
+/** Produto único: Foco Simples (Simples Nacional). */
+const isFocoSimplesUi = true;
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -59,7 +76,6 @@ import {
   fetchSimplesDasPeriods,
   gerarSimplesDas,
   downloadSimplesDas,
-  SIMPLES_DAS_PORTAL_FALLBACK,
 } from '../services/simplesDasService';
 import {
   listarNfse,
@@ -219,27 +235,6 @@ import { withMeiFetchTimeout } from '../lib/meiFetchWithTimeout';
 import { getTechTokens } from '../lib/techDesign';
 import { toMeiUserErrorMessage } from '../utils/meiUserFacingMessage';
 
-const PGMEI_URL =
-  'https://www8.receita.fazenda.gov.br/SimplesNacional/Aplicacoes/ATSPO/pgmei.app/Identificacao';
-
-const isFocoSimplesUi = resolveAppOrigin() === 'focosimples';
-const DAS_PORTAL_URL = isFocoSimplesUi ? SIMPLES_DAS_PORTAL_FALLBACK : PGMEI_URL;
-const DAS_PORTAL_LABEL = isFocoSimplesUi ? 'PGDAS-D' : 'PGMEI';
-const DAS_PAGE_TITLE = isFocoSimplesUi ? 'Guia DAS (Simples Nacional)' : 'Guia DAS';
-const DAS_PAGE_DESC = isFocoSimplesUi
-  ? 'Competências do PGDAS-D: consulte e baixe o DAS da empresa no Simples Nacional.'
-  : 'Dois passos: escolha o mês e baixe o PDF.';
-const NOTAS_AREA_TITLE = isFocoSimplesUi ? 'Notas' : 'Meu MEI';
-const NOTAS_AREA_SUBTITLE = isFocoSimplesUi
-  ? 'Emissão fiscal — Simples Nacional (NFS-e e NF-e).'
-  : 'Status rápido das áreas do Meu MEI.';
-const NOTAS_ACCESS_DENIED = isFocoSimplesUi
-  ? 'A emissão de notas está disponível para administradores e utilizadores do Foco Simples.'
-  : 'O Meu MEI está disponível apenas para administradores ou utilizadores com MEI habilitado. Fale com o suporte se precisar de acesso.';
-const NOTAS_PAYWALL = isFocoSimplesUi
-  ? 'Sua conta está ativa, mas a emissão de notas só libera depois do pagamento do plano.'
-  : 'Sua conta está ativa, mas o Meu MEI só libera depois do pagamento do plano.';
-
 const formatDateToBR = (dateString: string): string => {
   if (!dateString) return '';
   try {
@@ -323,8 +318,7 @@ type MeiTab = MeiTabKey;
 /** Spinner nos overlays de loading dos cards do Início: ~20 px (small) + 15 px. */
 const MEI_OVERVIEW_LOADING_SPINNER_SIZE = 35;
 
-const NFSE_PRESTADOR_PREFILL_MSG_EMPTY =
-  'Não há cadastro MEI activo para preencher automaticamente. Complete o certificado ou preencha o prestador manualmente.';
+const NFSE_PRESTADOR_PREFILL_MSG_EMPTY = CERT_PREFILL_MISSING;
 const NFSE_PRESTADOR_PREFILL_MSG_ERROR =
   'Não foi possível carregar os dados do cadastro. Preencha o prestador manualmente.';
 
@@ -679,9 +673,28 @@ function MeiScreenContent() {
     () => detectNfeVendaLocalizacao(nfeEmitenteUf, nfeDestinatarioUf),
     [nfeEmitenteUf, nfeDestinatarioUf],
   );
+  const nfeDestinatarioTaxContext = useMemo(
+    () => ({
+      destinatarioDoc: nfeLikeForm.destinatarioCpfCnpj,
+      indIEDest: nfeLikeForm.destinatarioIndIEDest,
+      inscricaoEstadual: nfeLikeForm.destinatarioInscricaoEstadual,
+    }),
+    [
+      nfeLikeForm.destinatarioCpfCnpj,
+      nfeLikeForm.destinatarioIndIEDest,
+      nfeLikeForm.destinatarioInscricaoEstadual,
+    ],
+  );
   const nfeCfopAuto = useMemo(
-    () => calculateItemTax({}, nfeEmitenteUf, nfeDestinatarioUf, null, nfeEmitenteBusinessType).cfop,
-    [nfeEmitenteUf, nfeDestinatarioUf, nfeEmitenteBusinessType],
+    () => calculateItemTax(
+      {},
+      nfeEmitenteUf,
+      nfeDestinatarioUf,
+      null,
+      nfeEmitenteBusinessType,
+      nfeDestinatarioTaxContext,
+    ).cfop,
+    [nfeEmitenteUf, nfeDestinatarioUf, nfeEmitenteBusinessType, nfeDestinatarioTaxContext],
   );
   const nfeLocalizacaoBanner = useMemo(
     () => getNfeLocalizacaoBanner(nfeEmitenteUf, nfeDestinatarioUf, nfeVendaLocalizacao, nfeCfopAuto),
@@ -705,13 +718,17 @@ function MeiScreenContent() {
         nfeItensRef.current,
         nfeEmitenteUf,
         nfeDestinatarioUf,
-        nfeEmitenteBusinessType,
+        {
+          businessType: nfeEmitenteBusinessType,
+          destinatario: nfeDestinatarioTaxContext,
+        },
       );
       if (cancelled) return;
       setNfeLikeForm((f) => {
         const changed = nextItens.some((it, i) =>
           it.cfop !== f.itens[i]?.cfop
-          || it.tributos.icms.csosn !== f.itens[i]?.tributos.icms.csosn,
+          || it.tributos.icms.csosn !== f.itens[i]?.tributos.icms.csosn
+          || (it.cest ?? '') !== (f.itens[i]?.cest ?? ''),
         );
         if (!changed) return f;
         return { ...f, itens: nextItens };
@@ -728,6 +745,7 @@ function MeiScreenContent() {
     nfeDestinatarioUf,
     nfeTaxItemsKey,
     nfeEmitenteBusinessType,
+    nfeDestinatarioTaxContext,
   ]);
 
   const touchNfsePrestadorFields = useCallback(() => {
@@ -1109,7 +1127,7 @@ function MeiScreenContent() {
       Alert.alert(
         'DAS indisponível',
         period.errorMessage
-          || 'A Receita não emite DAS para esta competência (período inválido, futuro, decadente ou antes de ser MEI).'
+          || DAS_PERIODO_INDISPONIVEL_HINT
       );
       return;
     }
@@ -1883,8 +1901,8 @@ function MeiScreenContent() {
       if (!guide?.pdfBase64) {
         Alert.alert(
           'Sem PDF',
-          'A Receita não devolveu o arquivo. Para mês já pago, baixe o comprovante no PGMEI.',
-          [{ text: 'Abrir PGMEI', onPress: () => void handleOpenPgmei() }, { text: 'OK' }]
+          'A Receita não devolveu o arquivo. Para mês já pago, baixe o comprovante no PGDAS-D.',
+          [{ text: `Abrir ${DAS_PORTAL_LABEL}`, onPress: () => void handleOpenPgmei() }, { text: 'OK' }]
         );
         return;
       }
@@ -2046,7 +2064,7 @@ function MeiScreenContent() {
       }
     } catch (e: unknown) {
       const certToast = getMeiCertificateUploadToast(e, {
-        product: isFocoSimplesUi ? 'focosimples' : 'focomei',
+        product: 'focosimples',
       });
       if (certToast) {
         // Preferir mensagem do backend quando existir (mais específica que o toast genérico)
@@ -2621,29 +2639,46 @@ function MeiScreenContent() {
         );
       }
     } else {
-      const incomplete = !isCatalogProdutoUsableForNfeLike(item, emitirNotaType)
-      const row = mapCatalogProdutoToNfeItem(item, {
-        emitenteUf: nfeEmitenteUf,
-        destinatarioUf: nfeDestinatarioUf,
-        businessType: nfeEmitenteBusinessType,
-      })
-      setNfeLikeForm((f) => {
-        const idx = Math.min(Math.max(nfeItemEditIndex, 0), Math.max(f.itens.length - 1, 0))
-        if (f.itens.length === 0) {
-          setNfeItemEditIndex(0)
-          return { ...f, itens: [row] }
+      const incomplete = !isCatalogProdutoUsableForNfeLike(item, emitirNotaType);
+      void (async () => {
+        let row = mapCatalogProdutoToNfeItem(item, {
+          emitenteUf: nfeEmitenteUf,
+          destinatarioUf: nfeDestinatarioUf,
+          businessType: nfeEmitenteBusinessType,
+          destinatarioDoc: nfeLikeForm.destinatarioCpfCnpj,
+          indIEDest: nfeLikeForm.destinatarioIndIEDest,
+          inscricaoEstadual: nfeLikeForm.destinatarioInscricaoEstadual,
+        });
+        if (nfeEmitenteUf && nfeDestinatarioUf) {
+          const [recalculated] = await recalculateNfeItemsTax(
+            [row],
+            nfeEmitenteUf,
+            nfeDestinatarioUf,
+            {
+              businessType: nfeEmitenteBusinessType,
+              destinatario: nfeDestinatarioTaxContext,
+            },
+          );
+          if (recalculated) row = recalculated;
         }
-        return {
-          ...f,
-          itens: f.itens.map((it, i) => (i === idx ? row : it)),
+        setNfeLikeForm((f) => {
+          const idx = Math.min(Math.max(nfeItemEditIndex, 0), Math.max(f.itens.length - 1, 0));
+          if (f.itens.length === 0) {
+            setNfeItemEditIndex(0);
+            return { ...f, itens: [row] };
+          }
+          return {
+            ...f,
+            itens: f.itens.map((it, i) => (i === idx ? row : it)),
+          };
+        });
+        if (incomplete) {
+          showToast(
+            'Produto incompleto: preencha o NCM (8 dígitos) no formulário ou edite no catálogo antes de emitir.',
+            'info',
+          );
         }
-      })
-      if (incomplete) {
-        showToast(
-          'Produto incompleto: preencha o NCM (8 dígitos) no formulário ou edite no catálogo antes de emitir.',
-          'info',
-        )
-      }
+      })();
     }
     setCatalogProdutoVisible(false);
   };
@@ -2741,7 +2776,26 @@ function MeiScreenContent() {
       return;
     }
     const docType = emitirNotaType as 'NFE' | 'NFCE';
-    const form = nfeLikeForm;
+    let form = nfeLikeForm;
+
+    if (docType === 'NFE' && nfeEmitenteUf && nfeDestinatarioUf && form.itens.length > 0) {
+      try {
+        const itensAtualizados = await recalculateNfeItemsTax(
+          form.itens,
+          nfeEmitenteUf,
+          nfeDestinatarioUf,
+          {
+            businessType: nfeEmitenteBusinessType,
+            destinatario: nfeDestinatarioTaxContext,
+          },
+        );
+        form = { ...form, itens: itensAtualizados };
+        setNfeLikeForm(form);
+      } catch {
+        /* tributação: backend valida na emissão */
+      }
+    }
+
     const msg = getNfeLikeValidationMessage(form, docType);
     if (msg) {
       reportEmitError(msg);
@@ -2922,7 +2976,7 @@ function MeiScreenContent() {
   const tabs: { key: MeiTab; label: string }[] = [
     { key: 'overview', label: 'Início' },
     { key: 'certificado', label: 'Certificado' },
-    { key: 'das', label: isFocoSimplesUi ? 'DAS Simples' : 'Guia DAS' },
+    { key: 'das', label: DAS_TAB_LABEL },
     { key: 'parcelamentos', label: isDesktop ? 'Parcelamentos' : 'Parcelar' },
     { key: 'notas', label: 'Notas' },
   ];
@@ -2933,7 +2987,7 @@ function MeiScreenContent() {
     { key: 'certificado', label: 'Certificado', icon: 'shield-checkmark-outline' },
     {
       key: 'das',
-      label: isFocoSimplesUi ? 'DAS Simples' : 'Guia DAS',
+      label: DAS_TAB_LABEL,
       icon: 'document-text-outline',
       badge: meiPeriodsEmAberto.length || undefined,
     },
@@ -2959,7 +3013,7 @@ function MeiScreenContent() {
   const mobileTabSubtitle: Record<MeiTab, string> = {
     overview: 'Toque na opção que você precisa',
     das: 'Guia do mês em PDF',
-    parcelamentos: 'Parcelamentos do MEI',
+    parcelamentos: PARCELAMENTOS_SUBTITLE,
     notas: 'Emitir e ver suas notas',
     certificado: 'Enviar certificado digital A1',
   };
@@ -3226,7 +3280,7 @@ function MeiScreenContent() {
                   {isFocoSimplesUi ? 'DAS · Simples Nacional' : 'DAS · Guias mensais'}
                 </Text>
                 <Text style={styles.overviewDesc}>
-                  Gere e baixe as guias do Simples Nacional MEI mês a mês.
+                  Gere e baixe as guias do Simples Nacional mês a mês.
                 </Text>
                 <View style={styles.overviewMetric}>
                   <Text style={styles.overviewMetricLabel}>Guias em aberto</Text>
@@ -3365,7 +3419,7 @@ function MeiScreenContent() {
             <View style={styles.dasToolbar}>
               <View style={styles.dasToolbarLeft}>
                 <Ionicons name="document-text-outline" size={18} color={theme.primary} />
-                <Text style={styles.dasToolbarTitle}>Guias DAS — Simples Nacional MEI</Text>
+                <Text style={styles.dasToolbarTitle}>Guias DAS — Simples Nacional</Text>
               </View>
               <View style={styles.dasToolbarActions}>
                 <TouchableOpacity
@@ -4325,7 +4379,7 @@ function MeiScreenContent() {
                 <Text style={{ fontWeight: '700' }}>certificado digital A1</Text>
                 {isFocoSimplesUi
                   ? ' (e-CNPJ da própria empresa, arquivo .pfx).'
-                  : ' (o arquivo .pfx do seu MEI).'}
+                  : ' (o arquivo .pfx da empresa).'}
               </Text>
               <Text style={{ fontSize: 14, color: theme.text, lineHeight: 22 }}>
                 É ele que autoriza o app a:
@@ -4712,7 +4766,7 @@ function MeiScreenContent() {
                     placeholder={
                       isFocoSimplesUi
                         ? 'Simples Nacional: deixe em branco se ISS no DAS'
-                        : 'MEI/Simples: deixe em branco'
+                        : 'Simples Nacional: deixe em branco'
                     }
                     value={String(nfseForm.servico?.aliquota ?? '')}
                     onChangeText={(t) => setNfseForm((f) => ({ ...f, servico: { ...f.servico, aliquota: t } }))}
@@ -4775,7 +4829,7 @@ function MeiScreenContent() {
                   <Text style={{ fontSize: 12, color: theme.textSecondary, marginBottom: mfSpacing.sm, lineHeight: 16 }}>
                     {isFocoSimplesUi
                       ? 'Obrigatória na NF-e de mercadoria. IE da empresa emitente no XML — não confunda com a IE do cliente.'
-                      : 'IE da sua empresa MEI no XML do emitente. Não confunda com a IE do cliente (destinatário).'}
+                      : 'IE da sua empresa no XML do emitente. Não confunda com a IE do cliente (destinatário).'}
                   </Text>
                   <MeiLinkButton
                     label="Alterar no cadastro da empresa"
@@ -5247,7 +5301,7 @@ export default function MeiScreen() {
         <View style={styles.accessDeniedWrap}>
           <Ionicons name="lock-closed-outline" size={48} color={theme.tabInactive} />
           <Text style={styles.accessDeniedTitle}>
-            {needsPlan ? 'Escolha um plano MEI' : 'Área indisponível'}
+            {needsPlan ? PLAN_PAYWALL_TITLE : 'Área indisponível'}
           </Text>
           <Text style={styles.accessDeniedText}>
             {needsPlan

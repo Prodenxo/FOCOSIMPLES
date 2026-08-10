@@ -7,6 +7,7 @@ import {
   calculateItemTax,
   normalizeNcm,
   normalizeUf,
+  sanitizeItemTaxApiResult,
 } from '../lib/nfe-item-tax-engine.js';
 
 const TAX_RULES_TABLE = 'tax_rules_state';
@@ -124,15 +125,50 @@ export const lookupTaxRulesStateBatch = async ({
 };
 
 /**
- * Calcula CSOSN/CFOP para vários itens (formulário NF-e).
- * @param {{ originUf: string, destinationUf: string, items: Array<{ ncm?: string, cest?: string }> }} input
+ * Interestadual: se não houver regra origin→dest, usa ST da operação interna (origin→origin).
+ * @param {Map<string, { hasSt: boolean, cfopSt: string|null }>} directMap
+ * @param {Map<string, { hasSt: boolean, cfopSt: string|null }>} estadualMap
  */
-export const calculateItemsTax = async ({ originUf, destinationUf, items, businessType }) => {
+export const mergeTaxRulesWithEstadualFallback = (directMap, estadualMap) => {
+  const merged = new Map(directMap);
+  for (const [ncm, estadualRule] of estadualMap) {
+    if (merged.has(ncm)) continue;
+    if (estadualRule?.hasSt) {
+      merged.set(ncm, {
+        hasSt: true,
+        cfopSt: estadualRule.cfopSt ?? null,
+      });
+    }
+  }
+  return merged;
+};
+
+/**
+ * Calcula CSOSN/CFOP para vários itens (formulário NF-e).
+ * @param {{ originUf: string, destinationUf: string, items: Array<{ ncm?: string, cest?: string, icmsCsosn?: string, hasSt?: boolean }> }} input
+ */
+export const calculateItemsTax = async ({
+  originUf,
+  destinationUf,
+  items,
+  businessType,
+  destinatarioDoc,
+  destinatarioCpfCnpj,
+  indIEDest,
+  inscricaoEstadual,
+  nonTaxpayer,
+}) => {
   const orig = normalizeUf(originUf);
   const dest = normalizeUf(destinationUf);
   const list = Array.isArray(items) ? items : [];
+  const destinatarioContext = {
+    destinatarioDoc: destinatarioDoc ?? destinatarioCpfCnpj,
+    indIEDest,
+    inscricaoEstadual,
+    nonTaxpayer,
+  };
 
-  const rulesMap = orig && dest
+  let rulesMap = orig && dest
     ? await lookupTaxRulesStateBatch({
       ncms: list.map((item) => item?.ncm),
       originUf: orig,
@@ -140,9 +176,19 @@ export const calculateItemsTax = async ({ originUf, destinationUf, items, busine
     })
     : new Map();
 
+  if (orig && dest && orig !== dest) {
+    const estadualMap = await lookupTaxRulesStateBatch({
+      ncms: list.map((item) => item?.ncm),
+      originUf: orig,
+      destinationUf: orig,
+    });
+    rulesMap = mergeTaxRulesWithEstadualFallback(rulesMap, estadualMap);
+  }
+
   return list.map((product) => {
     const ncm = normalizeNcm(product?.ncm);
     const stateRule = ncm ? rulesMap.get(ncm) ?? null : null;
-    return calculateItemTax(product, orig, dest, stateRule, businessType);
+    const tax = calculateItemTax(product, orig, dest, stateRule, businessType, destinatarioContext);
+    return sanitizeItemTaxApiResult(tax, product);
   });
 };

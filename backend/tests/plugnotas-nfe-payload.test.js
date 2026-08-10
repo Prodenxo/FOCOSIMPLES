@@ -57,6 +57,71 @@ test('destinatarioMapsToNaoContribuinteOnPlugnotas detecta CNPJ sem IE', () => {
   );
 });
 
+test('normalizePlugnotasNfePayload inclui CEST normalizado em item com ST', () => {
+  const out = normalizePlugnotasNfePayload({
+    itens: [{
+      codigo: '001',
+      descricao: 'Refrigerante Cola 2L PET',
+      ncm: '22021000',
+      cfop: '6108',
+      unidadeComercial: 'UN',
+      quantidade: 1,
+      valorUnitario: 8,
+      cest: '03.001.00',
+      tributos: {
+        icms: { origem: '0', csosn: '500' },
+        pis: { cst: '49' },
+        cofins: { cst: '49' },
+      },
+    }],
+  });
+
+  assert.equal(out.itens[0].cest, '0300100');
+});
+
+test('normalizePlugnotasNfePayload infere CEST pela descrição em item ST', () => {
+  const out = normalizePlugnotasNfePayload({
+    itens: [{
+      codigo: '001',
+      descricao: 'Cerveja Pilsen 350ml Lata',
+      ncm: '22030000',
+      cfop: '5405',
+      unidadeComercial: 'UN',
+      quantidade: 1,
+      valorUnitario: 5,
+      tributos: {
+        icms: { origem: '0', cst: '500' },
+        pis: { cst: '49' },
+        cofins: { cst: '49' },
+      },
+    }],
+  });
+
+  assert.equal(out.itens[0].cest, '0300300');
+});
+
+test('normalizePlugnotasNfePayload não inclui CEST em item sem ST mesmo com descrição ST', () => {
+  const out = normalizePlugnotasNfePayload({
+    itens: [{
+      codigo: '001',
+      descricao: 'Refrigerante Cola 2L PET',
+      ncm: '22021000',
+      cfop: '5102',
+      unidadeComercial: 'UN',
+      quantidade: 1,
+      valorUnitario: 8,
+      cest: '03.001.00',
+      tributos: {
+        icms: { origem: '0', csosn: '102' },
+        pis: { cst: '49' },
+        cofins: { cst: '49' },
+      },
+    }],
+  });
+
+  assert.equal(out.itens[0].cest, undefined);
+});
+
 test('normalizePlugnotasNfePayload converte item flat para formato Plugnotas', () => {
   const out = normalizePlugnotasNfePayload({
     itens: [{

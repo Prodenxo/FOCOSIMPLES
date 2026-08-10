@@ -226,7 +226,7 @@ export function ActivationStepList ({
         showTopBorder={hasCore && hasOptional}
       />
       <StepSection
-        eyebrow="Para MEI"
+        eyebrow="Para Simples Nacional"
         steps={groups.mei}
         theme={theme}
         isDarkMode={isDarkMode}

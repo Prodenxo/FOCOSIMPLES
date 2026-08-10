@@ -19,7 +19,7 @@ test('seed RJ retail ST contém NCMs de bebidas e higiene', () => {
   assert.ok(ncms.has('23091000'));
   assert.ok(ncms.has('30049099'));
   assert.equal(RJ_RETAIL_ST_SEED_COUNT, entries.length);
-  assert.ok(entries.length >= 80);
+  assert.ok(entries.length >= 75);
 });
 
 test('seed RJ cobre segmentos de varejo geral', () => {

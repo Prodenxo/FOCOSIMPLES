@@ -130,7 +130,9 @@ export function buildProdutoCatalogPayload (
       cnae: '',
       discriminacao: input.discriminacao.trim(),
       ...(valorOpt !== null && valorOpt !== undefined ? { valor_sugerido: valorOpt } : {}),
-      metadata_json: buildNfeCatalogProdutoMetadata(existingMetadata, nfeFields),
+      metadata_json: buildNfeCatalogProdutoMetadata(existingMetadata, nfeFields, {
+        discriminacao: input.discriminacao.trim(),
+      }),
     }
   }
 

@@ -53,6 +53,10 @@ function rewriteKnownFiscalErrors (raw: string): string | null {
   return null
 }
 
+export function toFiscalUserErrorMessage (raw: string | null | undefined): string {
+  return toMeiUserErrorMessage(raw);
+}
+
 export function toMeiUserErrorMessage (raw: string | null | undefined): string {
   if (!raw?.trim()) {
     return 'Não foi possível consultar agora. Tente de novo.'

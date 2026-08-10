@@ -202,7 +202,7 @@ export function EmpresaStripeMeiBillingModal({
         );
       }
     } catch (e: unknown) {
-      showToast(apiErrorMessage(e, 'Erro ao processar cobrança MEI'), 'error');
+      showToast(apiErrorMessage(e, 'Erro ao processar cobrança fiscal'), 'error');
     } finally {
       setSubmitLoading(false);
     }
@@ -215,11 +215,11 @@ export function EmpresaStripeMeiBillingModal({
       const { max_mei: next } = await syncMaxMeiFromStripeLines(empresa.id);
       await onMaxMeiSynced?.();
       showToast(
-        `Limite MEI alinhado: ${next} vagas. Atualize a lista de empresas se o número ainda não mudou.`,
+        `Limite fiscal alinhado: ${next} vagas. Atualize a lista de empresas se o número ainda não mudou.`,
         'success',
       );
     } catch (e: unknown) {
-      showToast(apiErrorMessage(e, 'Erro ao alinhar limite MEI'), 'error');
+      showToast(apiErrorMessage(e, 'Erro ao alinhar limite fiscal'), 'error');
     } finally {
       setSyncMaxMeiLoading(false);
     }
@@ -274,14 +274,14 @@ export function EmpresaStripeMeiBillingModal({
                   pressed && styles.pressed,
                 ]}
                 accessibilityRole="button"
-                accessibilityLabel="Fechar cobrança MEI"
+                accessibilityLabel="Fechar cobrança fiscal"
               >
                 <Ionicons name="close" size={20} color={theme.text} />
               </Pressable>
               <View style={styles.headerTitles}>
                 <ActivationEyebrow label="COBRANÇA · STRIPE" isDarkMode={isDarkMode} style={styles.headerEyebrow} />
                 <Text style={styles.headerTitle} accessibilityRole="header">
-                  Pacotes MEI
+                  Pacotes fiscais
                 </Text>
               </View>
               <View style={styles.headerIconSpacer} />
@@ -324,7 +324,7 @@ export function EmpresaStripeMeiBillingModal({
                         mfTechInsetSurface(isDarkMode),
                         pressed && styles.pressed,
                       ]}
-                      accessibilityLabel="Alinhar limite MEI com linhas Stripe ativas"
+                      accessibilityLabel="Alinhar limite fiscal com linhas Stripe ativas"
                     >
                       {syncMaxMeiLoading ? (
                         <ActivityIndicator size="small" color={tokens.accent} />
@@ -416,7 +416,7 @@ export function EmpresaStripeMeiBillingModal({
                 <View
                   style={styles.slotGrid}
                   accessibilityRole="radiogroup"
-                  accessibilityLabel="Tamanho do pacote em vagas MEI"
+                  accessibilityLabel="Tamanho do pacote em vagas fiscais"
                 >
                   {MEI_SLOT_PACKAGE_OPTIONS.map((n) => {
                     const active = meiSlots === n;
@@ -484,7 +484,7 @@ export function EmpresaStripeMeiBillingModal({
                     <View style={styles.summaryMetrics}>
                       <SummaryMetric label="Limite guardado" value={plataformaMeiGuardadoLabel} mono />
                       <SummaryMetric
-                        label="Utilizadores MEI"
+                        label="Utilizadores fiscais"
                         value={meiEmUso !== null && Number.isFinite(meiEmUso) ? String(meiEmUso) : '—'}
                         mono
                       />

@@ -1,7 +1,6 @@
 import React, { useMemo } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { APP_BRAND_NAME } from '@/lib/appBrand';
-import { resolveAppOrigin } from '@/lib/appOrigin';
 import { brandColors } from '@/lib/brandTokens';
 
 const WORDMARK_DARK_BG = require('../../assets/logo.png');
@@ -174,7 +173,7 @@ function NativeWordmark({
   const fontSize = variant === 'wordmarkCompact' ? 18 : 22;
   const iconSize = Math.round(height * 0.62);
   const color = onDarkBackground ? brandColors.background : brandColors.primary;
-  const productWord = resolveAppOrigin() === 'focomei' ? 'MEI' : 'Simples';
+  const productWord = 'Simples';
 
   return (
     <View

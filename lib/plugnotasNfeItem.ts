@@ -1,7 +1,7 @@
 /** Mapeia item do formulário para o JSON esperado pela Plugnotas (NF-e / NFC-e). */
 
 import type { NfeIcmsInput, NfeItemInput, NfeTributosInput } from '../services/meiNotasService';
-
+import { normalizeCestInput } from './nfe-cest-packaging-hints';
 export type PlugnotasNfeItemFormLike = {
   codigo: string;
   descricao: string;
@@ -79,7 +79,9 @@ export function mapNfeItemForPlugnotas(
     throw new Error('Item NF-e: quantidade e valor unitário devem ser maiores que zero');
   }
   const valorTotal = quantidade * valorUnitarioNum;
-
+  const csosn = normalizeDoc(String(tributos?.icms?.csosn ?? tributos?.icms?.cst ?? '')).slice(0, 3);
+  const includeCest = csosn === '500';
+  const cestNorm = includeCest ? (normalizeCestInput(item.cest) || null) : null;
   return {
     codigo: item.codigo.trim(),
     descricao: item.descricao.trim(),
@@ -90,7 +92,7 @@ export function mapNfeItemForPlugnotas(
     valorUnitario: { comercial: valorUnitarioNum, tributavel: valorUnitarioNum },
     valor: valorTotal,
     ...(toOptionalDecimal(item.desconto) !== undefined ? { desconto: toOptionalDecimal(item.desconto) } : {}),
-    ...(item.cest.trim() ? { cest: item.cest.trim() } : {}),
+    ...(includeCest && cestNorm ? { cest: cestNorm } : {}),
     ...(item.sku.trim() ? { sku: item.sku.trim() } : {}),
     tributos,
   };

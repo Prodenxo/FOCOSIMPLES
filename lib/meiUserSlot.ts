@@ -6,12 +6,18 @@ export function isMeiSlotUser(mei: boolean | null | undefined): boolean {
   return mei === true;
 }
 
-export function getMeiUserTypeLabel(mei: boolean | null | undefined): 'MEI' | 'PF / Outros' {
-  return isMeiSlotUser(mei) ? 'MEI' : 'PF / Outros';
+export function getMeiUserTypeLabel(mei: boolean | null | undefined): 'Simples Nacional' | 'PF / Outros' {
+  return isMeiSlotUser(mei) ? 'Simples Nacional' : 'PF / Outros';
 }
 
 export function getMeiUserStatusShort(mei: boolean | null | undefined): string {
-  if (mei === true) return 'MEI habilitado';
-  if (mei === false) return 'MEI desativado';
+  if (mei === true) return 'Emissão fiscal habilitada';
+  if (mei === false) return 'Emissão fiscal desativada';
   return 'PF / Outros';
 }
+
+/** @deprecated use getMeiUserTypeLabel */
+export const getFiscalUserTypeLabel = getMeiUserTypeLabel;
+
+/** @deprecated use getMeiUserStatusShort */
+export const getFiscalUserStatusShort = getMeiUserStatusShort;

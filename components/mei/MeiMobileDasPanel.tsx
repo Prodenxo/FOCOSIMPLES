@@ -111,7 +111,7 @@ export function MeiMobileDasPanel ({
   onCreateGuide,
   onRefreshPeriods,
   onOpenPgmei,
-  portalButtonLabel = 'PGMEI',
+  portalButtonLabel = 'PGDAS-D',
   selectedMonth,
   selectedYear,
   onSelectPeriod,

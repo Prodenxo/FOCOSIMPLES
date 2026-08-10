@@ -170,7 +170,7 @@ export default function EmpresaModal({ visible, initial, onClose, onSuccess }: E
     if (meiEnabled) {
       const n = parseInt(meiSlotsText, 10);
       if (!Number.isFinite(n) || n < 1) {
-        setSubmitError('Informe ao menos 1 vaga MEI (módulo não pode ficar zerado).');
+        setSubmitError('Informe ao menos 1 vaga fiscal (módulo não pode ficar zerado).');
         return false;
       }
     }
@@ -406,17 +406,17 @@ export default function EmpresaModal({ visible, initial, onClose, onSuccess }: E
             <View style={[styles.field, styles.limitsBox]}>
               <View style={styles.limitsHeader}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.label}>Módulo MEI</Text>
+                  <Text style={styles.label}>Emissão fiscal</Text>
                   <Text style={styles.helpText}>
                     {meiEnabled
-                      ? 'Defina quantas vagas MEI (CNPJ) esta empresa pode ter.'
-                      : 'Desativado — esta empresa não pode ter clientes MEI.'}
+                      ? 'Defina quantas vagas fiscais (CNPJ) esta empresa pode ter.'
+                      : 'Desativado — esta empresa não pode emitir notas.'}
                   </Text>
                 </View>
                 <TouchableOpacity
                   style={[styles.toggle, meiEnabled && styles.toggleOn]}
                   onPress={toggleMeiModule}
-                  accessibilityLabel={meiEnabled ? 'Desativar módulo MEI' : 'Ativar módulo MEI'}
+                  accessibilityLabel={meiEnabled ? 'Desativar emissão fiscal' : 'Ativar emissão fiscal'}
                   accessibilityRole="switch"
                   accessibilityState={{ checked: meiEnabled }}
                 >
@@ -425,7 +425,7 @@ export default function EmpresaModal({ visible, initial, onClose, onSuccess }: E
               </View>
               {meiEnabled ? (
                 <View style={{ marginTop: 8 }}>
-                  <Text style={styles.label}>Quantidade de vagas MEI</Text>
+                  <Text style={styles.label}>Quantidade de vagas fiscais</Text>
                   <TextInput
                     style={styles.input}
                     value={meiSlotsText}
@@ -445,7 +445,7 @@ export default function EmpresaModal({ visible, initial, onClose, onSuccess }: E
                     placeholder="Ex.: 1, 3, 10"
                     placeholderTextColor={theme.placeholder}
                     keyboardType="number-pad"
-                    accessibilityLabel="Quantidade de vagas MEI"
+                    accessibilityLabel="Quantidade de vagas fiscais"
                   />
                 </View>
               ) : null}

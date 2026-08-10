@@ -46,8 +46,8 @@ export function isFocoMeiProductLine (value?: string | null): boolean {
 
 export function productLineLabel (value?: string | null): string {
   const line = normalizeProductLine(value)
-  if (line === 'focomei') return 'FocoMEI'
-  if (line === 'both') return 'FocoMEI + Foco Simples'
+  if (line === 'focomei') return 'Foco Simples'
+  if (line === 'both') return 'Foco Simples'
   if (line === 'financeiro') return 'Foco Simples'
   return '—'
 }

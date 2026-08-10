@@ -508,7 +508,7 @@ const UserCard = React.memo(function UserCard({
           )}
           <Badge label={ROLE_LABEL[user.role] || user.role} bg={roleTone.bg} fg={roleTone.fg} styles={styles} />
           {isFocoMeiProductLine(resolveUserProductLine(user.mei, user.productLine)) ? (
-            <Badge label="FocoMEI" bg={theme.primaryLight} fg={theme.primary} styles={styles} />
+            <Badge label="Foco Simples" bg={theme.primaryLight} fg={theme.primary} styles={styles} />
           ) : null}
         </View>
       </View>
@@ -713,11 +713,11 @@ const EmpresaCard = React.memo(function EmpresaCard({
             ) : null}
             <View style={styles.empresaLimitsRow}>
               <View style={styles.empresaLimitChip}>
-                <Text style={styles.empresaLimitChipLabel}>MEI</Text>
+                <Text style={styles.empresaLimitChipLabel}>Fiscal</Text>
                 <Text style={styles.empresaLimitChipValue}>{renderMeiEmpresaCap(empresa.max_mei)}</Text>
               </View>
               <View style={styles.empresaLimitChip}>
-                <Text style={styles.empresaLimitChipLabel}>Não MEI</Text>
+                <Text style={styles.empresaLimitChipLabel}>Sem emissão</Text>
                 <Text style={styles.empresaLimitChipValue}>
                   {renderNaoMeiLimit(empresa.max_usuarios_nao_mei)}
                 </Text>
@@ -1272,7 +1272,7 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
         throw new Error('E-mail inválido');
       }
       if (editMei && !editDocNfse && !editDocNfe && !editDocNfce) {
-        throw new Error('Com MEI ativo, libere ao menos um tipo de nota (NFS-e, NF-e ou NFC-e).');
+        throw new Error('Com emissão fiscal ativa, libere ao menos um tipo de nota (NFS-e, NF-e ou NFC-e).');
       }
       const expiresAtValue =
         editExpiresAt.trim() && editingUser.role === 'usuario'
@@ -1611,14 +1611,14 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
       (u) => u.role === 'admin' || u.role === 'superadmin',
     ).length;
     const items = [
-      { label: isMeiProduct ? 'Usuários MEI' : 'Usuários', value: focomeiUsers.length },
+      { label: 'Usuários', value: focomeiUsers.length },
       { label: 'Ativos', value: activeCount },
       { label: 'Bloqueados', value: blockedCount },
       { label: 'Admins', value: adminCount },
     ];
     if (showEmpresasTab) {
       items.splice(1, 0, {
-        label: isMeiProduct ? 'Empresas MEI' : 'Empresas',
+        label: 'Empresas',
         value: focomeiEmpresas.length,
       });
     }
@@ -1700,7 +1700,7 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
             stats={pageStats}
             subtitle={
               resolveAppOrigin() === 'focomei'
-                ? 'Somente empresas e usuários com MEI ativo no FocoMEI.'
+                ? 'Somente empresas e usuários com emissão fiscal ativa.'
                 : 'Gerencie empresas, usuários e permissões do Foco Simples.'
             }
             loading={initialUsersLoading || (showEmpresasTab && initialEmpresasLoading)}
@@ -2005,11 +2005,11 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
 
               <View style={styles.empresaMeiFilterBlock}>
                 <Text style={styles.empresaMeiFilterHint}>
-                  Exibindo apenas empresas com MEI ativo e usuários com vaga MEI liberada.
+                  Exibindo empresas com módulo fiscal ativo e usuários com emissão liberada.
                 </Text>
                 <View style={[styles.meiStatBadge, { borderColor: theme.success + '55', backgroundColor: theme.successLight }]}>
                   <Text style={[styles.meiStatBadgeText, { color: theme.success }]}>
-                    MEI ativo: {totalEmpresasMeiAtivo}
+                    Emissão fiscal ativa: {totalEmpresasMeiAtivo}
                   </Text>
                 </View>
               </View>
@@ -2043,14 +2043,14 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
                         {initialEmpresasLoading
                           ? ''
                           : focomeiEmpresas.length === 0
-                            ? 'Sem empresas MEI ainda'
+                            ? 'Sem empresas com emissão fiscal ainda'
                             : 'Nenhuma empresa encontrada'}
                       </Text>
                       <Text style={styles.emptyDescription}>
                         {initialEmpresasLoading
                           ? ''
                           : focomeiEmpresas.length === 0
-                            ? 'Cadastre a primeira empresa com MEI ativo para começar.'
+                            ? 'Cadastre a primeira empresa com emissão fiscal ativa para começar.'
                             : empresaTabSearch.trim()
                               ? 'Ajuste a busca pelo nome da empresa.'
                               : ''}
@@ -2357,7 +2357,7 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
         <View style={styles.switchRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.switchLabel}>
-              {resolveAppOrigin() === 'focosimples' ? 'Habilitar Notas (emissão fiscal)' : 'Habilitar MEI'}
+              Habilitar Notas (emissão fiscal)
             </Text>
             <Text style={styles.switchHelper}>
               {resolveAppOrigin() === 'focosimples'
@@ -2367,10 +2367,10 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
                     ? 'Com isto ligado, a aba Notas aparece no menu.'
                     : 'Libera a aba Notas e a emissão NFS-e / NF-e / NFC-e (Simples Nacional).'
                 : editingUser?.id === currentUserId && editingUser?.mei === true && !editMei
-                  ? 'Desligue para remover o módulo MEI da sua conta.'
+                  ? 'Desligue para remover a emissão fiscal da sua conta.'
                   : editingUser?.id === currentUserId && editMei
-                    ? 'Você pode desligar quando não precisar mais do módulo MEI.'
-                    : 'Permite uso dos recursos exclusivos para MEI.'}
+                    ? 'Você pode desligar quando não precisar mais da emissão de notas.'
+                    : 'Permite uso dos recursos fiscais do Simples Nacional.'}
             </Text>
           </View>
           <ToggleSwitch
@@ -2975,7 +2975,7 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
         <Text style={styles.helperText}>
           {empresaMembersList.length === 0
             ? 'Nenhum usuário vinculado a esta empresa.'
-            : `${empresaMembersList.length} usuário${empresaMembersList.length === 1 ? '' : 's'} vinculado${empresaMembersList.length === 1 ? '' : 's'} · ${empresaMembersMeiCount} com vaga MEI · ${empresaMembersList.length - empresaMembersMeiCount} PF / Outros. Toque em um nome para editar.`}
+            : `${empresaMembersList.length} usuário${empresaMembersList.length === 1 ? '' : 's'} vinculado${empresaMembersList.length === 1 ? '' : 's'} · ${empresaMembersMeiCount} com emissão fiscal · ${empresaMembersList.length - empresaMembersMeiCount} PF / Outros. Toque em um nome para editar.`}
         </Text>
         <View style={styles.membersList}>
           {empresaMembersList.map((member) => {

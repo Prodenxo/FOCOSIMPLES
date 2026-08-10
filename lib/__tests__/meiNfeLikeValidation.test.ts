@@ -89,10 +89,17 @@ describe('getNfeLikeValidationMessage', () => {
     expect(getNfeLikeValidationMessage(form, 'NFE')).toMatch(/CSOSN do ICMS deve ter 3 dígitos/)
   })
 
-  it('rejeita CEST com tamanho inválido', () => {
+  it('não valida CEST no frontend — backend decide na emissão', () => {
     const form = validNfeForm()
     form.itens[0]!.cest = '123'
-    expect(getNfeLikeValidationMessage(form, 'NFE')).toMatch(/CEST/)
+    expect(getNfeLikeValidationMessage(form, 'NFE')).toBeNull()
+  })
+
+  it('não bloqueia emissão por CEST no frontend (validação fica no backend)', () => {
+    const form = validNfeForm()
+    form.itens[0]!.tributos.icms.csosn = '500'
+    form.itens[0]!.cest = ''
+    expect(getNfeLikeValidationMessage(form, 'NFE')).toBeNull()
   })
 })
 

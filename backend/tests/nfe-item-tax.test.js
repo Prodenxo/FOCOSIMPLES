@@ -5,11 +5,16 @@ import {
   CFOP_VENDA_ESTADUAL,
   CFOP_VENDA_ESTADUAL_ST,
   CFOP_VENDA_INTERESTADUAL,
+  CFOP_VENDA_INTERESTADUAL_CONSUMIDOR_RESELLER,
   CFOP_VENDA_INTERESTADUAL_ST,
   CFOP_VENDA_INTERESTADUAL_ST_ALT,
+  CFOP_VENDA_INTERESTADUAL_ST_CONSUMIDOR_CONVENIO,
   CSOSN_ST,
   CSOSN_TRIBUTADO_SN,
+  productHasStTaxation,
+  resolveDestinatarioNonTaxpayer,
   resolveEstadualHasSt,
+  resolveItemHasSt,
 } from '../src/lib/nfe-item-tax-engine.js';
 import {
   __resetGetDbForTests,
@@ -17,6 +22,7 @@ import {
   __setGetDbForTests,
   calculateItemsTax,
   lookupTaxRulesStateBatch,
+  mergeTaxRulesWithEstadualFallback,
 } from '../src/services/nfe-item-tax.service.js';
 
 describe('nfe-item-tax-engine', () => {
@@ -46,13 +52,97 @@ describe('nfe-item-tax-engine', () => {
     assert.equal(tax.csosn, CSOSN_ST);
   });
 
+  it('productHasStTaxation (legado) detecta CSOSN 500 e CEST no produto', () => {
+    assert.equal(productHasStTaxation({ icmsCsosn: '500' }), true);
+    assert.equal(productHasStTaxation({ cest: '0300100' }), true);
+    assert.equal(productHasStTaxation({ ncm: '22021000' }), false);
+  });
+
+  it('resolveItemHasSt usa somente tabela tax_rules_state', () => {
+    assert.equal(resolveItemHasSt({ cest: '0300100' }, null), false);
+    assert.equal(resolveItemHasSt({ icmsCsosn: '500' }, null), false);
+    assert.equal(resolveItemHasSt({ ncm: '22021000' }, { hasSt: true }), true);
+  });
+
+  it('CEST no produto não gera ST sem regra na tabela → 102', () => {
+    const tax = calculateItemTax(
+      { ncm: '22021000', cest: '0300100' },
+      'RJ',
+      'SP',
+      null,
+      'RESELLER',
+      { destinatarioDoc: '12345678901' },
+    );
+    assert.equal(tax.cfop, CFOP_VENDA_INTERESTADUAL_CONSUMIDOR_RESELLER);
+    assert.equal(tax.csosn, CSOSN_TRIBUTADO_SN);
+    assert.equal(tax.hasSt, false);
+  });
+
+  it('mergeTaxRulesWithEstadualFallback usa ST interna quando par interestadual ausente', () => {
+    const direct = new Map();
+    const estadual = new Map([['22021000', { hasSt: true, cfopSt: '5405' }]]);
+    const merged = mergeTaxRulesWithEstadualFallback(direct, estadual);
+    assert.equal(merged.get('22021000')?.hasSt, true);
+  });
+
   it('interestadual sem protocolo ST → 102 / 6102', () => {
     const tax = calculateItemTax({ ncm: '61091000' }, 'RJ', 'SP', null);
     assert.equal(tax.cfop, CFOP_VENDA_INTERESTADUAL);
     assert.equal(tax.csosn, CSOSN_TRIBUTADO_SN);
   });
 
-  it('interestadual com ST → 500 / 6105 ou 6403', () => {
+  it('interestadual CPF / não contribuinte sem ST → 102 / 6108', () => {
+    const tax = calculateItemTax(
+      { ncm: '61091000' },
+      'RJ',
+      'SP',
+      null,
+      'RESELLER',
+      { destinatarioDoc: '12345678901', indIEDest: '9' },
+    );
+    assert.equal(tax.cfop, CFOP_VENDA_INTERESTADUAL_CONSUMIDOR_RESELLER);
+    assert.equal(tax.csosn, CSOSN_TRIBUTADO_SN);
+    assert.equal(tax.reason, 'interestadual_normal_consumidor');
+  });
+
+  it('interestadual CPF com ST → 500 / 6108', () => {
+    const tax = calculateItemTax(
+      { ncm: '22021000' },
+      'RJ',
+      'SP',
+      { hasSt: true },
+      'RESELLER',
+      { destinatarioDoc: '12345678901' },
+    );
+    assert.equal(tax.cfop, CFOP_VENDA_INTERESTADUAL_CONSUMIDOR_RESELLER);
+    assert.equal(tax.csosn, CSOSN_ST);
+    assert.equal(tax.reason, 'interestadual_st_consumidor');
+  });
+
+  it('interestadual CPF com ST e convênio → 500 / 6404', () => {
+    const tax = calculateItemTax(
+      { ncm: '22021000' },
+      'RJ',
+      'SP',
+      { hasSt: true, cfopSt: CFOP_VENDA_INTERESTADUAL_ST_ALT },
+      'RESELLER',
+      { indIEDest: '9' },
+    );
+    assert.equal(tax.cfop, CFOP_VENDA_INTERESTADUAL_ST_CONSUMIDOR_CONVENIO);
+    assert.equal(tax.csosn, CSOSN_ST);
+  });
+
+  it('resolveDestinatarioNonTaxpayer identifica CPF e indIEDest 9', () => {
+    assert.equal(resolveDestinatarioNonTaxpayer({ destinatarioDoc: '12345678901' }), true);
+    assert.equal(resolveDestinatarioNonTaxpayer({ indIEDest: '9' }), true);
+    assert.equal(resolveDestinatarioNonTaxpayer({
+      destinatarioDoc: '01858368000158',
+      indIEDest: '1',
+      inscricaoEstadual: '123456789',
+    }), false);
+  });
+
+  it('interestadual com ST → 500 / 6105 ou 6403 (contribuinte)', () => {
     const tax6105 = calculateItemTax({ ncm: '22021000' }, 'RJ', 'SP', { hasSt: true });
     assert.equal(tax6105.cfop, CFOP_VENDA_INTERESTADUAL_ST);
     assert.equal(tax6105.csosn, CSOSN_ST);
@@ -111,8 +201,12 @@ describe('nfe-item-tax.service', () => {
 
     assert.equal(taxes.length, 2);
     assert.equal(taxes[0].cfop, CFOP_VENDA_INTERESTADUAL);
+    assert.equal(taxes[0].csosn, CSOSN_TRIBUTADO_SN);
+    assert.equal(taxes[0].has_st, false);
+    assert.equal(taxes[0].cest, null);
     assert.equal(taxes[1].cfop, CFOP_VENDA_INTERESTADUAL_ST_ALT);
     assert.equal(taxes[1].csosn, CSOSN_ST);
+    assert.equal(taxes[1].has_st, true);
 
     __resetGetDbForTests();
   });
@@ -132,7 +226,7 @@ describe('nfe-item-tax.service', () => {
                 assert.equal(val2, 'RJ');
                 return {
                   in: async () => ({
-                    data: [{ ncm: '61091000', has_st: true, cfop_st: null }],
+                    data: [{ ncm: '22021000', has_st: true, cfop_st: '5405' }],
                     error: null,
                   }),
                 };
@@ -144,19 +238,48 @@ describe('nfe-item-tax.service', () => {
     }));
 
     const map = await lookupTaxRulesStateBatch({
-      ncms: ['61091000'],
+      ncms: ['22021000'],
       originUf: 'RJ',
       destinationUf: 'RJ',
     });
     assert.equal(map.size, 1);
-    assert.equal(map.get('61091000')?.hasSt, true);
+    assert.equal(map.get('22021000')?.hasSt, true);
 
     const taxes = await calculateItemsTax({
       originUf: 'RJ',
       destinationUf: 'RJ',
-      items: [{ ncm: '61091000' }],
+      items: [{ ncm: '22021000' }],
     });
     assert.equal(taxes[0].cfop, CFOP_VENDA_ESTADUAL_ST);
+    assert.equal(taxes[0].csosn, CSOSN_ST);
+
+    __resetGetDbForTests();
+  });
+
+  it('vestuário (61091000) nunca recebe ST mesmo com csosn 500 no item', async () => {
+    __resetTaxRulesSchemaCacheForTests();
+    __resetGetDbForTests();
+    __setGetDbForTests(() => ({
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            eq: () => ({
+              in: async () => ({ data: [], error: null }),
+            }),
+          }),
+        }),
+      }),
+    }));
+
+    const taxes = await calculateItemsTax({
+      originUf: 'RJ',
+      destinationUf: 'RJ',
+      items: [{ ncm: '61091000', icmsCsosn: '500', cest: '0300100' }],
+    });
+    assert.equal(taxes[0].cfop, CFOP_VENDA_ESTADUAL);
+    assert.equal(taxes[0].csosn, CSOSN_TRIBUTADO_SN);
+    assert.equal(taxes[0].has_st, false);
+    assert.equal(taxes[0].cest, null);
 
     __resetGetDbForTests();
   });

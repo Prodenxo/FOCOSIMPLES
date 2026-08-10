@@ -4,6 +4,7 @@ import {
   normalizeCodigoServicoInput,
   validateProdutoCatalogForm,
 } from '../meiCatalogoProdutoForm'
+import { emptyNfeCatalogProdutoFormFields } from '../nfeCatalogProdutoMetadata'
 
 const parseDecimal = (raw: string): number | null => {
   const t = raw.trim().replace(',', '.')
@@ -77,7 +78,7 @@ describe('meiCatalogoProdutoForm', () => {
     expect(payload.aliquota).toBeUndefined()
   })
 
-  it('aceita produto NF-e com tributos no metadata', () => {
+  it('aceita produto NF-e e grava NCM no metadata (tributos calculados na emissão)', () => {
     const payload = buildProdutoCatalogPayload(
       {
         codigo: 'AGUA20',
@@ -93,15 +94,38 @@ describe('meiCatalogoProdutoForm', () => {
           icmsCsosn: '102',
           pisCst: '49',
           cofinsCst: '49',
+          cest: '',
         },
       },
       parseDecimal,
     )
     expect(payload.metadata_json).toMatchObject({
       ncm: '22011000',
-      icmsCsosn: '102',
-      pisCst: '49',
+      unidade: 'UN',
     })
     expect(payload.cnae).toBe('')
+  })
+
+  it('infere CEST ao salvar produto com embalagem PET na descrição (sem marcar ST)', () => {
+    const payload = buildProdutoCatalogPayload(
+      {
+        codigo: 'REF2L',
+        cnae: '',
+        discriminacao: 'Refrigerante Cola 2L PET',
+        aliquotaStr: '',
+        valorSugeridoStr: '8,00',
+        documentType: 'NFE',
+        nfe: {
+          ...emptyNfeCatalogProdutoFormFields(),
+          ncm: '22021000',
+        },
+      },
+      parseDecimal,
+    )
+    expect(payload.metadata_json).toMatchObject({
+      ncm: '22021000',
+      cest: '0300100',
+    })
+    expect(payload.metadata_json).not.toHaveProperty('hasSt')
   })
 })

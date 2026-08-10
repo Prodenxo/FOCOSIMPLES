@@ -9,6 +9,8 @@ export type AppNavItem = {
   label: string;
   icon: IoniconName;
   activeIcon: IoniconName;
+  requiresFiscalAccess?: boolean;
+  /** @deprecated use requiresFiscalAccess */
   requiresMeiAccess?: boolean;
   /** Exibido na barra superior (web) */
   showInTopNav?: boolean;
@@ -74,7 +76,7 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
     label: 'Notas',
     icon: 'briefcase-outline',
     activeIcon: 'briefcase',
-    requiresMeiAccess: true,
+    requiresFiscalAccess: true,
     showInTopNav: true,
     showInBottomNav: true,
   },
@@ -130,6 +132,9 @@ export function resolveAppScreenFromPath(pathname?: string | null): AppScreenNam
   return PATH_SUFFIX_TO_SCREEN[suffix] ?? 'Dashboard';
 }
 
-export function filterNavItems(items: AppNavItem[], showMei: boolean): AppNavItem[] {
-  return items.filter((item) => !item.requiresMeiAccess || showMei);
+export function filterNavItems(items: AppNavItem[], showFiscal: boolean): AppNavItem[] {
+  return items.filter((item) => {
+    const needsFiscal = item.requiresFiscalAccess ?? item.requiresMeiAccess;
+    return !needsFiscal || showFiscal;
+  });
 }

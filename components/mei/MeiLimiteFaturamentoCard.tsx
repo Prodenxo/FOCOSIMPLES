@@ -92,7 +92,7 @@ export function MeiLimiteFaturamentoCard({
   vigenciaLabel,
   loading = false,
   onIrParaNotas,
-  variant = 'mei',
+  variant = 'simples',
 }: MeiLimiteFaturamentoCardProps) {
   const { theme, isDarkMode } = useMfTheme()
   const tokens = useMemo(() => getTechTokens(isDarkMode), [isDarkMode])

@@ -54,6 +54,11 @@ import {
 } from './plugnotas/plugnotas-nfe-payload.js';
 import { applyIbptTransparenciaToNfePayload, logIbptTransparenciaEmit } from '../lib/ibpt-transparencia-nfe.js';
 import {
+  validateNfeCatalogProdutoMetadata,
+} from '../lib/nfe-cest.js';
+import { recalculateNfeLikePayloadTaxForEmit } from '../lib/nfe-like-payload-tax-apply.js';
+import { getBusinessTypeMirror } from './empresa-business-type.service.js';
+import {
   applyMeiNfeEmitForcePolicy,
   ensureMeiNfePlugnotasCadastroBeforeEmit,
   hydrateMeiNfeEmitenteIeFromEmpresa,
@@ -2041,6 +2046,10 @@ export const emitirNota = async (userId, input) => {
     }
 
     phase = 'validate';
+    if (documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE) {
+      const businessType = await getBusinessTypeMirror(userId);
+      emitPayload = await recalculateNfeLikePayloadTaxForEmit(emitPayload, { businessType });
+    }
     validatePayloadByDocumentType(emitPayload, documentType);
 
     if (documentType === DOCUMENT_TYPE_NFSE) {
@@ -3154,6 +3163,13 @@ export const criarCatalogoProduto = async (userId, body = {}) => {
       row.metadata_json = null;
     } else {
       const meta = sanitizeMetadata(body.metadata_json);
+      if (documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE) {
+        try {
+          validateNfeCatalogProdutoMetadata(meta, { discriminacao });
+        } catch (err) {
+          throw badRequest(err instanceof Error ? err.message : String(err));
+        }
+      }
       row.metadata_json = Object.keys(meta).length ? meta : null;
     }
   }
@@ -3179,7 +3195,7 @@ export const atualizarCatalogoProduto = async (userId, id, body = {}) => {
     throw badRequest('Não é permitido alterar dedupe_key ou document_type');
   }
 
-  await findCatalogProduto(userId, recordId);
+  const existing = await findCatalogProduto(userId, recordId);
 
   const updates = {};
   if (body.codigo !== undefined) {
@@ -3204,6 +3220,17 @@ export const atualizarCatalogoProduto = async (userId, id, body = {}) => {
       updates.metadata_json = null;
     } else {
       const meta = sanitizeMetadata(body.metadata_json);
+      const docType = String(existing?.document_type || '').toUpperCase();
+      if (docType === DOCUMENT_TYPE_NFE || docType === DOCUMENT_TYPE_NFCE) {
+        const discriminacaoCtx = body.discriminacao !== undefined
+          ? String(body.discriminacao || '').trim()
+          : String(existing?.discriminacao || '').trim();
+        try {
+          validateNfeCatalogProdutoMetadata(meta, { discriminacao: discriminacaoCtx });
+        } catch (err) {
+          throw badRequest(err instanceof Error ? err.message : String(err));
+        }
+      }
       updates.metadata_json = Object.keys(meta).length ? meta : null;
     }
   }

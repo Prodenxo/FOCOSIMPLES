@@ -3,6 +3,10 @@
  * Aceita números simples (formulário) ou objetos { comercial, tributavel }.
  */
 
+import {
+  resolveItemCestForPlugnotas,
+} from '../../lib/nfe-cest.js';
+
 const toObject = (value) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   return value;
@@ -116,9 +120,12 @@ export const normalizeNfeItemForPlugnotasEmit = (item) => {
 
   const tributos = toObject(item.tributos);
   const unidade = String(item.unidadeComercial || item.unidade || 'UN').trim() || 'UN';
+  const cestNorm = resolveItemCestForPlugnotas(item);
+  const { cest: _ignoredCest, ...itemWithoutCest } = item;
 
   return prune({
-    ...item,
+    ...itemWithoutCest,
+    ...(cestNorm ? { cest: cestNorm } : {}),
     unidadeComercial: unidade,
     quantidade: quantidade !== null
       ? { comercial: quantidade, tributavel: quantidade }

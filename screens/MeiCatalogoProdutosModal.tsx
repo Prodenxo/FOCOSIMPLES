@@ -697,7 +697,8 @@ export default function MeiCatalogoProdutosModal ({
             <MeiFormField
               label="Nome do produto"
               required
-              placeholder="Ex.: Água mineral 20L"
+              placeholder="Ex.: Refrigerante Cola 2L PET, Cerveja 350ml Lata"
+              hint="Inclua a embalagem (PET, lata, garrafa) quando aplicável — ajuda a vincular o CEST em produtos com ST."
               value={form.discriminacao}
               onChangeText={(t) => setForm((f) => ({ ...f, discriminacao: t }))}
               multiline
@@ -710,6 +711,19 @@ export default function MeiCatalogoProdutosModal ({
               onChange={(ncm) =>
                 setForm((f) => ({ ...f, nfe: { ...f.nfe, ncm } }))
               }
+            />
+            <MeiFormField
+              label="CEST (opcional)"
+              placeholder="7 dígitos — preenchido automaticamente se possível"
+              hint="Obrigatório em alguns produtos com ST. Informe ou deixe em branco para sugestão pela embalagem na descrição."
+              value={form.nfe.cest}
+              onChangeText={(t) =>
+                setForm((f) => ({
+                  ...f,
+                  nfe: { ...f.nfe, cest: t.replace(/\D/g, '').slice(0, 7) },
+                }))
+              }
+              keyboardType="number-pad"
             />
             <MeiFormField
               label="Preço de venda (opcional)"
@@ -760,7 +774,7 @@ export default function MeiCatalogoProdutosModal ({
           placeholder={
             resolveAppOrigin() === 'focosimples'
               ? 'Simples Nacional: deixe em branco se ISS no DAS'
-              : 'MEI/Simples: deixe em branco'
+              : 'Simples Nacional: deixe em branco'
           }
           value={form.aliquota}
           onChangeText={(t) => setForm((f) => ({ ...f, aliquota: t }))}

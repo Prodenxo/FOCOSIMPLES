@@ -785,7 +785,10 @@ export async function sugerirCatalogoNcms (options: {
 export type NfeItemTaxResult = {
   cfop: string | null
   csosn: string | null
-  hasSt: boolean
+  has_st: boolean
+  /** Alias legado no cliente — derivado de has_st. */
+  hasSt?: boolean
+  cest: string | null
   scope: 'estadual' | 'interestadual' | 'unknown'
   reason: string
 }
@@ -796,6 +799,11 @@ export async function calcularTributacaoItensNfe(input: {
   destinationUf: string
   businessType?: EmpresaBusinessType | string
   items: Array<{ ncm?: string; cest?: string }>
+  destinatarioDoc?: string
+  destinatarioCpfCnpj?: string
+  indIEDest?: string
+  inscricaoEstadual?: string
+  nonTaxpayer?: boolean
 }): Promise<{ items: NfeItemTaxResult[] }> {
   return await apiClient.post<{ items: NfeItemTaxResult[] }>(
     '/mei-notas/tax/calculate-items',

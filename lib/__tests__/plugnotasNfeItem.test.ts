@@ -39,7 +39,7 @@ describe('plugnotasNfeItem', () => {
     expect(item.valorUnitario).toEqual({ comercial: 12, tributavel: 12 });
     expect(item.valor).toBe(504);
     expect(item.tributos?.icms?.cst).toBe('102');
-    expect(item.tributos?.icms?.csosn).toBeUndefined();
+    expect(item.tributos?.icms?.csosn).toBe('102');
     expect(payload.consumidorFinal).toBe(false);
     expect(payload.pagamentos?.[0]).toEqual({
       meio: '99',
@@ -64,23 +64,72 @@ describe('plugnotasNfeItem', () => {
     expect(mapIcmsForPlugnotas({ csosn: '102' })).toEqual({ origem: '0', cst: '102' });
   });
 
-  it('mapNfeItemForPlugnotas não envia campo unidade string', () => {
+  it('mapNfeItemForPlugnotas envia CEST normalizado (7 dígitos) para item ST', () => {
     const mapped = mapNfeItemForPlugnotas(
       {
         codigo: '1',
-        descricao: 'X',
-        ncm: '22011000',
-        cfop: '5102',
+        descricao: 'Refrigerante Cola 2L PET',
+        ncm: '22021000',
+        cfop: '5405',
         unidade: 'UN',
         quantidade: '2',
         valorUnitario: '10',
         desconto: '',
+        cest: '03.001.00',
+        sku: '',
+      },
+      {
+        pis: { cst: '49' },
+        cofins: { cst: '49' },
+        icms: { cst: '500', origem: '0' },
+      },
+    );
+    expect(mapped.cest).toBe('0300100');
+  });
+
+  it('mapNfeItemForPlugnotas não infere CEST pela descrição — só campo cest', () => {
+    const mapped = mapNfeItemForPlugnotas(
+      {
+        codigo: '1',
+        descricao: 'Refrigerante Cola 2L PET',
+        ncm: '22021000',
+        cfop: '6108',
+        unidade: 'UN',
+        quantidade: '1',
+        valorUnitario: '8',
+        desconto: '',
         cest: '',
         sku: '',
       },
-      { pis: { cst: '49' }, cofins: { cst: '49' }, icms: { cst: '102' } },
+      {
+        pis: { cst: '49' },
+        cofins: { cst: '49' },
+        icms: { csosn: '500', origem: '0' },
+      },
     );
-    expect(mapped.unidade).toBeUndefined();
-    expect(mapped.unidadeComercial).toBe('UN');
+    expect(mapped.cest).toBeUndefined();
+  });
+
+  it('mapNfeItemForPlugnotas não envia CEST quando CSOSN não é 500', () => {
+    const mapped = mapNfeItemForPlugnotas(
+      {
+        codigo: '1',
+        descricao: 'Refrigerante Cola 2L PET',
+        ncm: '22021000',
+        cfop: '5102',
+        unidade: 'UN',
+        quantidade: '1',
+        valorUnitario: '8',
+        desconto: '',
+        cest: '03.001.00',
+        sku: '',
+      },
+      {
+        pis: { cst: '49' },
+        cofins: { cst: '49' },
+        icms: { csosn: '102', origem: '0' },
+      },
+    );
+    expect(mapped.cest).toBeUndefined();
   });
 });

@@ -31,6 +31,7 @@ import {
   resolveNfeConsumidorFinal,
   buildDefaultNfePagamentos,
 } from './plugnotasNfeItem';
+import { sanitizeNfeItemFormForEmit } from './nfeItemTaxEngine';
 import { isValidCnpjDigits, isValidCpfOrCnpjDigits } from './validateCnpj';
 import {
   NFSE_SERVICO_CODIGO_MIN_LENGTH,
@@ -429,10 +430,6 @@ export function getNfeLikeValidationMessage(form: NfeLikeForm, documentType: Not
     if (normalizeDoc(item.ncm).length !== 8) return `Item ${linha}: NCM deve conter 8 dígitos.`;
     if (normalizeDoc(item.cfop).length !== 4) return `Item ${linha}: CFOP deve ter 4 dígitos.`;
     if (!hasRequiredText(item.unidade)) return `Item ${linha}: informe a unidade comercial.`;
-    const cestDigits = normalizeDoc(item.cest);
-    if (cestDigits && cestDigits.length !== 7) {
-      return `Item ${linha}: CEST deve ter 7 dígitos ou ficar em branco.`;
-    }
     const quantidade = parseDecimalInput(item.quantidade);
     if (quantidade === null || quantidade <= 0) return `Item ${linha}: quantidade deve ser maior que zero.`;
     const valorUnitario = parseDecimalInput(item.valorUnitario);
@@ -543,7 +540,14 @@ function mapNfeTributos(tributos: NfeItemFormTributos): NfeTributosInput {
 }
 
 function mapNfeItem(item: NfeItemForm): NfeItemInput {
-  return mapNfeItemForPlugnotas(item, mapNfeTributos(item.tributos));
+  const clean = sanitizeNfeItemFormForEmit(item);
+  const tributos = mapNfeTributos(clean.tributos);
+  tributos.icms = { ...tributos.icms, csosn: clean.tributos.icms.csosn };
+  const isSt = clean.tributos.icms.csosn === '500';
+  const itemForPlugnotas = isSt
+    ? clean
+    : { ...clean, cest: '' };
+  return mapNfeItemForPlugnotas(itemForPlugnotas, tributos);
 }
 
 export function computeNfeItemsTotal(itens: NfeItemForm[]): number {

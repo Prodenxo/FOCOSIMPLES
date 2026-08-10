@@ -1,5 +1,6 @@
 import type { DocumentType } from '../services/meiNotasService'
 import { MEI_DEFAULT_NFE_CSOSN, MEI_DEFAULT_NFE_PIS_COFINS_CST } from './meiNfseForms'
+import { inferCestFromProductDescription, normalizeCestInput } from './nfe-cest-packaging-hints'
 
 /** Metadados NF-e / NFC-e gravados em `metadata_json` do catálogo de produtos. */
 export type NfeCatalogProdutoItemMetadata = {
@@ -10,6 +11,8 @@ export type NfeCatalogProdutoItemMetadata = {
   pisCst?: string
   cofinsCst?: string
   cest?: string
+  /** Produto sujeito a ST (ICMS recolhido na entrada). */
+  hasSt?: boolean
 }
 
 export type NfeCatalogProdutoFormFields = {
@@ -19,6 +22,7 @@ export type NfeCatalogProdutoFormFields = {
   icmsCsosn: string
   pisCst: string
   cofinsCst: string
+  cest: string
 }
 
 const onlyDigits = (value: string, max: number) =>
@@ -36,6 +40,7 @@ export function emptyNfeCatalogProdutoFormFields(): NfeCatalogProdutoFormFields 
     icmsCsosn: MEI_DEFAULT_NFE_CSOSN,
     pisCst: MEI_DEFAULT_NFE_PIS_COFINS_CST,
     cofinsCst: MEI_DEFAULT_NFE_PIS_COFINS_CST,
+    cest: '',
   }
 }
 
@@ -43,6 +48,7 @@ export function readNfeCatalogProdutoMetadata(raw: unknown): NfeCatalogProdutoIt
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
   const o = raw as Record<string, unknown>
   const str = (key: string) => (typeof o[key] === 'string' ? o[key] : undefined)
+  const bool = (key: string) => (typeof o[key] === 'boolean' ? o[key] : undefined)
   return {
     ncm: str('ncm'),
     cfop: str('cfop'),
@@ -51,6 +57,7 @@ export function readNfeCatalogProdutoMetadata(raw: unknown): NfeCatalogProdutoIt
     pisCst: str('pisCst') ?? str('pis_cst'),
     cofinsCst: str('cofinsCst') ?? str('cofins_cst'),
     cest: str('cest'),
+    hasSt: bool('hasSt') ?? bool('has_st'),
   }
 }
 
@@ -66,19 +73,26 @@ export function nfeCatalogProdutoFormFieldsFromMetadata(
     icmsCsosn: onlyDigits(meta.icmsCsosn ?? defaults.icmsCsosn, 3) || defaults.icmsCsosn,
     pisCst: onlyDigits(meta.pisCst ?? defaults.pisCst, 2) || defaults.pisCst,
     cofinsCst: onlyDigits(meta.cofinsCst ?? defaults.cofinsCst, 2) || defaults.cofinsCst,
+    cest: normalizeCestInput(meta.cest ?? ''),
   }
 }
 
 export function buildNfeCatalogProdutoMetadata(
   existing: Record<string, unknown> | null | undefined,
   fields: NfeCatalogProdutoFormFields,
+  options: { discriminacao?: string; hasSt?: boolean } = {},
 ): Record<string, unknown> {
   const base =
     existing && typeof existing === 'object' && !Array.isArray(existing) ? { ...existing } : {}
+  const cestManual = normalizeCestInput(fields.cest)
+  const cestInferred = inferCestFromProductDescription(fields.ncm, options.discriminacao)
+  const cest = cestManual || cestInferred || undefined
+
   return {
     ...base,
     ncm: onlyDigits(fields.ncm, 8),
     unidade: String(fields.unidade || 'UN').trim() || 'UN',
+    ...(cest ? { cest } : {}),
   }
 }
 
@@ -87,6 +101,8 @@ export function validateNfeCatalogProdutoFormFields(
 ): string | null {
   const ncm = onlyDigits(fields.ncm, 8)
   if (ncm.length !== 8) return 'Informe o NCM com 8 dígitos.'
+  const cest = normalizeCestInput(fields.cest)
+  if (cest && cest.length !== 7) return 'CEST deve ter 7 dígitos ou ficar em branco.'
   return null
 }
 
