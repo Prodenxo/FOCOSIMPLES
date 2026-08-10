@@ -63,15 +63,31 @@ curl https://SUA-URL-BACKEND/health
 1. **Create Service → App**
 2. Nome: **`focosimples-web`**
 3. **Source:** mesmo repo `Prodenxo/FOCOSIMPLES` → `main`
-4. **Build:**
-   - Dockerfile: **`Dockerfile`** (raiz do repo)
-   - Context: **`.`** (raiz)
-5. **Port:** `80`
-6. **Domains:** ex. `focosimples.xxxx.easypanel.host` ou aponte `focomei.com.br`
-7. **Environment:** copie `deploy/easypanel/frontend.env.template`
-   - `EXPO_PUBLIC_MEI_API_URL` = URL pública do **focosimples-api**
-   - `EXPO_PUBLIC_INVITE_APP_BASE_URL` = URL pública deste frontend
-8. **Deploy** (rebuild obrigatório — Expo embute env no build)
+4. **Build (campos do Easypanel):**
+
+   | Campo | Valor |
+   |-------|--------|
+   | Caminho de Build | **`/`** (raiz — **não** `backend`) |
+   | Dockerfile | **`dockerfile`** ou **`Dockerfile`** |
+   | Porta | **`80`** |
+
+   > Linux do Easypanel é case-sensitive: se o build falhar com "dockerfile not found", use `dockerfile` (minúsculo) — arquivo existe na raiz do repo.
+
+5. **Build Args:** deixe **vazio** (não coloque secrets nem URLs aqui).
+6. **Environment:** copie `deploy/easypanel/frontend.env.template` e ajuste URLs:
+
+   ```env
+   EXPO_PUBLIC_AUTH_MODE=local
+   EXPO_PUBLIC_APP_PRODUCT=focosimples
+   EXPO_PUBLIC_MEI_API_URL=https://<URL-DO-BACKEND>.easypanel.host
+   EXPO_PUBLIC_INVITE_APP_BASE_URL=https://<URL-DESTE-FRONTEND>.easypanel.host
+   ```
+
+   O `docker-entrypoint.sh` gera `env-config.js` na **subida** do container — URLs vão na aba **Environment**, não em Build Args.
+
+7. **Domains:** URL gerada (`*.easypanel.host`) ou `focomei.com.br` (já responde DNS).
+8. **Deploy** → aguarde build (~5–10 min, `expo export` é pesado).
+9. **Teste:** abra a URL → login local → confira chamadas à API no DevTools (Network).
 
 ---
 
