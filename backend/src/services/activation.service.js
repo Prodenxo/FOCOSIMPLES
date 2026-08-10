@@ -64,18 +64,18 @@ const STEP_COPY = {
     route: 'settings:google',
   },
   mei_certificate: {
-    title: 'Certificado MEI',
-    description: 'Necessário para DAS e notas fiscais.',
+    title: 'Certificado digital',
+    description: 'Necessário para DAS e notas fiscais (e-CNPJ A1).',
     route: 'mei:certificate',
   },
   mei_das_view: {
     title: 'Consultar DAS',
-    description: 'Veja o DAS do mês na área MEI.',
+    description: 'Veja o DAS do mês na área Notas.',
     route: 'mei:das',
   },
   mei_nfse_catalog: {
-    title: 'Cliente NFSe',
-    description: 'Cadastre pelo menos um cliente para emitir notas.',
+    title: 'Catálogo fiscal',
+    description: 'Cadastre cliente ou produto para emitir notas.',
     route: 'mei:nfse',
   },
 };
@@ -91,6 +91,13 @@ const CORE_STEP_IDS = [
 const OPTIONAL_STEP_IDS = ['google_calendar'];
 
 const MEI_STEP_IDS = ['mei_certificate', 'mei_das_view', 'mei_nfse_catalog'];
+
+/** Passos exibidos no painel de ativação (com rota no app). */
+export const ACTIVATION_PANEL_STEP_IDS = [
+  'profile_name',
+  'phone_whatsapp',
+  ...MEI_STEP_IDS,
+];
 
 /**
  * @param {string} stepId
@@ -160,6 +167,10 @@ export const computeProgressFromSteps = (steps) => {
   const isFullyComplete = totalAll > 0 && completedAll >= totalAll;
   const pendingCount = totalAll - completedAll;
 
+  const panelSteps = steps.filter((s) => ACTIVATION_PANEL_STEP_IDS.includes(s.id));
+  const panelCompleted = panelSteps.filter((s) => s.status === 'completed').length;
+  const isPanelComplete = panelSteps.length > 0 && panelCompleted >= panelSteps.length;
+
   return {
     completed: completedRequired,
     totalRequired,
@@ -173,6 +184,10 @@ export const computeProgressFromSteps = (steps) => {
     isCoreComplete,
     /** Todos os passos da lista (incl. MEI e recomendados) concluídos */
     isFullyComplete,
+    /** Painel de ativação (passos visíveis no app) — 100% concluído */
+    isPanelComplete,
+    panelCompleted,
+    panelTotal: panelSteps.length,
     hasPendingSteps: pendingCount > 0,
   };
 };
@@ -229,6 +244,31 @@ const fetchMeiFlag = async (admin, userId) => {
   return data?.mei === true;
 };
 
+/**
+ * Sinais fiscais alinhados à área Notas (DAS Simples/PGDAS, catálogo NFSe/NF-e).
+ * @param {{
+ *   dasSimplesCount?: number,
+ *   dasMensalCount?: number,
+ *   nfseClientsCount?: number,
+ *   nfseProdutosCount?: number,
+ *   nfseNotesCount?: number,
+ * }} counts
+ * @param {boolean} hasMeiCertificate
+ */
+const resolveMeiFiscalSignals = (counts = {}, hasMeiCertificate = false) => {
+  const dasTotal = (counts.dasSimplesCount ?? 0) + (counts.dasMensalCount ?? 0);
+  const catalogTotal =
+    (counts.nfseClientsCount ?? 0)
+    + (counts.nfseProdutosCount ?? 0)
+    + (counts.nfseNotesCount ?? 0);
+
+  return {
+    hasMeiCertificate: Boolean(hasMeiCertificate),
+    hasDasActivity: dasTotal > 0,
+    nfseClientsCount: catalogTotal,
+  };
+};
+
 export const gatherActivationContext = async (userId) => {
   if (isLocalAuthMode()) {
     return gatherActivationContextPg(userId);
@@ -246,7 +286,10 @@ export const gatherActivationContext = async (userId) => {
     budgetRes,
     googleRes,
     nfseClientsRes,
-    dasRes,
+    dasMensalRes,
+    dasSimplesRes,
+    nfseProdutosRes,
+    nfseNotesRes,
     showMei,
     hasMeiCertificate,
   ] = await Promise.all([
@@ -286,6 +329,18 @@ export const gatherActivationContext = async (userId) => {
       .from('das_mensal_status')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', userId),
+    admin
+      .from('das_simples')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId),
+    admin
+      .from('mei_nfse_produtos')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId),
+    admin
+      .from('mei_nfse')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId),
     fetchMeiFlag(admin, userId),
     userHasMeiCertificate(userId).catch(() => false),
   ]);
@@ -297,6 +352,14 @@ export const gatherActivationContext = async (userId) => {
   const budgetRows = budgetRes.data || [];
   const hasBudgetThisMonth = budgetRows.length > 0;
 
+  const meiFiscal = resolveMeiFiscalSignals({
+    dasSimplesCount: dasSimplesRes.count ?? 0,
+    dasMensalCount: dasMensalRes.count ?? 0,
+    nfseClientsCount: nfseClientsRes.count ?? 0,
+    nfseProdutosCount: nfseProdutosRes.count ?? 0,
+    nfseNotesCount: nfseNotesRes.count ?? 0,
+  }, Boolean(hasMeiCertificate));
+
   return {
     showMei,
     ctx: {
@@ -306,9 +369,9 @@ export const gatherActivationContext = async (userId) => {
       transactionsCount: txRes.count ?? 0,
       hasBudgetThisMonth,
       hasGoogleCalendar: Boolean(googleRes.data?.access_token),
-      hasMeiCertificate: Boolean(hasMeiCertificate),
-      hasDasActivity: (dasRes.count ?? 0) > 0,
-      nfseClientsCount: nfseClientsRes.count ?? 0,
+      hasMeiCertificate: meiFiscal.hasMeiCertificate,
+      hasDasActivity: meiFiscal.hasDasActivity,
+      nfseClientsCount: meiFiscal.nfseClientsCount,
     },
   };
 };
@@ -323,6 +386,12 @@ const gatherActivationContextPg = async (userId) => {
     budgetRes,
     googleRes,
     linkRes,
+    nfseClientsRes,
+    dasMensalRes,
+    dasSimplesRes,
+    nfseProdutosRes,
+    nfseNotesRes,
+    hasMeiCertificate,
   ] = await Promise.all([
     query(
       `SELECT email, phone, raw_user_meta_data FROM public.users WHERE id = $1 LIMIT 1`,
@@ -357,12 +426,41 @@ const gatherActivationContextPg = async (userId) => {
        ORDER BY created_at DESC LIMIT 1`,
       [userId],
     ),
+    query(
+      `SELECT count(*)::int AS c FROM public.mei_nfse_clientes WHERE user_id = $1`,
+      [userId],
+    ),
+    query(
+      `SELECT count(*)::int AS c FROM public.das_mensal_status WHERE user_id = $1`,
+      [userId],
+    ),
+    query(
+      `SELECT count(*)::int AS c FROM public.das_simples WHERE user_id = $1`,
+      [userId],
+    ),
+    query(
+      `SELECT count(*)::int AS c FROM public.mei_nfse_produtos WHERE user_id = $1`,
+      [userId],
+    ),
+    query(
+      `SELECT count(*)::int AS c FROM public.mei_nfse WHERE user_id = $1`,
+      [userId],
+    ),
+    userHasMeiCertificate(userId).catch(() => false),
   ]);
 
   const user = userRes.rows[0];
   const meta = user?.raw_user_meta_data || {};
   const displayName = meta.display_name || meta.full_name || null;
   const phoneRaw = user?.phone || meta.phone || n8nRes.rows[0]?.user_number || null;
+
+  const meiFiscal = resolveMeiFiscalSignals({
+    dasSimplesCount: dasSimplesRes.rows[0]?.c ?? 0,
+    dasMensalCount: dasMensalRes.rows[0]?.c ?? 0,
+    nfseClientsCount: nfseClientsRes.rows[0]?.c ?? 0,
+    nfseProdutosCount: nfseProdutosRes.rows[0]?.c ?? 0,
+    nfseNotesCount: nfseNotesRes.rows[0]?.c ?? 0,
+  }, Boolean(hasMeiCertificate));
 
   return {
     showMei: linkRes.rows[0]?.mei === true,
@@ -373,9 +471,9 @@ const gatherActivationContextPg = async (userId) => {
       transactionsCount: txRes.rows[0]?.c ?? 0,
       hasBudgetThisMonth: (budgetRes.rows || []).length > 0,
       hasGoogleCalendar: Boolean(googleRes.rows[0]?.access_token),
-      hasMeiCertificate: false,
-      hasDasActivity: false,
-      nfseClientsCount: 0,
+      hasMeiCertificate: meiFiscal.hasMeiCertificate,
+      hasDasActivity: meiFiscal.hasDasActivity,
+      nfseClientsCount: meiFiscal.nfseClientsCount,
     },
   };
 };

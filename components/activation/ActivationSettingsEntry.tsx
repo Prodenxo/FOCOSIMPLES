@@ -7,6 +7,7 @@ import { useMfTheme } from '../ui/useMfTheme'
 import { fetchActivationProgress } from '../../services/activationService'
 import { ACTIVATION_ROUTE } from '../../lib/settingsRoutes'
 import { setSessionActivationSkipped } from '../../lib/activationSession'
+import { shouldHideActivationPanel } from '../../lib/activationPanelComplete'
 import {
   getSiteTokens,
   mfSitePanel,
@@ -33,8 +34,7 @@ export function ActivationSettingsEntry () {
 
   const load = useCallback(async () => {
     const data = await fetchActivationProgress()
-    const fullyDone = data?.progress.isFullyComplete ?? data?.progress.isComplete
-    if (!data || fullyDone) {
+    if (!data || await shouldHideActivationPanel(data)) {
       setSummary(null)
       return
     }
@@ -74,7 +74,7 @@ export function ActivationSettingsEntry () {
       <Text style={[sitePanelTitleStyle, { color: tokens.textPrimary }]}>Configuração da conta</Text>
       <Text style={[siteHintStyle, styles.desc, { color: tokens.textSecondary }]}>
         {summary.coreDone
-          ? `Essencial completo (${summary.completed}/${summary.total}). Faltam ${summary.pendingCount} passo${summary.pendingCount === 1 ? '' : 's'} — MEI ou recomendados.`
+          ? `Essencial completo (${summary.completed}/${summary.total}). Faltam ${summary.pendingCount} passo${summary.pendingCount === 1 ? '' : 's'} — fiscal ou recomendados.`
           : 'Nome, WhatsApp, conta, lançamento e orçamento — o essencial para começar.'}
       </Text>
 

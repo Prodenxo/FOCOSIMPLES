@@ -25,6 +25,10 @@ export type ActivationProgress = {
   isCoreComplete?: boolean
   /** Inclui MEI e recomendados */
   isFullyComplete?: boolean
+  /** Painel visível no app (nome, WhatsApp, fiscal) — 100% */
+  isPanelComplete?: boolean
+  panelCompleted?: number
+  panelTotal?: number
   hasPendingSteps?: boolean
   dismissStorage?: 'client'
 }

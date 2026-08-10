@@ -56,7 +56,7 @@ export function AppBrandLogo({
     [variant, onDarkBackground, heightOverride],
   );
 
-  if (isWordmark && transparent) {
+  if (isWordmark) {
     return (
       <NativeWordmark
         variant={variant}
@@ -65,6 +65,7 @@ export function AppBrandLogo({
       />
     );
   }
+
 
   if (!isWordmark) {
     const fullLogo = onDarkBackground ? LOGO_LIGHT_BG : LOGO_DARK_BG;
@@ -79,17 +80,7 @@ export function AppBrandLogo({
     );
   }
 
-  const source = onDarkBackground ? WORDMARK_DARK_BG : WORDMARK_LIGHT_BG;
-
-  return (
-    <Image
-      source={source}
-      style={styles.wordmark}
-      resizeMode="contain"
-      accessibilityRole="image"
-      accessibilityLabel={APP_BRAND_NAME}
-    />
-  );
+  return null;
 }
 
 /** Ícone alvo da marca — sem fundo (manual v1.0). */

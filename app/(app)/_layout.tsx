@@ -34,6 +34,7 @@ import {
   registerEmpresaCnpjLayoutGateReset,
   unregisterEmpresaCnpjLayoutGateReset,
 } from '@/lib/empresaCnpjLayoutGate';
+import { shouldHideActivationPanel } from '@/lib/activationPanelComplete';
 import { SignOutProvider } from '@/components/auth/SignOutProvider';
 
 type AccessStatus = 'checking' | 'pending' | 'ok';
@@ -158,9 +159,9 @@ export default function AppLayout() {
       return;
     }
     let cancelled = false;
-    void fetchActivationProgress().then((data) => {
+    void fetchActivationProgress().then(async (data) => {
       if (cancelled) return;
-      if (!data || data.progress.isFullyComplete) {
+      if (!data || await shouldHideActivationPanel(data)) {
         setActivationMenuHint(null);
         return;
       }
@@ -332,15 +333,22 @@ export default function AppLayout() {
     }
     let cancelled = false;
     setActivationGate((prev) => (prev === 'checking' ? prev : 'checking'));
-    void fetchActivationProgress().then((data) => {
+    void fetchActivationProgress().then(async (data) => {
       if (cancelled) return;
       loginActivationGateDone.current = true;
-      const coreDone = data?.progress.isCoreComplete ?? data?.progress.isComplete;
-      if (!data || coreDone) {
+      if (!data || await shouldHideActivationPanel(data)) {
         setActivationGate((prev) => (prev === 'ready' ? prev : 'ready'));
+        if (isActivationRoute) {
+          router.replace(SCREEN_TO_HREF.Dashboard as never);
+        }
         return;
       }
-      router.replace('/(app)/ativacao' as any);
+      const coreDone = data.progress.isCoreComplete ?? data.progress.isComplete;
+      if (!coreDone) {
+        router.replace('/(app)/ativacao' as any);
+        return;
+      }
+      setActivationGate((prev) => (prev === 'ready' ? prev : 'ready'));
     });
     return () => {
       cancelled = true;

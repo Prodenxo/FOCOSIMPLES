@@ -25,6 +25,9 @@ import {
 import { ActivationStepList } from '../components/activation/ActivationStepList'
 import { activationRouteToScreen } from '../lib/activationStepRoutes'
 import { setSessionActivationSkipped } from '../lib/activationSession'
+import {
+  shouldHideActivationPanel,
+} from '../lib/activationPanelComplete'
 import { isEmpresaCnpjOnboardingRequired } from '../lib/empresaCnpjGate'
 import { EMPRESA_CNPJ_ONBOARDING_ROUTE } from '../lib/settingsRoutes'
 import { SCREEN_TO_HREF } from '../lib/appNavConfig'
@@ -76,8 +79,8 @@ export default function ActivationSetupScreen () {
     const data = await fetchActivationProgress()
     setPayload(data)
     setLoading(false)
-    if (data?.progress.isFullyComplete) {
-      router.replace(SCREEN_TO_HREF.MeuMei as any)
+    if (await shouldHideActivationPanel(data)) {
+      router.replace(SCREEN_TO_HREF.Dashboard as any)
     }
   }, [router])
 
@@ -96,7 +99,7 @@ export default function ActivationSetupScreen () {
 
   const handleSkip = () => {
     setSessionActivationSkipped(true)
-    router.replace(SCREEN_TO_HREF.MeuMei as any)
+    router.replace(SCREEN_TO_HREF.Dashboard as any)
   }
 
   const steps = useMemo(
@@ -159,7 +162,7 @@ export default function ActivationSetupScreen () {
               <View style={styles.hero}>
                 <ActivationEyebrow label="Primeiros passos" isDarkMode={dark} />
                 <Text style={[styles.heroTitle, { color: theme.text }]}>
-                  Configure seu painel MEI
+                  Configure sua conta
                 </Text>
                 <Text style={[styles.heroSubtitle, { color: theme.textSecondary }]}>
                   {APP_BRAND_TAGLINE} Complete o essencial para emitir notas, acompanhar

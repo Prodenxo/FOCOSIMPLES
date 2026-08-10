@@ -3,6 +3,7 @@ import type { Session, User } from '@supabase/supabase-js';
 import { clearSupabaseAuthStorage, supabase } from '../lib/supabase';
 import { cleanPhone, normalizeRoleValue, resolveRoleAndEmpresa, type UserRole } from '../lib/auth-roles';
 import { resetSessionActivationSkip } from '../lib/activationSession';
+import { clearActivationPanelCompleteFlag } from '../lib/activationPanelComplete';
 import {
   getErrorMessage,
   isAuthBlockOrExpiryMessage,
@@ -447,6 +448,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (isLocalApiAuthMode()) {
       await clearLocalAuthSnapshot();
       resetSessionActivationSkip();
+      void clearActivationPanelCompleteFlag();
       set(CLEARED_AUTH_STATE);
       return;
     }
@@ -465,6 +467,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     await clearSupabaseAuthStorage();
     resetSessionActivationSkip();
+    void clearActivationPanelCompleteFlag();
     set(CLEARED_AUTH_STATE);
   },
   impersonate: async (targetUserId) => {

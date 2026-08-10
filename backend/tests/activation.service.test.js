@@ -60,6 +60,22 @@ test('computeProgressFromSteps: core completo mas MEI pendente não é fully com
   assert.equal(p.pendingCount, 1);
 });
 
+test('computeProgressFromSteps: isPanelComplete quando passos visíveis concluídos', () => {
+  const steps = [
+    { id: 'profile_name', required: true, status: 'completed' },
+    { id: 'phone_whatsapp', required: true, status: 'completed' },
+    { id: 'first_account', required: true, status: 'pending' },
+    { id: 'mei_certificate', required: false, status: 'completed' },
+    { id: 'mei_das_view', required: false, status: 'completed' },
+    { id: 'mei_nfse_catalog', required: false, status: 'completed' },
+  ];
+  const p = computeProgressFromSteps(steps);
+  assert.equal(p.isPanelComplete, true);
+  assert.equal(p.panelCompleted, 5);
+  assert.equal(p.panelTotal, 5);
+  assert.equal(p.isFullyComplete, false);
+});
+
 test('buildActivationSteps sem MEI não inclui passos mei_*', () => {
   const steps = buildActivationSteps(fullCtx, { showMei: false });
   assert.equal(steps.some((s) => s.id.startsWith('mei_')), false);
@@ -75,4 +91,20 @@ test('buildActivationSteps com MEI inclui certificado e DAS', () => {
 test('evaluateStepStatus: first_transaction pendente sem lançamentos', () => {
   const r = evaluateStepStatus('first_transaction', { ...fullCtx, transactionsCount: 0 });
   assert.equal(r.status, 'pending');
+});
+
+test('evaluateStepStatus: mei_das_view concluído com das_simples (PGDAS)', () => {
+  const r = evaluateStepStatus('mei_das_view', {
+    ...fullCtx,
+    hasDasActivity: true,
+  });
+  assert.equal(r.status, 'completed');
+});
+
+test('evaluateStepStatus: mei_nfse_catalog concluído com produto no catálogo', () => {
+  const r = evaluateStepStatus('mei_nfse_catalog', {
+    ...fullCtx,
+    nfseClientsCount: 1,
+  });
+  assert.equal(r.status, 'completed');
 });
