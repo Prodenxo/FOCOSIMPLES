@@ -3,7 +3,7 @@
  * antes da emissão — não confia em csosn/cfop enviados pelo cliente.
  */
 
-import { calculateItemsTax } from '../services/nfe-item-tax.service.js';
+import { calculateItemsTax } from '../services/tax.service.js';
 import {
   CSOSN_ST,
   CSOSN_TRIBUTADO_SN,

@@ -15,6 +15,7 @@ import {
   resolveDestinatarioNonTaxpayer,
   resolveEstadualHasSt,
   resolveItemHasSt,
+  normalizeStMatrixRule,
 } from '../src/lib/nfe-item-tax-engine.js';
 import {
   __resetGetDbForTests,
@@ -26,8 +27,9 @@ import {
 } from '../src/services/nfe-item-tax.service.js';
 
 describe('nfe-item-tax-engine', () => {
-  it('resolveEstadualHasSt usa regra da tabela', () => {
-    assert.equal(resolveEstadualHasSt({ ncm: '22021000' }, { hasSt: true }), true);
+  it('resolveEstadualHasSt usa regra da matriz', () => {
+    const stRule = normalizeStMatrixRule({ ncm: '22021000', has_st: true });
+    assert.equal(resolveEstadualHasSt({ ncm: '22021000' }, stRule), true);
     assert.equal(resolveEstadualHasSt({ ncm: '22021000' }, null), false);
   });
 
@@ -38,16 +40,18 @@ describe('nfe-item-tax-engine', () => {
     assert.equal(tax.reason, 'estadual_normal');
   });
 
-  it('estadual com ST na tabela → 500 / 5405', () => {
-    const tax = calculateItemTax({ ncm: '22021000' }, 'SP', 'SP', { hasSt: true });
+  it('estadual com ST na matriz → 500 / 5405', () => {
+    const stRule = normalizeStMatrixRule({ ncm: '22021000', has_st: true });
+    const tax = calculateItemTax({ ncm: '22021000' }, 'SP', 'SP', stRule);
     assert.equal(tax.cfop, CFOP_VENDA_ESTADUAL_ST);
     assert.equal(tax.csosn, CSOSN_ST);
     assert.equal(tax.reason, 'estadual_st');
   });
 
-  it('estadual ST via tabela (sem CEST)', () => {
-    assert.equal(resolveEstadualHasSt({ ncm: '22021000' }, { hasSt: true }), true);
-    const tax = calculateItemTax({ ncm: '22021000' }, 'BA', 'BA', { hasSt: true });
+  it('estadual ST via matriz (sem CEST no produto)', () => {
+    const stRule = normalizeStMatrixRule({ ncm: '22021000', has_st: true });
+    assert.equal(resolveEstadualHasSt({ ncm: '22021000' }, stRule), true);
+    const tax = calculateItemTax({ ncm: '22021000' }, 'BA', 'BA', stRule);
     assert.equal(tax.cfop, CFOP_VENDA_ESTADUAL_ST);
     assert.equal(tax.csosn, CSOSN_ST);
   });
@@ -58,10 +62,11 @@ describe('nfe-item-tax-engine', () => {
     assert.equal(productHasStTaxation({ ncm: '22021000' }), false);
   });
 
-  it('resolveItemHasSt usa somente tabela tax_rules_state', () => {
+  it('resolveItemHasSt usa somente matriz ST', () => {
     assert.equal(resolveItemHasSt({ cest: '0300100' }, null), false);
     assert.equal(resolveItemHasSt({ icmsCsosn: '500' }, null), false);
-    assert.equal(resolveItemHasSt({ ncm: '22021000' }, { hasSt: true }), true);
+    const stRule = normalizeStMatrixRule({ ncm: '22021000', has_st: true });
+    assert.equal(resolveItemHasSt({ ncm: '22021000' }, stRule), true);
   });
 
   it('CEST no produto não gera ST sem regra na tabela → 102', () => {
@@ -80,9 +85,10 @@ describe('nfe-item-tax-engine', () => {
 
   it('mergeTaxRulesWithEstadualFallback usa ST interna quando par interestadual ausente', () => {
     const direct = new Map();
-    const estadual = new Map([['22021000', { hasSt: true, cfopSt: '5405' }]]);
+    const stRule = normalizeStMatrixRule({ ncm: '22021000', has_st: true, cfop_st: '5405' });
+    const estadual = new Map([['22021000', stRule]]);
     const merged = mergeTaxRulesWithEstadualFallback(direct, estadual);
-    assert.equal(merged.get('22021000')?.hasSt, true);
+    assert.equal(merged.get('22021000')?.ncm, '22021000');
   });
 
   it('interestadual sem protocolo ST → 102 / 6102', () => {
@@ -106,11 +112,12 @@ describe('nfe-item-tax-engine', () => {
   });
 
   it('interestadual CPF com ST → 500 / 6108', () => {
+    const stRule = normalizeStMatrixRule({ ncm: '22021000', has_st: true });
     const tax = calculateItemTax(
       { ncm: '22021000' },
       'RJ',
       'SP',
-      { hasSt: true },
+      stRule,
       'RESELLER',
       { destinatarioDoc: '12345678901' },
     );
@@ -120,11 +127,16 @@ describe('nfe-item-tax-engine', () => {
   });
 
   it('interestadual CPF com ST e convênio → 500 / 6404', () => {
+    const stRule = normalizeStMatrixRule({
+      ncm: '22021000',
+      has_st: true,
+      cfop_st: CFOP_VENDA_INTERESTADUAL_ST_ALT,
+    });
     const tax = calculateItemTax(
       { ncm: '22021000' },
       'RJ',
       'SP',
-      { hasSt: true, cfopSt: CFOP_VENDA_INTERESTADUAL_ST_ALT },
+      stRule,
       'RESELLER',
       { indIEDest: '9' },
     );
@@ -143,14 +155,17 @@ describe('nfe-item-tax-engine', () => {
   });
 
   it('interestadual com ST → 500 / 6105 ou 6403 (contribuinte)', () => {
-    const tax6105 = calculateItemTax({ ncm: '22021000' }, 'RJ', 'SP', { hasSt: true });
+    const stRule6105 = normalizeStMatrixRule({ ncm: '22021000', has_st: true });
+    const tax6105 = calculateItemTax({ ncm: '22021000' }, 'RJ', 'SP', stRule6105);
     assert.equal(tax6105.cfop, CFOP_VENDA_INTERESTADUAL_ST);
     assert.equal(tax6105.csosn, CSOSN_ST);
 
-    const tax6403 = calculateItemTax({ ncm: '22021000' }, 'RJ', 'SP', {
-      hasSt: true,
-      cfopSt: CFOP_VENDA_INTERESTADUAL_ST_ALT,
+    const stRule6403 = normalizeStMatrixRule({
+      ncm: '22021000',
+      has_st: true,
+      cfop_st: CFOP_VENDA_INTERESTADUAL_ST_ALT,
     });
+    const tax6403 = calculateItemTax({ ncm: '22021000' }, 'RJ', 'SP', stRule6403);
     assert.equal(tax6403.cfop, CFOP_VENDA_INTERESTADUAL_ST_ALT);
   });
 
@@ -159,7 +174,13 @@ describe('nfe-item-tax-engine', () => {
     assert.equal(estadual.cfop, '5101');
     const interestadual = calculateItemTax({ ncm: '61091000' }, 'RJ', 'SP', null, 'MANUFACTURER');
     assert.equal(interestadual.cfop, '6101');
-    const st = calculateItemTax({ ncm: '22021000' }, 'SP', 'SP', { hasSt: true }, 'MANUFACTURER');
+    const st = calculateItemTax(
+      { ncm: '22021000' },
+      'SP',
+      'SP',
+      normalizeStMatrixRule({ ncm: '22021000', has_st: true }),
+      'MANUFACTURER',
+    );
     assert.equal(st.cfop, '5401');
   });
 });
@@ -243,7 +264,8 @@ describe('nfe-item-tax.service', () => {
       destinationUf: 'RJ',
     });
     assert.equal(map.size, 1);
-    assert.equal(map.get('22021000')?.hasSt, true);
+    assert.equal(map.get('22021000')?.ncm, '22021000');
+    assert.equal(map.get('22021000')?.csosn, '500');
 
     const taxes = await calculateItemsTax({
       originUf: 'RJ',

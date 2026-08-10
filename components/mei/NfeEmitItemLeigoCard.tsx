@@ -2,6 +2,7 @@ import { View, Text, Pressable } from 'react-native'
 import type { NfeItemForm } from '../../lib/meiNfseForms'
 import { getNfeItemLineTotal } from '../../lib/meiNfseForms'
 import { NCM_OBRIGATORIO_HINT } from '../../lib/nfeEmissaoLeigo'
+import { nfeItemFormRequiresCest } from '../../lib/stRulesEngine'
 import { MeiFormField, MeiLinkButton } from './meiFlowUi'
 
 export type NfeEmitItemLeigoCardProps = {
@@ -40,6 +41,7 @@ export function NfeEmitItemLeigoCard({
 }: NfeEmitItemLeigoCardProps) {
   const ncmDigits = String(item.ncm || '').replace(/\D/g, '')
   const ncmIncomplete = ncmDigits.length !== 8
+  const requiresCest = nfeItemFormRequiresCest(item)
   const lineTotal = getNfeItemLineTotal(item)
 
   return (
@@ -115,6 +117,19 @@ export function NfeEmitItemLeigoCard({
         onChangeText={(t) => onChange({ valorUnitario: t })}
         keyboardType="decimal-pad"
       />
+
+      {requiresCest ? (
+        <MeiFormField
+          label="CEST (7 dígitos)"
+          required
+          placeholder="Ex.: 0300100"
+          hint="Obrigatório — produto com substituição tributária (ST)."
+          value={item.cest}
+          onChangeText={(t) => onChange({ cest: t.replace(/\D/g, '').slice(0, 7) })}
+          keyboardType="numeric"
+          maxLength={7}
+        />
+      ) : null}
 
       <View style={{ marginBottom: mfSpacing.sm, gap: 2 }}>
         <Text style={{ fontSize: 13, fontWeight: '600', color: theme.text }}>

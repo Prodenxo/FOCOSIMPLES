@@ -161,9 +161,16 @@ create table if not exists public.tax_rules_state (
   destination_uf char(2) not null,
   has_st boolean not null default false,
   cfop_st varchar(4),
+  cest_default varchar(7),
+  cfop_interno varchar(4),
+  cfop_interestadual_pf varchar(4),
   updated_at timestamptz not null default now(),
   constraint tax_rules_state_unique_route unique (ncm, origin_uf, destination_uf)
 );
+
+alter table public.tax_rules_state add column if not exists cest_default varchar(7);
+alter table public.tax_rules_state add column if not exists cfop_interno varchar(4);
+alter table public.tax_rules_state add column if not exists cfop_interestadual_pf varchar(4);
 
 create index if not exists idx_tax_rules_state_lookup
   on public.tax_rules_state (ncm, origin_uf, destination_uf);

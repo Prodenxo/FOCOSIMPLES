@@ -4,7 +4,7 @@ import {
   buscarNcmsCatalogo,
   sugerirNcmsPorTexto,
 } from '../services/ncm-catalog.service.js';
-import { calculateItemsTax } from '../services/nfe-item-tax.service.js';
+import { calculateItemsTax } from '../services/tax.service.js';
 import {
   extractBusinessTypeFromPayload,
   stripBusinessTypeFromPayload,

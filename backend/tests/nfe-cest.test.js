@@ -66,17 +66,23 @@ describe('nfe-cest', () => {
     );
   });
 
-  it('validateNfeCatalogProdutoMetadata exige CEST quando CSOSN 500 no cadastro', () => {
-    assert.throws(
+  it('validateNfeCatalogProdutoMetadata exige CEST só com hasSt + CSOSN 500', () => {
+    assert.doesNotThrow(
       () => validateNfeCatalogProdutoMetadata(
         { ncm: '22021000', icmsCsosn: '500' },
+        { discriminacao: 'Refri' },
+      ),
+    );
+    assert.throws(
+      () => validateNfeCatalogProdutoMetadata(
+        { ncm: '22021000', icmsCsosn: '500', hasSt: true },
         { discriminacao: 'Refri' },
       ),
       /CSOSN 500 exigem CEST/,
     );
     assert.doesNotThrow(
       () => validateNfeCatalogProdutoMetadata(
-        { ncm: '22021000', icmsCsosn: '500' },
+        { ncm: '22021000', icmsCsosn: '500', hasSt: true },
         { discriminacao: 'Refrigerante PET' },
       ),
     );

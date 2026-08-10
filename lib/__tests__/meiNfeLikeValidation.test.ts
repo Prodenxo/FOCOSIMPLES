@@ -95,11 +95,21 @@ describe('getNfeLikeValidationMessage', () => {
     expect(getNfeLikeValidationMessage(form, 'NFE')).toBeNull()
   })
 
-  it('não bloqueia emissão por CEST no frontend (validação fica no backend)', () => {
+  it('não bloqueia emissão sem CEST quando csosn 500 mas sem has_st da API', () => {
     const form = validNfeForm()
     form.itens[0]!.tributos.icms.csosn = '500'
+    form.itens[0]!.fiscalHasSt = false
     form.itens[0]!.cest = ''
     expect(getNfeLikeValidationMessage(form, 'NFE')).toBeNull()
+  })
+
+  it('exige CEST quando has_st da API e csosn 500', () => {
+    const form = validNfeForm()
+    form.itens[0]!.tributos.icms.csosn = '500'
+    form.itens[0]!.fiscalHasSt = true
+    form.itens[0]!.cest = ''
+    form.itens[0]!.descricao = 'Produto genérico'
+    expect(getNfeLikeValidationMessage(form, 'NFE')).toMatch(/CEST/)
   })
 })
 

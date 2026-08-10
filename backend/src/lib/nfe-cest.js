@@ -93,7 +93,8 @@ export const validateNfeCatalogProdutoMetadata = (metadata, context = {}) => {
   }
 
   const csosn = onlyDigits(metadata.icmsCsosn ?? metadata.icms_csosn, 3);
-  if (csosn === '500' && !cest) {
+  const hasStFlag = metadata.hasSt === true || metadata.has_st === true;
+  if (hasStFlag && csosn === '500' && !cest) {
     const discriminacao = String(context.discriminacao || '').trim();
     const ncm = onlyDigits(metadata.ncm, 8);
     const inferred = inferCestFromProductDescription(ncm, discriminacao);

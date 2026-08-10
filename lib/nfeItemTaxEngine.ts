@@ -7,6 +7,7 @@
  */
 
 import { type NfeVendaLocalizacao, detectNfeVendaLocalizacao } from './nfeEmissaoLeigo'
+import { nfeItemRequiresCestFromApi, nfeItemFormRequiresCest } from './stRulesEngine'
 import {
   DEFAULT_EMPRESA_BUSINESS_TYPE,
   normalizeEmpresaBusinessType,
@@ -83,6 +84,8 @@ export type NfeItemTaxResult = {
     | 'interestadual_normal_consumidor'
     | 'unknown_uf'
 }
+
+export { nfeItemRequiresCestFromApi, nfeItemFormRequiresCest } from './stRulesEngine'
 
 const onlyDigits = (value: string | null | undefined, max: number) =>
   String(value ?? '').replace(/\D/g, '').slice(0, max)
@@ -273,7 +276,7 @@ export function sanitizeItemTaxApiResult(
   product?: Pick<NfeTaxProductInput, 'cest'> | null,
 ): NfeItemTaxResult & { has_st: boolean; cest: string | null } {
   const csosn = onlyDigits(tax?.csosn, 3)
-  const isSt = tax?.hasSt === true && csosn === CSOSN_ST
+  const isSt = nfeItemRequiresCestFromApi({ has_st: tax?.hasSt ?? tax?.has_st, csosn })
 
   if (!isSt) {
     return {
@@ -310,8 +313,13 @@ export type NfeItemTaxFormSlice = {
 const formIcmsCsosn = (icms: { csosn?: string; cst?: string }) =>
   onlyDigits(icms?.csosn, 3)
 
-/** CSOSN efetivo do item no formulário — ST somente quando csosn === '500'. */
-export function nfeItemFormCsosnIsSt(item: Pick<NfeItemTaxFormSlice, 'tributos'>): boolean {
+/** CSOSN efetivo do item no formulário — ST somente quando API confirmou has_st + csosn 500. */
+export function nfeItemFormCsosnIsSt(
+  item: Pick<NfeItemTaxFormSlice, 'tributos'> & { fiscalHasSt?: boolean },
+): boolean {
+  if (typeof item.fiscalHasSt === 'boolean') {
+    return nfeItemFormRequiresCest(item)
+  }
   const icms = item.tributos?.icms ?? { csosn: '', cst: '' }
   return formIcmsCsosn(icms) === CSOSN_ST
 }
@@ -339,15 +347,19 @@ export function sanitizeNfeItemFormForEmit<T extends NfeItemTaxFormSlice & { ces
 }
 
 /** Aplica resultado do motor no item do formulário (preserva edições manuais de outros campos). */
-export function applyItemTaxResultToNfeItem<T extends NfeItemTaxFormSlice & { cest?: string }>(
+export function applyItemTaxResultToNfeItem<T extends NfeItemTaxFormSlice & { cest?: string; fiscalHasSt?: boolean }>(
   item: T,
   tax: NfeItemTaxResult,
 ): T {
   if (!tax.cfop || !tax.csosn) return item
-  const isSt = tax.csosn === CSOSN_ST
+  const isSt = nfeItemRequiresCestFromApi({
+    has_st: tax.has_st ?? tax.hasSt,
+    csosn: tax.csosn,
+  })
   const next: T = {
     ...item,
     cfop: tax.cfop,
+    fiscalHasSt: isSt,
     cest: isSt ? (tax.cest?.trim() || item.cest || '') : '',
     tributos: {
       ...item.tributos,

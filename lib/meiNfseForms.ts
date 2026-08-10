@@ -31,7 +31,8 @@ import {
   resolveNfeConsumidorFinal,
   buildDefaultNfePagamentos,
 } from './plugnotasNfeItem';
-import { sanitizeNfeItemFormForEmit } from './nfeItemTaxEngine';
+import { sanitizeNfeItemFormForEmit, nfeItemFormRequiresCest } from './nfeItemTaxEngine';
+import { normalizeCestInput, inferCestFromProductDescription } from './nfe-cest-packaging-hints';
 import { isValidCnpjDigits, isValidCpfOrCnpjDigits } from './validateCnpj';
 import {
   NFSE_SERVICO_CODIGO_MIN_LENGTH,
@@ -79,6 +80,8 @@ export interface NfeItemForm {
   desconto: string;
   cest: string;
   sku: string;
+  /** ST confirmado pela API (`has_st` em `/tax/calculate-items`). */
+  fiscalHasSt?: boolean;
   tributos: NfeItemFormTributos;
 }
 
@@ -453,6 +456,13 @@ export function getNfeLikeValidationMessage(form: NfeLikeForm, documentType: Not
     const cofinsCst = normalizeDoc(item.tributos.cofins.cst);
     if (!cofinsCst) return `Item ${linha}: informe CST do COFINS (ex.: 49).`;
     if (cofinsCst.length > 2) return `Item ${linha}: CST do COFINS deve ter no máximo 2 dígitos.`;
+    if (nfeItemFormRequiresCest(item)) {
+      const cest = normalizeCestInput(item.cest)
+      const inferred = inferCestFromProductDescription(item.ncm, item.descricao)
+      if (cest.length !== 7 && !inferred) {
+        return `Item ${linha}: informe o CEST (7 dígitos) — produto com substituição tributária.`
+      }
+    }
   }
   return null;
 }

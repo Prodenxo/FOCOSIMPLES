@@ -25,7 +25,7 @@ const taxItemsPayload = (items: NfeItemForm[]) =>
   }))
 
 const normalizeApiTaxResult = (raw: NfeItemTaxResult): NfeItemTaxResult => {
-  const isSt = raw.csosn === '500'
+  const isSt = raw.has_st === true && raw.csosn === '500'
   return {
     cfop: raw.cfop,
     csosn: isSt ? '500' : (raw.csosn ?? '102'),
