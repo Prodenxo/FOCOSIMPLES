@@ -14,12 +14,14 @@
     "test:openclaw:salario": "node scripts/test-openclaw-transaction.mjs",
     "test:openclaw:nfse": "node scripts/test-openclaw-nfse.mjs",
     "test:openclaw:nfse:local": "node scripts/test-openclaw-nfse.mjs --local",
-    "seed:tax-rules-rj": "node scripts/one-time/seed-tax-rules-state-rj-retail.mjs"
+    "seed:tax-rules-rj": "node scripts/one-time/seed-tax-rules-state-rj-retail.mjs",
+    "test:fiscal-engine": "node --test tests/fiscal-engine/*.test.js tests/nfe-like-payload-sanitize.test.js tests/st-rules-engine.test.js tests/nfe-item-tax.test.js tests/nfe-like-payload-tax-apply.test.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.7",
     "@xmldom/xmldom": "^0.8.11",
     "cors": "^2.8.5",
+    "decimal.js": "^10.4.3",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "morgan": "^1.10.0",

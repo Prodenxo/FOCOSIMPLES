@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "fiscal-engine/nfe-technical-profile.v1.schema.json",
+  "title": "NFeTechnicalProfile",
+  "type": "object",
+  "required": ["modelo", "layoutVersion", "effectiveDate", "technicalNotes", "validationRuleSetVersion"],
+  "properties": {
+    "modelo": { "type": "integer", "enum": [55, 65] },
+    "layoutVersion": { "type": "string", "minLength": 1 },
+    "environment": { "type": "string", "enum": ["production", "homologation"] },
+    "effectiveDate": { "type": "string", "format": "date" },
+    "technicalNotes": { "type": "array", "items": { "type": "string" } },
+    "validationRuleSetVersion": { "type": "string", "minLength": 1 }
+  },
+  "additionalProperties": false
+}

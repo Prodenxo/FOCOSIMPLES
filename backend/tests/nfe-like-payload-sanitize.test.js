@@ -20,7 +20,7 @@ describe('nfe-like-payload-sanitize', () => {
     );
   });
 
-  it('sanitize força 102 e remove cest quando não ST', () => {
+  it('sanitize força 102 e remove cest quando não ST (legado)', () => {
     const item = sanitizeNfeLikePayloadItemForEmit({
       ncm: '61091000',
       cest: '0300100',
@@ -29,6 +29,19 @@ describe('nfe-like-payload-sanitize', () => {
     assert.equal(item.cest, undefined);
     assert.equal(item.tributos.icms.csosn, '102');
     assert.equal(item.tributos.icms.cst, '102');
+  });
+
+  it('com FISCAL_ENGINE_V3=true preserva CEST quando não ST', async () => {
+    const { __withFiscalEngineV3FlagForTests } = await import('../src/fiscal-engine/feature-flag.js');
+    await __withFiscalEngineV3FlagForTests(true, async () => {
+      const item = sanitizeNfeLikePayloadItemForEmit({
+        ncm: '61091000',
+        cest: '0300100',
+        tributos: { icms: { cst: '500' } },
+      });
+      assert.equal(item.cest, '0300100');
+      assert.equal(item.tributos.icms.csosn, '102');
+    });
   });
 
   it('sanitizeNfeLikePayloadForEmit aplica em todos os itens', () => {

@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "fiscal-engine/fiscal-issue.v1.schema.json",
+  "title": "FiscalIssue",
+  "type": "object",
+  "required": ["code", "severity", "blocksEmission", "overrideAllowed", "message"],
+  "properties": {
+    "code": {
+      "type": "string",
+      "enum": [
+        "RULE_CONFLICT",
+        "CEST_CONFLICT",
+        "RULE_NOT_PRODUCTION_READY",
+        "ORIGIN_UNKNOWN",
+        "PRIOR_ST_UNKNOWN",
+        "CURRENT_ST_UNKNOWN",
+        "ITEM_SOURCE_UNKNOWN",
+        "ICMS_TAXPAYER_STATUS_UNKNOWN",
+        "REQUIRED_FIELD_MISSING",
+        "CRT_INCOMPATIBLE",
+        "UNSUPPORTED_SCENARIO",
+        "ST_ALLOCATION_STRATEGY_MISSING",
+        "SCHEMA_INVALID",
+        "XML_INVALID",
+        "FISCAL_COMBINATION_FORBIDDEN"
+      ]
+    },
+    "severity": { "type": "string", "enum": ["INFO", "WARNING", "REVIEW", "ERROR"] },
+    "blocksEmission": { "type": "boolean" },
+    "overrideAllowed": { "type": "boolean" },
+    "message": { "type": "string", "minLength": 1 },
+    "ruleRefs": { "type": "array", "items": { "type": "object" } },
+    "meta": { "type": "object" }
+  },
+  "additionalProperties": false
+}

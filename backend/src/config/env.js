@@ -386,4 +386,10 @@ export const env = {
    */
   IBPT_API_TOKEN: normalizeEnvSecret(process.env.IBPT_API_TOKEN || ""),
   IBPT_TIMEOUT_MS: Number(process.env.IBPT_TIMEOUT_MS || "3000"),
+  /**
+   * Fiscal Engine v3.1 — OFF por padrão.
+   * Quando false: emissão usa motor legado (st-rules-engine) sem regressão.
+   * Quando true: infraestrutura v3 ativa (CEST preservado na sanitização, etc.).
+   */
+  FISCAL_ENGINE_V3: process.env.FISCAL_ENGINE_V3 || "false",
 };

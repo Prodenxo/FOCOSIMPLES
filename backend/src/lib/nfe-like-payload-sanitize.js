@@ -1,10 +1,14 @@
 /**
  * Sanitiza itens NF-e/NFC-e antes da validação/emissão.
  * ST só quando `tributos.icms.csosn === '500'` (definido pelo motor tributário).
- * Qualquer outro caso → CSOSN 102, sem CEST.
+ * Qualquer outro caso → CSOSN 102.
+ *
+ * CEST: removido apenas no fluxo legado (FISCAL_ENGINE_V3=false).
+ * Com FISCAL_ENGINE_V3=true, CEST permanece — independente de ST da operação (v3.1).
  */
 
 import { CSOSN_ST, CSOSN_TRIBUTADO_SN } from './nfe-item-tax-engine.js';
+import { isFiscalEngineV3Enabled } from '../fiscal-engine/feature-flag.js';
 
 const onlyDigits = (value, max) => String(value ?? '').replace(/\D/g, '').slice(0, max);
 
@@ -44,9 +48,8 @@ export const sanitizeNfeLikePayloadItemForEmit = (item) => {
     };
   }
 
-  const { cest: _omit, ...rest } = item;
-  return {
-    ...rest,
+  const base = {
+    ...item,
     tributos: {
       ...tributos,
       icms: {
@@ -56,6 +59,13 @@ export const sanitizeNfeLikePayloadItemForEmit = (item) => {
       },
     },
   };
+
+  if (isFiscalEngineV3Enabled()) {
+    return base;
+  }
+
+  const { cest: _omit, ...rest } = base;
+  return rest;
 };
 
 /**
