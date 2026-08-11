@@ -18,6 +18,7 @@ import internalAccessRequestsRoutes from './internal-access-requests.routes.js';
 import moedasGlobaisRoutes from './moedas-globais.routes.js';
 import billingRoutes from './billing.routes.js';
 import contasFinanceirasRoutes from './contas-financeiras.routes.js';
+import fiscalPurchaseRoutes from './fiscal-purchase.routes.js';
 const router = Router();
 
 router.use('/auth', authRoutes);
@@ -44,4 +45,5 @@ router.use('/bot', openclawRoutes);
 router.use('/webhooks/zapi', zapiRoutes);
 router.use('/internal/access-requests', internalAccessRequestsRoutes);
 router.use('/moedas-globais', moedasGlobaisRoutes);
+router.use('/fiscal/purchases', fiscalPurchaseRoutes);
 export default router;

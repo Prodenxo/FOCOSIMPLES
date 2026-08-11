@@ -21,6 +21,11 @@
  *   | 'SCHEMA_INVALID'
  *   | 'XML_INVALID'
  *   | 'FISCAL_COMBINATION_FORBIDDEN'
+ *   | 'PURCHASE_RECIPIENT_MISMATCH'
+ *   | 'SUPPLIER_CEST_EVIDENCE'
+ *   | 'XML_SIGNATURE_INVALID'
+ *   | 'XML_SIGNATURE_UNVERIFIED'
+  | 'PROTOCOL_DIGEST_MISMATCH'
  * )} FiscalIssueCode
  */
 
@@ -108,6 +113,31 @@ export const FISCAL_ISSUE_PRESETS = Object.freeze({
     overrideAllowed: false,
   },
   FISCAL_COMBINATION_FORBIDDEN: {
+    severity: 'ERROR',
+    blocksEmission: true,
+    overrideAllowed: false,
+  },
+  PURCHASE_RECIPIENT_MISMATCH: {
+    severity: 'ERROR',
+    blocksEmission: true,
+    overrideAllowed: false,
+  },
+  SUPPLIER_CEST_EVIDENCE: {
+    severity: 'INFO',
+    blocksEmission: false,
+    overrideAllowed: false,
+  },
+  XML_SIGNATURE_INVALID: {
+    severity: 'ERROR',
+    blocksEmission: true,
+    overrideAllowed: false,
+  },
+  XML_SIGNATURE_UNVERIFIED: {
+    severity: 'WARNING',
+    blocksEmission: false,
+    overrideAllowed: false,
+  },
+  PROTOCOL_DIGEST_MISMATCH: {
     severity: 'ERROR',
     blocksEmission: true,
     overrideAllowed: false,

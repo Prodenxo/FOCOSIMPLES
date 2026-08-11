@@ -392,4 +392,5 @@ export const env = {
    * Quando true: infraestrutura v3 ativa (CEST preservado na sanitização, etc.).
    */
   FISCAL_ENGINE_V3: process.env.FISCAL_ENGINE_V3 || "false",
+  FISCAL_PURCHASE_SCHEMA_AUTO_ENSURE: process.env.FISCAL_PURCHASE_SCHEMA_AUTO_ENSURE || "",
 };

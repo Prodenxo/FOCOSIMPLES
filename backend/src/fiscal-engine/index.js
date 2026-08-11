@@ -101,6 +101,18 @@ export {
   EMISSION_OVERRIDE_PERMISSION,
 } from './audit/emission-override-policy.js';
 
+export { importPurchaseNfeXml, __resetPurchaseRepoForTests } from './acquisition/purchase-import.service.js';
+export { parsePurchaseNfeXml } from './acquisition/purchase-xml-parser.js';
+export {
+  classifyPriorStFromIcmsGroups,
+  buildPriorStEvidence,
+  explainPriorStRetained,
+} from './acquisition/acquisition-classifier.js';
+export { allocateStRetainedValues } from './acquisition/st-retained-allocator.js';
+export { buildUnitConversionEvidence } from './acquisition/unit-conversion.js';
+export { detectXxePatterns, assertSecurePurchaseXmlInput } from './acquisition/purchase-xml-security.js';
+export { buildPurchaseItemTaxParse } from './acquisition/purchase-item-tax-parse.js';
+
 /**
  * Stub — resolução fiscal completa nas Fases 2+.
  * @returns {{ status: 'UNSUPPORTED_SCENARIO', issues: import('./types/fiscal-issue.js').FiscalIssue[] }}

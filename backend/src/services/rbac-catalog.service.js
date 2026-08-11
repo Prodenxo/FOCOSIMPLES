@@ -27,6 +27,7 @@ const PERMISSIONS_BY_ROLE = {
   ],
   admin: [
     { key: 'app.manage_own_company', scope: 'app', description: 'Gere utilizadores e dados só da sua empresa.' },
+    { key: 'fiscal.purchase_import', scope: 'app', description: 'Importação manual XML NF-e de compra.' },
     { key: 'app.impersonate_company_users', scope: 'app', description: 'Impersonate de utilizadores da mesma empresa (não superadmin).' },
     { key: 'app.empresa_invites', scope: 'app', description: 'Convites e vínculos da empresa.' },
     { key: 'bot.own_transactions', scope: 'bot', description: 'Lançamentos na própria conta.' },
@@ -38,6 +39,7 @@ const PERMISSIONS_BY_ROLE = {
   usuario: [
     { key: 'app.own_profile', scope: 'app', description: 'Perfil e finanças pessoais.' },
     { key: 'app.mei_own', scope: 'app', description: 'MEI próprio onde aplicável.' },
+    { key: 'fiscal.purchase_import', scope: 'app', description: 'Importação manual XML NF-e de compra.' },
     { key: 'bot.own_transactions', scope: 'bot', description: 'Listar/criar/apagar próprios lançamentos.' },
     { key: 'bot.own_categories', scope: 'bot', description: 'Listar categorias próprias.' },
     { key: 'bot.own_das', scope: 'bot', description: 'DAS próprio.' },
