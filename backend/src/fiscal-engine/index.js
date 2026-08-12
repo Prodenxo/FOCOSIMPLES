@@ -88,6 +88,14 @@ export {
 export { buildFiscalBatchResult } from './batch/compute-batch-blocked.js';
 
 export { buildFiscalContextV31 } from './context/build-fiscal-context.js';
+export {
+  buildFiscalContextFromAllocation,
+  buildFiscalContextsFromAllocations,
+  prepareTaxTreatmentInput,
+  resolveOrigemProvenanceFromAllocation,
+  resolveCanonicalDestinationUf,
+  resolveOperationLocation,
+} from './context/build-allocation-fiscal-context.js';
 export { resolveOrigemFiscal } from './resolvers/origem-resolver.js';
 
 export {
