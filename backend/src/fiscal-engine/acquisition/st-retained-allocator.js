@@ -25,6 +25,8 @@ import { createFiscalIssue } from '../types/fiscal-issue.js';
  * @param {string} params.remainingQty
  * @param {StAllocationMethod} [params.method]
  * @param {string} [params.effectiveDate]
+ * @param {string} [params.priorActiveAllocatedQty]
+ * @param {Record<string, string>} [params.priorActiveAllocatedValues]
  */
 export const allocateStRetainedValues = ({
   purchaseValues,
@@ -33,6 +35,8 @@ export const allocateStRetainedValues = ({
   remainingQty,
   method = ST_ALLOCATION_METHOD.PROPORTIONAL_QTY,
   effectiveDate,
+  priorActiveAllocatedQty = '0',
+  priorActiveAllocatedValues = {},
 }) => {
   if (method === ST_ALLOCATION_METHOD.DIRECT_IDENTIFIED) {
     return {
@@ -84,6 +88,17 @@ export const allocateStRetainedValues = ({
   const ratio = `${allocatedQty}/${purchaseTotalQty}`;
   const numericFields = ['vBCSTRet', 'vICMSSTRet', 'vBCFCPSTRet', 'vFCPSTRet', 'vICMSSubstituto'];
   const rateFields = ['pST', 'pFCPSTRet'];
+  const policyFieldByStField = {
+    vBCSTRet: 'vBCSTRet',
+    vICMSSTRet: 'vICMSSTRet',
+    vBCFCPSTRet: 'vBCST',
+    vFCPSTRet: 'vBC',
+    vICMSSubstituto: 'vICMS',
+  };
+
+  const priorQty = toDecimal(priorActiveAllocatedQty);
+  const currentQty = toDecimal(allocatedQty);
+  const closesLotFiscally = priorQty.plus(currentQty).eq(total);
 
   /** @type {Record<string, string>} */
   const allocatedValues = {};
@@ -92,9 +107,34 @@ export const allocateStRetainedValues = ({
   for (const field of numericFields) {
     const raw = purchaseValues?.[field];
     if (raw == null || raw === '') continue;
-    const allocated = proportionalAllocate(raw, allocatedQty, purchaseTotalQty, 2);
-    allocatedValues[field] = formatFieldByPolicy(allocated, 'vBC', effectiveDate);
-    roundingRecords.push({ field, original: raw, allocated: allocatedValues[field], ratio });
+    const original = toDecimal(raw);
+    const priorSum = toDecimal(priorActiveAllocatedValues[field] ?? '0');
+    const remainingBudget = original.minus(priorSum);
+    const policyField = policyFieldByStField[field] ?? 'vBC';
+
+    let allocated;
+    let closureMode;
+    if (closesLotFiscally) {
+      allocated = remainingBudget;
+      closureMode = 'remainder';
+    } else {
+      allocated = proportionalAllocate(raw, allocatedQty, purchaseTotalQty, 2);
+      if (allocated.gt(remainingBudget)) {
+        allocated = remainingBudget;
+      }
+      closureMode = 'proportional';
+    }
+
+    allocatedValues[field] = formatFieldByPolicy(allocated, policyField, effectiveDate);
+    roundingRecords.push({
+      field,
+      original: raw,
+      allocated: allocatedValues[field],
+      ratio,
+      closureMode,
+      priorSum: priorSum.toFixed(2),
+      remainingBudget: remainingBudget.toFixed(2),
+    });
   }
 
   for (const field of rateFields) {
@@ -111,6 +151,8 @@ export const allocateStRetainedValues = ({
       ratio,
       purchaseValues,
       roundingRecords,
+      priorActiveAllocatedQty: String(priorActiveAllocatedQty),
+      closesLotFiscally,
     },
     issues: [],
   };

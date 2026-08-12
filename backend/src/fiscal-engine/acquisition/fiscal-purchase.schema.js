@@ -18,6 +18,7 @@ const readMigration = (filename) => {
 
 export const FISCAL_PURCHASE_PHASE2_SQL = readMigration('20260811200000_fiscal_purchase_stock_phase2.sql');
 export const FISCAL_PURCHASE_HARDENING_SQL = readMigration('20260811210000_fiscal_purchase_hardening.sql');
+export const FISCAL_STOCK_ALLOCATION_PHASE3_SQL = readMigration('20260812100000_fiscal_stock_allocation_phase3.sql');
 
 /** @type {Promise<{ ok: boolean }> | null} */
 let schemaEnsureInFlight = null;
@@ -68,6 +69,7 @@ export const ensureFiscalPurchaseSchema = async (options = {}) => {
       await client.connect();
       await client.query(FISCAL_PURCHASE_PHASE2_SQL);
       await client.query(FISCAL_PURCHASE_HARDENING_SQL);
+      await client.query(FISCAL_STOCK_ALLOCATION_PHASE3_SQL);
       schemaEnsured = true;
       return { ok: true };
     } finally {

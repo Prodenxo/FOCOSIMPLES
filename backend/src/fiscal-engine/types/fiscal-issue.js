@@ -26,6 +26,13 @@
  *   | 'XML_SIGNATURE_INVALID'
  *   | 'XML_SIGNATURE_UNVERIFIED'
   | 'PROTOCOL_DIGEST_MISMATCH'
+  | 'INSUFFICIENT_USABLE_FISCAL_STOCK'
+  | 'STOCK_LOT_NOT_USABLE'
+  | 'STOCK_ALLOCATION_CONFLICT'
+  | 'ALLOCATION_IDEMPOTENCY_CONFLICT'
+  | 'ALLOCATION_QUANTITY_PRECISION_INVALID'
+  | 'CROSS_TENANT_ACCESS'
+  | 'STOCK_UNIT_UNCONFIRMED'
  * )} FiscalIssueCode
  */
 
@@ -138,6 +145,41 @@ export const FISCAL_ISSUE_PRESETS = Object.freeze({
     overrideAllowed: false,
   },
   PROTOCOL_DIGEST_MISMATCH: {
+    severity: 'ERROR',
+    blocksEmission: true,
+    overrideAllowed: false,
+  },
+  INSUFFICIENT_USABLE_FISCAL_STOCK: {
+    severity: 'ERROR',
+    blocksEmission: true,
+    overrideAllowed: false,
+  },
+  STOCK_LOT_NOT_USABLE: {
+    severity: 'ERROR',
+    blocksEmission: true,
+    overrideAllowed: false,
+  },
+  STOCK_ALLOCATION_CONFLICT: {
+    severity: 'ERROR',
+    blocksEmission: true,
+    overrideAllowed: false,
+  },
+  ALLOCATION_IDEMPOTENCY_CONFLICT: {
+    severity: 'ERROR',
+    blocksEmission: true,
+    overrideAllowed: false,
+  },
+  ALLOCATION_QUANTITY_PRECISION_INVALID: {
+    severity: 'ERROR',
+    blocksEmission: true,
+    overrideAllowed: false,
+  },
+  CROSS_TENANT_ACCESS: {
+    severity: 'ERROR',
+    blocksEmission: true,
+    overrideAllowed: false,
+  },
+  STOCK_UNIT_UNCONFIRMED: {
     severity: 'ERROR',
     blocksEmission: true,
     overrideAllowed: false,

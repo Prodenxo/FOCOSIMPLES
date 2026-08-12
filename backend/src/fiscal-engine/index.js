@@ -112,6 +112,16 @@ export { allocateStRetainedValues } from './acquisition/st-retained-allocator.js
 export { buildUnitConversionEvidence } from './acquisition/unit-conversion.js';
 export { detectXxePatterns, assertSecurePurchaseXmlInput } from './acquisition/purchase-xml-security.js';
 export { buildPurchaseItemTaxParse } from './acquisition/purchase-item-tax-parse.js';
+export {
+  allocateFiscalStockForSaleItem,
+  releaseFiscalStockAllocation,
+  consumeFiscalStockAllocation,
+  __setStockAllocationRepoForTests,
+  __resetStockAllocationRepoForTests,
+} from './allocation/stock-allocation.service.js';
+export { planFifoAllocation, evaluateLotEligibility, sortLotsFifo } from './allocation/stock-allocation-eligibility.js';
+export { buildPreResolutionAllocationContext } from './allocation/stock-allocation-builder.js';
+export { ALLOCATION_STATUS } from './allocation/allocation-constants.js';
 
 /**
  * Stub — resolução fiscal completa nas Fases 2+.

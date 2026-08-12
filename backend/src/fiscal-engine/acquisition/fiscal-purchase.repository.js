@@ -331,6 +331,12 @@ export const __deletePurchaseImportForTests = async (empresaId, chaveNfe) => {
     [invoiceId],
   );
   await pool.query(
+    `DELETE FROM fiscal_stock_allocation_requests WHERE empresa_id = $1 AND id IN (
+       SELECT DISTINCT allocation_request_uuid FROM fiscal_stock_allocations WHERE empresa_id = $1
+     )`,
+    [empresaId],
+  );
+  await pool.query(
     `DELETE FROM fiscal_stock_lots WHERE purchase_item_id IN (
        SELECT id FROM fiscal_purchase_items WHERE purchase_invoice_id = $1
      )`,

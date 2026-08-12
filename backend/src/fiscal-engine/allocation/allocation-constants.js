@@ -1,0 +1,26 @@
+/**
+ * Status do lifecycle de alocação/reserva fiscal (Fase 3).
+ */
+export const ALLOCATION_STATUS = Object.freeze({
+  RESERVED: 'RESERVED',
+  CONSUMED: 'CONSUMED',
+  RELEASED: 'RELEASED',
+});
+
+export const ALLOCATION_REQUEST_STATUS = Object.freeze({
+  COMPLETED: 'COMPLETED',
+  FAILED: 'FAILED',
+});
+
+/** Motivos de rejeição de lote na seleção FIFO. */
+export const LOT_REJECTION_REASON = Object.freeze({
+  WRONG_TENANT: 'WRONG_TENANT',
+  WRONG_PRODUCT: 'WRONG_PRODUCT',
+  NOT_USABLE: 'NOT_USABLE',
+  BLOCKED: 'BLOCKED',
+  NEEDS_REVIEW: 'NEEDS_REVIEW',
+  UNVERIFIED_POLICY: 'UNVERIFIED_POLICY',
+  UNIT_UNCONFIRMED: 'UNIT_UNCONFIRMED',
+  NO_BALANCE: 'NO_BALANCE',
+  MISSING_CATALOG: 'MISSING_CATALOG',
+});

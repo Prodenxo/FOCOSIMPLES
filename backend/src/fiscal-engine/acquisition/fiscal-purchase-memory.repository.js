@@ -75,6 +75,7 @@ export const savePurchaseImport = async ({ invoice, items, lots }) => {
       ...lot,
       id: lotId,
       purchase_item_id: purchaseItemId,
+      _purchase_invoice_id: invoiceId,
       version: lot.version ?? 0,
     };
     lotsById.set(lotId, saved);
@@ -144,3 +145,6 @@ export const listStockLotsByEmpresa = async (empresaId) => (
 );
 
 export const getEmpresaFiscalDoc = async () => null;
+
+/** @internal testes — expõe mapa de lotes para alocação Fase 3 */
+export const __getLotsByIdMapForTests = () => lotsById;
