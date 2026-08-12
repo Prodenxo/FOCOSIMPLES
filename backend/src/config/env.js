@@ -392,5 +392,7 @@ export const env = {
    * Quando true: infraestrutura v3 ativa (CEST preservado na sanitização, etc.).
    */
   FISCAL_ENGINE_V3: process.env.FISCAL_ENGINE_V3 || "false",
+  /** Shadow mode v3 — compara legado × v3 sem alterar emissão (Fase 7A). */
+  FISCAL_ENGINE_V3_SHADOW: process.env.FISCAL_ENGINE_V3_SHADOW || "false",
   FISCAL_PURCHASE_SCHEMA_AUTO_ENSURE: process.env.FISCAL_PURCHASE_SCHEMA_AUTO_ENSURE || "",
 };

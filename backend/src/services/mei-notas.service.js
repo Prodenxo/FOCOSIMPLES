@@ -57,6 +57,9 @@ import {
   validateNfeCatalogProdutoMetadata,
 } from '../lib/nfe-cest.js';
 import { recalculateNfeLikePayloadTaxForEmit } from '../lib/nfe-like-payload-tax-apply.js';
+import { triggerNfeEmissionShadowComparisonAfterSuccess } from '../fiscal-engine/shadow/nfe-emission-shadow-hook.js';
+import { isEmissionEligibleForShadowObservation } from '../fiscal-engine/shadow/shadow-emission-confirmation-policy.js';
+import { reconcileShadowLedgerOnMeiNotaStatusChange } from '../fiscal-engine/shadow/shadow-ledger-reconciliation.js';
 import { getBusinessTypeMirror } from './empresa-business-type.service.js';
 import {
   applyMeiNfeEmitForcePolicy,
@@ -2046,8 +2049,9 @@ export const emitirNota = async (userId, input) => {
     }
 
     phase = 'validate';
+    let businessType = null;
     if (documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE) {
-      const businessType = await getBusinessTypeMirror(userId);
+      businessType = await getBusinessTypeMirror(userId);
       emitPayload = await recalculateNfeLikePayloadTaxForEmit(emitPayload, { businessType });
     }
     validatePayloadByDocumentType(emitPayload, documentType);
@@ -2257,6 +2261,36 @@ export const emitirNota = async (userId, input) => {
       route: MEI_EMIT_ROUTE_EMITIR_NOTA,
       ...(plugnotas_status ? { plugnotas_status } : {})
     });
+
+    const normalizedEmitStatus = normalizeStatus(status);
+
+    if (
+      (documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE)
+      && normalizedEmitStatus === 'processando'
+    ) {
+      scheduleNfseProcessandoSyncFollowUp(userId, created.id);
+    }
+
+    if (
+      documentType === DOCUMENT_TYPE_NFE
+      && isEmissionEligibleForShadowObservation(normalizedEmitStatus)
+    ) {
+      triggerNfeEmissionShadowComparisonAfterSuccess({
+        userId,
+        empresaId: metadata?.empresaId ?? userId,
+        legacyPayload: emitPayload,
+        businessType,
+        documentType,
+        metadata: {
+          ...metadata,
+          meiNotaRecordId: created.id,
+        },
+        idIntegracao,
+        emissionStatus: normalizedEmitStatus,
+        shadowEmissionIdentity: String(created.id),
+        meiNotaRecordId: created.id,
+      });
+    }
 
     return created;
   } catch (error) {
@@ -3327,6 +3361,7 @@ export const obterNota = async (userId, id, { sync = false, skipWhatsappDelivery
   const plugnotasId = extractPlugNotasId(response) || record.plugnotas_id;
   const idIntegracao = extractIntegracaoId(response) || record.id_integracao;
   const providerStatus = extractPlugNotasStatus(response);
+  const previousStatus = normalizeStatus(record?.status);
   const status = resolveStatusAfterPlugnotasSync(record, providerStatus);
   const protocol = extractProtocol(response) || record.protocol;
 
@@ -3361,6 +3396,27 @@ export const obterNota = async (userId, id, { sync = false, skipWhatsappDelivery
         updated.payload_json,
         response,
       );
+    }
+  }
+
+  if (
+    (archivedOrUpdated.document_type === DOCUMENT_TYPE_NFE
+      || archivedOrUpdated.document_type === DOCUMENT_TYPE_NFCE)
+    && previousStatus !== normalizeStatus(status)
+  ) {
+    const { isFiscalEngineV3ShadowEnabled } = await import('../fiscal-engine/feature-flag.js');
+    if (isFiscalEngineV3ShadowEnabled()) {
+      void reconcileShadowLedgerOnMeiNotaStatusChange({
+        empresaId: userId,
+        meiNotaRecordId: updated.id,
+        previousStatus,
+        newStatus: status,
+      }).catch((err) => {
+        console.warn('[fiscal-shadow] reconcile ledger pós-sync falhou', {
+          notaId: updated.id,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      });
     }
   }
 
