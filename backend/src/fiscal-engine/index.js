@@ -131,6 +131,51 @@ export { planFifoAllocation, evaluateLotEligibility, sortLotsFifo } from './allo
 export { buildPreResolutionAllocationContext } from './allocation/stock-allocation-builder.js';
 export { ALLOCATION_STATUS } from './allocation/allocation-constants.js';
 
+export { FISCAL_RULE_TYPE } from './types/fiscal-rule.js';
+export { buildTaxTreatment } from './types/tax-treatment.js';
+export { buildFiscalResult } from './types/fiscal-result.js';
+
+export {
+  computeRuleSpecificity,
+  isRuleEffectiveOn,
+  ruleMatchesFacts,
+  resolveFiscalRule,
+  filterRulesByEffectiveDate,
+} from './rules/fiscal-rule-engine.js';
+export {
+  registerFiscalRules,
+  listFiscalRulesForEmpresa,
+  resetFiscalRulesRepository,
+  bootstrapDefaultTestRules,
+  __getFiscalRulesStoreForTests,
+} from './rules/fiscal-rule-memory.repository.js';
+export {
+  createDefaultTestRules,
+  createNcmFixtureRule,
+  createValidatedProductionReadyCurrentStRule,
+} from './rules/fixtures/default-test-rules.js';
+export {
+  normalizeResolverOptions,
+  DEFAULT_RESOLVER_OPTIONS,
+} from './rules/fiscal-rule-execution-policy.js';
+export {
+  validateRuleDependencies,
+  CURRENT_ST_FORBIDDEN_CONDITION_KEYS,
+} from './rules/fiscal-rule-validation.js';
+
+export { extractFactsFromContext } from './resolution/fiscal-context-facts.js';
+export {
+  resolveFiscalFromContext,
+  resolveFiscalFromContexts,
+  __bootstrapFiscalRulesForTests,
+} from './resolution/resolve-fiscal-from-context.js';
+
+export { resolveCurrentStLiability } from './resolvers/current-st-liability-resolver.js';
+export { resolveCsosn } from './resolvers/csosn-resolver.js';
+export { resolveCfop } from './resolvers/cfop-resolver.js';
+export { resolveXmlFields } from './resolvers/xml-fields-resolver.js';
+export { crossValidateFiscalResolution } from './validation/cross-validator.js';
+
 /**
  * Stub — resolução fiscal completa nas Fases 2+.
  * @returns {{ status: 'UNSUPPORTED_SCENARIO', issues: import('./types/fiscal-issue.js').FiscalIssue[] }}
