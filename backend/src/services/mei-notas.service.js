@@ -60,6 +60,13 @@ import { recalculateNfeLikePayloadTaxForEmit } from '../lib/nfe-like-payload-tax
 import { triggerNfeEmissionShadowComparisonAfterSuccess } from '../fiscal-engine/shadow/nfe-emission-shadow-hook.js';
 import { isEmissionEligibleForShadowObservation } from '../fiscal-engine/shadow/shadow-emission-confirmation-policy.js';
 import { reconcileShadowLedgerOnMeiNotaStatusChange } from '../fiscal-engine/shadow/shadow-ledger-reconciliation.js';
+import {
+  resolveNfeEmitPayloadForPlugnotas,
+  handleAuthoritativeEmitOutcome,
+  bindAuthoritativeAttemptIdIntegracao,
+  reconcileAuthoritativeAttemptOnMeiNotaStatusChange,
+} from '../fiscal-engine/authoritative/nfe-emit-authority-integration.js';
+import { AUTHORITY_ENGINE } from '../fiscal-engine/rollout/rollout-constants.js';
 import { getBusinessTypeMirror } from './empresa-business-type.service.js';
 import {
   applyMeiNfeEmitForcePolicy,
@@ -1555,6 +1562,7 @@ const emitNfeWithAutoNumeracaoRecovery = async (
   basePayload,
   documentType,
   prep = {},
+  authorityContext = null,
 ) => {
   const emitStartedAt = Date.now();
   let localMax = parsePositiveIntLocal(prep.initialLocalMax, 0)
@@ -1566,6 +1574,10 @@ const emitNfeWithAutoNumeracaoRecovery = async (
   for (let attempt = 0; attempt < NFE_EMIT_DUPLICIDADE_RETRY_MAX; attempt += 1) {
     emitPayload = { ...basePayload };
     emitPayload.idIntegracao = buildMeiIdIntegracao(userId);
+
+    if (authorityContext?.attemptId) {
+      await bindAuthoritativeAttemptIdIntegracao(authorityContext.attemptId, emitPayload.idIntegracao);
+    }
 
     const sync = await syncEmpresaNfeNumeracaoBeforeEmit(cnpjEmitente, {
       localMax,
@@ -1581,6 +1593,28 @@ const emitNfeWithAutoNumeracaoRecovery = async (
     response = await adapter.emitir(emitPayload);
     let status = extractPlugNotasStatus(response);
     let normalized = normalizeStatus(status);
+
+    if (
+      authorityContext?.authorityAssumed
+      && normalized === 'rejeitado'
+      && isNfeDuplicidadeRejection(response)
+    ) {
+      consecutiveDuplicidade += 1;
+      const rejectedNumero = extractNfeNumeroFromDuplicidadeMessage(response);
+      await healEmpresaNfeNumeracaoIfDuplicidade(cnpjEmitente, response, {
+        documentType,
+        localMax,
+      });
+      if (rejectedNumero) {
+        const jump = consecutiveDuplicidade >= 3 ? Math.min(25, consecutiveDuplicidade * 5) : 1;
+        localMax = Math.max(localMax, rejectedNumero + jump - 1);
+      }
+      console.warn('[plugnotas-nfe-num] duplicidade V3 authoritative — novo idIntegracao, mesma reserva', {
+        attempt: attempt + 1,
+        authorityAttemptId: authorityContext.attemptId,
+      });
+      continue;
+    }
 
     // Igual NFS-e: PROCESSANDO no POST → consulta até terminal antes de decidir retry.
     if (normalized === 'processando') {
@@ -2050,36 +2084,62 @@ export const emitirNota = async (userId, input) => {
 
     phase = 'validate';
     let businessType = null;
+    /** @type {import('../fiscal-engine/authoritative/nfe-emit-authority-integration.js').object | null} */
+    let authorityEmitContext = null;
+
     if (documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE) {
       businessType = await getBusinessTypeMirror(userId);
-      emitPayload = await recalculateNfeLikePayloadTaxForEmit(emitPayload, { businessType });
-    }
-    validatePayloadByDocumentType(emitPayload, documentType);
 
-    if (documentType === DOCUMENT_TYPE_NFSE) {
-      assertNfsePrestadorEmailOrThrow(emitPayload);
-    }
-    if (documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE) {
       const cnpjEmitente = prestadorDoc
         || String(payload?.emitente?.cpfCnpj || payload?.prestador?.cpfCnpj || '').replace(/\D/g, '');
       let empresaPlugnotas = null;
       if (cnpjEmitente.length === 14) {
         empresaPlugnotas = await ensureMeiNfePlugnotasCadastroBeforeEmit(cnpjEmitente);
       }
-      const ibptResult = await applyIbptTransparenciaToNfePayload(payload, {
-        cnpj: cnpjEmitente,
-        empresaPlugnotas,
-      });
-      logIbptTransparenciaEmit(ibptResult.ibpt, {
-        cnpjEmitente,
+
+      const applyTechnicalTransforms = async (nfePayload) => {
+        const ibptResult = await applyIbptTransparenciaToNfePayload(nfePayload, {
+          cnpj: cnpjEmitente,
+          empresaPlugnotas,
+        });
+        logIbptTransparenciaEmit(ibptResult.ibpt, {
+          cnpjEmitente,
+          documentType,
+        });
+        let result = ibptResult.payload;
+        result = normalizePlugnotasNfePayload(result);
+        if (cnpjEmitente.length === 14 && empresaPlugnotas) {
+          result = hydrateMeiNfeEmitenteIeFromEmpresa(result, empresaPlugnotas);
+        }
+        return applyMeiNfeEmitForcePolicy(result);
+      };
+
+      const resolved = await resolveNfeEmitPayloadForPlugnotas({
+        userId,
+        empresaId: metadata?.empresaId ?? userId,
         documentType,
+        commercialPayload: emitPayload,
+        businessType,
+        metadata,
+        idIntegracao: emitPayload?.idIntegracao ?? payload?.idIntegracao,
+        applyLegacyFiscalTransform: async (commercial) => (
+          recalculateNfeLikePayloadTaxForEmit(commercial, { businessType })
+        ),
+        applyTechnicalTransforms,
       });
-      emitPayload = ibptResult.payload;
-      emitPayload = normalizePlugnotasNfePayload(emitPayload);
-      if (cnpjEmitente.length === 14 && empresaPlugnotas) {
-        emitPayload = hydrateMeiNfeEmitenteIeFromEmpresa(emitPayload, empresaPlugnotas);
+
+      emitPayload = resolved.payloadToEmit;
+      if (resolved.engine === AUTHORITY_ENGINE.V3 && resolved.authorityAssumed) {
+        authorityEmitContext = resolved;
       }
-      emitPayload = applyMeiNfeEmitForcePolicy(emitPayload);
+    } else if (documentType === DOCUMENT_TYPE_NFSE) {
+      // NFSe permanece fora do pipeline authoritative v3 nesta fase.
+    }
+
+    validatePayloadByDocumentType(emitPayload, documentType);
+
+    if (documentType === DOCUMENT_TYPE_NFSE) {
+      assertNfsePrestadorEmailOrThrow(emitPayload);
     }
 
     phase = 'plugnotas_emit';
@@ -2131,6 +2191,7 @@ export const emitirNota = async (userId, input) => {
           emitPayload,
           documentType,
           { initialLocalMax: initialLocalMax ?? 0 },
+          authorityEmitContext,
         ));
         response = auto.response;
         emitPayload = auto.emitPayload;
@@ -2138,6 +2199,20 @@ export const emitirNota = async (userId, input) => {
         response = await adapter.emitir(emitPayload);
       }
     } catch (emitError) {
+      if (authorityEmitContext?.authorityAssumed) {
+        await handleAuthoritativeEmitOutcome({
+          attemptId: authorityEmitContext.attemptId,
+          empresaId: metadata?.empresaId ?? userId,
+          allocationRequestIds: authorityEmitContext.allocationRequestIds,
+          error: emitError,
+          sentToProvider: false,
+          idIntegracao: emitPayload?.idIntegracao,
+        }).catch((err) => {
+          console.warn('[fiscal-v3] authoritative emit error reconcile fail-open', {
+            message: err instanceof Error ? err.message : String(err),
+          });
+        });
+      }
       if (documentType === DOCUMENT_TYPE_NFSE) {
         rethrowIfPlugnotasEmpresaNaoCadastrada(emitError);
       }
@@ -2264,6 +2339,23 @@ export const emitirNota = async (userId, input) => {
 
     const normalizedEmitStatus = normalizeStatus(status);
 
+    if (authorityEmitContext?.authorityAssumed) {
+      await handleAuthoritativeEmitOutcome({
+        attemptId: authorityEmitContext.attemptId,
+        empresaId: metadata?.empresaId ?? userId,
+        meiNotaRecordId: created.id,
+        allocationRequestIds: authorityEmitContext.allocationRequestIds,
+        providerStatus: normalizedEmitStatus,
+        emissionStatus: normalizedEmitStatus,
+        sentToProvider: true,
+        idIntegracao,
+      }).catch((err) => {
+        console.warn('[fiscal-v3] authoritative emit success reconcile fail-open', {
+          message: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }
+
     if (
       (documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE)
       && normalizedEmitStatus === 'processando'
@@ -2274,6 +2366,7 @@ export const emitirNota = async (userId, input) => {
     if (
       documentType === DOCUMENT_TYPE_NFE
       && isEmissionEligibleForShadowObservation(normalizedEmitStatus)
+      && authorityEmitContext?.engine !== AUTHORITY_ENGINE.V3
     ) {
       triggerNfeEmissionShadowComparisonAfterSuccess({
         userId,
@@ -3418,6 +3511,19 @@ export const obterNota = async (userId, id, { sync = false, skipWhatsappDelivery
         });
       });
     }
+
+    void reconcileAuthoritativeAttemptOnMeiNotaStatusChange({
+      empresaId: userId,
+      userId,
+      meiNotaRecordId: updated.id,
+      previousStatus,
+      newStatus: status,
+    }).catch((err) => {
+      console.warn('[fiscal-v3] authoritative attempt reconcile pós-sync falhou', {
+        notaId: updated.id,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    });
   }
 
   if (

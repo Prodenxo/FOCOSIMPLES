@@ -39,6 +39,10 @@ const recordShadowHookError = (error, phase) => {
  */
 export const triggerNfeEmissionShadowComparisonAfterSuccess = (params) => {
   try {
+    if (params.authorityEngine === 'V3' || params.skipShadowBecauseAuthoritative === true) {
+      return { triggered: false, reason: 'authoritative_emit_skip_shadow' };
+    }
+
     if (!isFiscalEngineV3ShadowEnabled()) {
       return { triggered: false, reason: 'shadow_disabled' };
     }

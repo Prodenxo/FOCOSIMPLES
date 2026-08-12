@@ -7,6 +7,7 @@ export {
   isFiscalEngineV3Enabled,
   isFiscalEngineV3ShadowEnabled,
   assertShadowDoesNotAuthorizeEmission,
+  canFiscalEngineV3AndShadowCoexist,
   __withFiscalEngineV3FlagForTests,
   __withFiscalEngineV3ShadowFlagForTests,
   __withFiscalEngineFlagsForTests,
@@ -279,6 +280,91 @@ export {
   withShadowTenantPgPlanningLock,
 } from './shadow/shadow-stock-ledger.repository.js';
 export { reconcileShadowLedgerOnMeiNotaStatusChange } from './shadow/shadow-ledger-reconciliation.js';
+
+export {
+  ROLLOUT_MODE,
+  AUTHORITY_ENGINE,
+  AUTHORITY_DECISION_REASON,
+  EMISSION_ATTEMPT_STATUS,
+  RESERVATION_LIFECYCLE,
+  REQUEST_OUTCOME,
+  DEFAULT_ROLLOUT_POLICY,
+  AUTHORITATIVE_ELIGIBLE_DOCUMENT_TYPES,
+} from './rollout/rollout-constants.js';
+export {
+  computeDeterministicCanaryBucket,
+  isCanarySelected,
+  resolveEmissionStableId,
+} from './rollout/rollout-canary.js';
+export {
+  getRolloutPolicyForEmpresa,
+  __setRolloutPolicyPostgresEnabledForTests,
+  __resetRolloutPolicyServiceForTests,
+} from './rollout/rollout-policy.service.js';
+export {
+  upsertInMemoryRolloutPolicy,
+  __resetRolloutPolicyMemoryForTests,
+  normalizeRolloutMode,
+} from './rollout/rollout-policy-memory.repository.js';
+export {
+  evaluateFiscalV3RolloutReadiness,
+  assessReadinessGate,
+  __seedShadowComparisonsForReadinessTests,
+  __resetReadinessDataForTests,
+} from './rollout/rollout-readiness.js';
+export {
+  hasProductionReadyFiscalRules,
+  countProductionReadyFiscalRules,
+} from './rollout/rollout-production-rules-gate.js';
+export {
+  evaluateAuthorityDecision,
+  markAuthorityNotEligibleAfterPreflight,
+  assumeV3Authority,
+} from './rollout/authority-decision.js';
+export {
+  runAuthoritativePreflightReadOnly,
+  runAuthoritativePreflightPostReservation,
+  assertLegacyPayloadUnmutated,
+} from './authoritative/authoritative-preflight.js';
+export {
+  buildAuthoritativeNfePayloadFromFiscalResults,
+  validateAuthoritativeSplitInvariants,
+  allocateCommercialValueByQuantityShare,
+} from './authoritative/authoritative-payload-builder.js';
+export {
+  evaluateAuthoritativeEmissionRouting,
+  prepareAuthoritativeEmissionCandidate,
+  reconcileAuthoritativeReservationAfterEmit,
+  isAuthoritativeEmissionEnabled,
+} from './authoritative/authoritative-emission-orchestrator.js';
+export { evaluateAuthorityRoutingForEmit } from './authoritative/authority-routing.js';
+export {
+  prepareFiscalAuthorityRouting,
+  resolveNfeEmitPayloadForPlugnotas,
+  handleAuthoritativeEmitOutcome,
+  reconcileAuthoritativeAttemptOnMeiNotaStatusChange,
+  bindAuthoritativeAttemptIdIntegracao,
+  NFE_EMIT_TRANSFORM_CLASS,
+  NFE_EMIT_PIPELINE_ORDER,
+} from './authoritative/nfe-emit-authority-integration.js';
+export {
+  findEmissionAttemptById,
+  findEmissionAttemptsByMeiNotaRecordId,
+} from './authoritative/emission-attempt.service.js';
+export {
+  persistAuthorityRoutingAttempt,
+  updateEmissionAttempt,
+  findEmissionAttempt,
+  hashPayloadForAudit,
+  __setEmissionAttemptPostgresEnabledForTests,
+  __resetEmissionAttemptServiceForTests,
+} from './authoritative/emission-attempt.service.js';
+export {
+  classifyEmitRequestOutcome,
+  resolveReservationTransition,
+  applyReservationLifecycle,
+} from './authoritative/reservation-lifecycle.js';
+export { __resetEmissionAttemptsMemoryForTests } from './authoritative/emission-attempt-memory.repository.js';
 
 /**
  * Stub — resolução fiscal completa nas Fases 2+.
