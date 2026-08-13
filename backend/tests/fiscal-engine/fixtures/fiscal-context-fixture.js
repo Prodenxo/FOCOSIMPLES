@@ -48,6 +48,7 @@ export const buildTestFiscalContext = (overrides = {}) => {
     item: { itemSource: 'THIRD_PARTY', quantidade: 1, valorUnitario: 100, ...(overrides.item ?? {}) },
     operation: { tipo: 'VENDA', ...(overrides.operation ?? {}) },
     referenceDate: overrides.referenceDate ?? '2026-06-15',
+    fiscalExtensions: overrides.fiscalExtensions ?? {},
     ...overrides.input,
   });
 };

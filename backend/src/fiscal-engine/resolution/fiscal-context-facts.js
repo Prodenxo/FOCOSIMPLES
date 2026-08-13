@@ -21,6 +21,15 @@ export const extractFactsFromContext = (context, treatmentPartial = {}) => ({
   operationType: context.operacao?.operationType ?? context.operacao?.tipo ?? null,
   recipientTaxpayerStatus: context.destinatario?.icmsTaxpayerStatus ?? null,
   consumerFinal: context.destinatario?.consumidorFinal ?? null,
+  recipientFinalConsumer: context.destinatario?.consumidorFinal === true
+    ? 'YES'
+    : context.destinatario?.consumidorFinal === false
+      ? 'NO'
+      : 'UNKNOWN',
+  issuerStLiability: context.fiscalExtensions?.issuerStLiability ?? 'UNKNOWN',
+  stApplicabilityStatus: context.fiscalExtensions?.stApplicabilityStatus ?? 'UNKNOWN',
+  interstatePriorRetainedEligible: Boolean(context.fiscalExtensions?.interstatePriorRetainedEligible),
+  creditAllowed: context.fiscalExtensions?.creditAllowed === true,
   issuerUf: context.emitente?.uf ?? null,
   destinationUf: context.operacao?.destinationUf ?? null,
   referenceDate: context.operacao?.referenceDate ?? context.dataOperacao ?? null,

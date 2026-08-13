@@ -366,6 +366,111 @@ export {
 } from './authoritative/reservation-lifecycle.js';
 export { __resetEmissionAttemptsMemoryForTests } from './authoritative/emission-attempt-memory.repository.js';
 
+export {
+  PHASE8B_OFFICIAL_LEGAL_SOURCES,
+  validateFiscalLegalSource,
+  registerFiscalLegalSources,
+  getFiscalLegalSource,
+  isLegalSourceEffectiveOn,
+  listFiscalLegalSources,
+  __resetLegalSourceRegistryForTests,
+} from './simples-nacional/legal-source-registry.js';
+
+export {
+  CSOSN_CATALOG_CRT1,
+  getCsosnCatalogEntryCrt1,
+  getCsosnCatalogEntryForDate,
+  validateCsosnCatalogCompatibility,
+  isCsosnCatalogEffectiveOn,
+  OFFICIAL_CSOSN_CODES_CRT1,
+} from './simples-nacional/csosn-catalog-crt1.js';
+
+export {
+  CSOSN_NFE_EFFECTIVE_FROM,
+  SINIEF_AJUSTE_39_2023_EFFECTIVE_FROM,
+  PRIOR_ST_RETAINED_SEMANTICS,
+  CONSUMPTION_TAX_PROFILE,
+} from './simples-nacional/simples-nacional-constants.js';
+
+export {
+  CSOSN_CATALOG_PROVENANCE_VERSIONS,
+  resolveCsosnCatalogProvenanceVersion,
+  resolveCsosnCatalogSourceRefs,
+  assertCsosnProvenanceNotAnachronistic,
+  buildCsosnCatalogProvenanceAudit,
+} from './simples-nacional/csosn-catalog-provenance.js';
+
+export {
+  FISCAL_ENGINE_TEST_COUNT_REGRESSION_MATRIX,
+  FISCAL_ENGINE_TEST_COUNT_AUDIT,
+} from './simples-nacional/test-count-regression-matrix.js';
+
+export {
+  assertCsosnInvariantForCurrentSt,
+  assertCsosnEffectiveForReferenceDate,
+  resolveCsosnCandidatesForDueByIssuer,
+  resolveCsosnResolutionStatusForDueByIssuer,
+  assertCoverageMatrixHasNoForbiddenCsosnCombo,
+} from './simples-nacional/csosn-invariants.js';
+
+export {
+  resolveCfopNatureFromFacts,
+  assertCfopCsosnIndependence,
+} from './simples-nacional/cfop-nature-resolver.js';
+
+export {
+  buildStApplicabilityContext,
+  evaluateStApplicability,
+  assertStApplicabilityNotSilentlyDowngraded,
+} from './simples-nacional/st-applicability.js';
+
+export {
+  ST_PARAMETER_DATASET_PHASE8B,
+  ST_PARAMETER_TEST_FIXTURES,
+  getStParameterEntriesForDate,
+} from './simples-nacional/st-parameter-dataset.js';
+
+export { resolveDifalFromContext } from './simples-nacional/difal-resolver.js';
+
+export {
+  normalizeRecipientFinalConsumer,
+  recipientFinalConsumerToBoolean,
+} from './simples-nacional/recipient-final-consumer.js';
+
+export {
+  buildConsumptionTaxContext,
+  resolveConsumptionTaxLayer,
+} from './simples-nacional/consumption-tax-context.js';
+
+export {
+  validateProductionReadyPromotion,
+  assertAllProductionReadyRulesValid,
+} from './simples-nacional/production-rule-promotion-gate.js';
+
+export {
+  CFOP_DECISION_MATRIX_CRT1,
+  assertCfopNotBlindInterstateConversion,
+} from './simples-nacional/cfop-decision-matrix.js';
+
+export {
+  createSimplesNacionalPhase8bRules,
+  SIMPLES_NACIONAL_PHASE8B_PACKAGE_ID,
+} from './simples-nacional/simples-nacional-rules-phase8b.js';
+
+export {
+  buildSimplesNacionalCoverageMatrix,
+  formatCoverageMatrixReport,
+  evaluateScenarioResolutionStatus,
+  evaluateCfopNatureForContext,
+  countRulesByProductionReady,
+} from './simples-nacional/coverage-matrix.js';
+
+export { calculateIcmsStByMethod } from './simples-nacional/st-calculation.js';
+export { buildPriorStRetainedXmlFields } from './simples-nacional/prior-st-retained-xml.js';
+export { resolvePisCofinsSimplesNacional } from './simples-nacional/pis-cofins-layer.js';
+export { resolveIpiFromContext } from './simples-nacional/ipi-layer.js';
+export { resolveFcpFromStateRule } from './simples-nacional/fcp-resolver.js';
+
 /**
  * Stub — resolução fiscal completa nas Fases 2+.
  * @returns {{ status: 'UNSUPPORTED_SCENARIO', issues: import('./types/fiscal-issue.js').FiscalIssue[] }}

@@ -5,6 +5,8 @@
 import { createFiscalIssue } from '../types/fiscal-issue.js';
 import { CURRENT_OPERATION_ST } from '../types/st-allocation.js';
 import { isRuleEffectiveOn } from '../rules/fiscal-rule-engine.js';
+import { assertCsosnInvariantForCurrentSt } from '../simples-nacional/csosn-invariants.js';
+import { assertCfopCsosnIndependence } from '../simples-nacional/cfop-nature-resolver.js';
 
 /**
  * @param {object} params
@@ -43,6 +45,50 @@ export const crossValidateFiscalResolution = ({
     issues.push(createFiscalIssue(
       'FISCAL_COMBINATION_FORBIDDEN',
       'currentOperationSt DUE_BY_ISSUER incompatível com CSOSN 102.',
+    ));
+  }
+
+  const csosnInvariant = assertCsosnInvariantForCurrentSt(currentSt, csosn);
+  if (!csosnInvariant.ok && csosn) {
+    issues.push(createFiscalIssue(
+      'FISCAL_COMBINATION_FORBIDDEN',
+      `Invariante CSOSN violada: ${csosnInvariant.reason}.`,
+    ));
+  }
+
+  const cfopCsosnCheck = assertCfopCsosnIndependence({
+    cfop,
+    csosn,
+    facts: {
+      priorStStatus: treatment?.priorStStatus,
+      issuerStLiability: context.fiscalExtensions?.issuerStLiability,
+      interstatePriorRetainedEligible: context.fiscalExtensions?.interstatePriorRetainedEligible,
+    },
+  });
+  if (!cfopCsosnCheck.ok) {
+    for (const msg of cfopCsosnCheck.violations) {
+      issues.push(createFiscalIssue(
+        'FISCAL_COMBINATION_FORBIDDEN',
+        msg,
+        { severity: 'REVIEW', blocksEmission: true, overrideAllowed: true },
+      ));
+    }
+  }
+
+  if (cfop === '5405' && treatment?.priorStStatus === 'RETAINED'
+    && context.fiscalExtensions?.issuerStLiability !== 'SUBSTITUTED') {
+    issues.push(createFiscalIssue(
+      'FISCAL_COMBINATION_FORBIDDEN',
+      'CFOP 5405 exige emitente substituído com ST aplicável — priorSt RETAINED insuficiente.',
+      { severity: 'REVIEW', blocksEmission: true, overrideAllowed: true },
+    ));
+  }
+
+  if (cfop === '6404' && !context.fiscalExtensions?.interstatePriorRetainedEligible) {
+    issues.push(createFiscalIssue(
+      'FISCAL_COMBINATION_FORBIDDEN',
+      'CFOP 6404 exige condições oficiais interestaduais — priorSt RETAINED sozinho insuficiente.',
+      { severity: 'REVIEW', blocksEmission: true, overrideAllowed: true },
     ));
   }
 

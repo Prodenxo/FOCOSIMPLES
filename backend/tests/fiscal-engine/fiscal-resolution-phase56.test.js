@@ -113,6 +113,7 @@ test('8. conflito não resolvível bloqueia', () => {
   });
   const facts = extractFactsFromContext(ctx);
   facts.location = 'INTERESTADUAL';
+  facts.priorStStatus = 'UNKNOWN';
   const r = resolveFiscalRule(rules(), 'CURRENT_ST', facts, FIXTURE_OPTS);
   assert.equal(r.ok, false);
   assert.equal(r.reason, 'RULE_CONFLICT');
@@ -150,7 +151,11 @@ test('11. sourceRefs preservados na regra', () => {
 
 test('12. decisão auditável', () => {
   loadFixtures();
-  const r = resolveFiscalRule(rules(), 'CFOP', extractFactsFromContext(buildTestFiscalContext()), FIXTURE_OPTS);
+  const facts = extractFactsFromContext(buildTestFiscalContext(), {
+    currentOperationSt: 'NOT_DUE',
+    stScenarioKey: 'NO_ST_EVIDENCE+NOT_DUE',
+  });
+  const r = resolveFiscalRule(rules(), 'CFOP', facts, FIXTURE_OPTS);
   assert.ok(r.audit.selectedRule);
   assert.ok(r.audit.matchedRules.length >= 1);
 });
@@ -233,7 +238,11 @@ test('18. priorSt + currentST coexistem', () => {
 
 test('19. rule conflict bloqueia current ST', () => {
   loadFixtures();
-  const ctx = buildTestFiscalContext({ recipient: { uf: 'SP' }, operation: { destinationUf: 'SP' } });
+  const ctx = buildTestFiscalContext({
+    recipient: { uf: 'SP' },
+    operation: { destinationUf: 'SP' },
+    allocation: { prior_st_status: 'UNKNOWN' },
+  });
   const current = resolveCurrentStLiability(ctx, rules(), FIXTURE_OPTS);
   assert.ok(current.issues.some((i) => i.code === 'RULE_CONFLICT'));
 });
@@ -287,6 +296,36 @@ test('24. stScenarioKey correto', () => {
 
 test('25. nenhum cenário composto gera dois grupos ICMS', () => {
   loadFixtures();
+  registerFiscalRules([{
+    id: 'cfop-fixture-retained-not-due-internal',
+    ruleType: 'CFOP',
+    schemaVersion: '1.0.0',
+    rulePackageId: 'fixture-cfop-crt1-v1',
+    priority: 20,
+    specificity: 7,
+    applicableCrt: [1],
+    effectiveFrom: '2026-01-01',
+    conditions: {
+      location: ['INTERNA'],
+      itemSource: ['THIRD_PARTY'],
+      recipientTaxpayerStatus: ['NON_TAXPAYER'],
+      operationType: ['VENDA'],
+      priorStStatus: ['RETAINED'],
+      currentOperationSt: ['NOT_DUE'],
+      stScenarioKey: ['RETAINED+NOT_DUE'],
+    },
+    result: {
+      cfop: '5102',
+      cfopConstraints: {
+        location: 'INTERNA',
+        itemSource: 'THIRD_PARTY',
+        recipientTaxpayerStatus: 'NON_TAXPAYER',
+      },
+    },
+    sourceLegalReference: 'FIXTURE:SYNTHETIC_CFOP_5102_RETAINED_NOT_DUE',
+    productionReady: false,
+    enabled: true,
+  }]);
   const result = resolveFiscalFromContext(buildTestFiscalContext({
     allocation: {
       prior_st_status: 'RETAINED',
@@ -634,7 +673,11 @@ test('55. ruleRef inconsistente', () => {
 
 test('56. rule conflict propagado', () => {
   loadFixtures();
-  const ctx = buildTestFiscalContext({ recipient: { uf: 'SP' }, operation: { destinationUf: 'SP' } });
+  const ctx = buildTestFiscalContext({
+    recipient: { uf: 'SP' },
+    operation: { destinationUf: 'SP' },
+    allocation: { prior_st_status: 'UNKNOWN' },
+  });
   const result = resolveFiscalFromContext(ctx, FIXTURE_OPTS);
   assert.ok(result.issues.some((i) => i.code === 'RULE_CONFLICT'));
 });
@@ -644,6 +687,7 @@ test('57. blocksEmission propagado', () => {
   const result = resolveFiscalFromContext(buildTestFiscalContext({
     recipient: { uf: 'SP' },
     operation: { destinationUf: 'SP' },
+    allocation: { prior_st_status: 'UNKNOWN' },
   }), FIXTURE_OPTS);
   assert.equal(result.blocked, true);
 });
@@ -671,6 +715,7 @@ test('pipeline C — conflito bloqueia', () => {
   const result = resolveFiscalFromContext(buildTestFiscalContext({
     recipient: { uf: 'SP', cpfCnpj: '12345678901', icmsTaxpayerStatus: 'NON_TAXPAYER' },
     operation: { destinationUf: 'SP' },
+    allocation: { prior_st_status: 'UNKNOWN' },
   }), FIXTURE_OPTS);
   assert.ok(result.issues.some((i) => i.code === 'RULE_CONFLICT'));
   assert.equal(result.blocked, true);

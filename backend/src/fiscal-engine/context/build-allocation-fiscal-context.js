@@ -517,6 +517,10 @@ export const buildFiscalContextFromAllocation = (input = {}) => {
       icmsGroup: null,
     },
 
+    fiscalExtensions: input.fiscalExtensions && typeof input.fiscalExtensions === 'object'
+      ? { ...input.fiscalExtensions }
+      : {},
+
     auditRefs,
     issues,
     contextIssues: issues,
