@@ -4,7 +4,7 @@
 import { createFiscalIssue } from '../types/fiscal-issue.js';
 import { fiscalRuleRef } from './fiscal-rule-ref.js';
 import { validateFiscalRuleShape } from '../schemas/validate-shapes.js';
-import { normalizeResolverOptions } from './fiscal-rule-execution-policy.js';
+import { normalizeResolverOptions, isRuleEligibleForExecution } from './fiscal-rule-execution-policy.js';
 
 /**
  * @param {import('../types/fiscal-rule.js').FiscalRule} rule
@@ -79,9 +79,10 @@ export const ruleMatchesFacts = (rule, facts) => {
  * @param {boolean} [options.allowNonProductionRules]
  */
 export const resolveFiscalRule = (rules, ruleType, facts, options = {}) => {
-  const { allowNonProductionRules } = normalizeResolverOptions(options);
+  const resolverOptions = normalizeResolverOptions(options);
+  const { allowNonProductionRules, allowAccountantApprovedConfiguration } = resolverOptions;
 
-  /** @type {import('../types/fiscal-rule.js').RuleResolutionAudit & { rejectedNonProductionRules?: string[] }} */
+  /** @type {import('../types/fiscal-rule.js').RuleResolutionAudit & { rejectedNonProductionRules?: string[], rejectedAccountantRules?: string[] }} */
   const audit = {
     candidateRules: [],
     matchedRules: [],
@@ -90,6 +91,7 @@ export const resolveFiscalRule = (rules, ruleType, facts, options = {}) => {
     specificity: null,
     reason: null,
     rejectedNonProductionRules: [],
+    rejectedAccountantRules: [],
   };
 
   const list = Array.isArray(rules) ? rules : [];
@@ -103,20 +105,15 @@ export const resolveFiscalRule = (rules, ruleType, facts, options = {}) => {
   const matchedAll = candidates.filter((rule) => ruleMatchesFacts(rule, facts));
   audit.matchedRulesAll = matchedAll.map((rule) => rule.id);
 
-  let matched;
-  if (allowNonProductionRules) {
-    matched = matchedAll;
-  } else {
-    matched = matchedAll.filter((rule) => rule.productionReady === true);
-    audit.rejectedNonProductionRules = matchedAll
-      .filter((rule) => rule.productionReady !== true)
-      .map((rule) => rule.id);
-  }
+  let matched = matchedAll.filter((rule) => isRuleEligibleForExecution(rule, resolverOptions));
+  audit.rejectedNonProductionRules = matchedAll
+    .filter((rule) => rule.productionReady !== true && !isRuleEligibleForExecution(rule, resolverOptions))
+    .map((rule) => rule.id);
 
   audit.matchedRules = matched.map((rule) => rule.id);
 
   if (matched.length === 0) {
-    if (matchedAll.length > 0 && !allowNonProductionRules) {
+    if (matchedAll.length > 0 && !allowNonProductionRules && !allowAccountantApprovedConfiguration) {
       return {
         ok: false,
         reason: 'NO_PRODUCTION_RULE',
@@ -213,10 +210,10 @@ export const resolveFiscalRule = (rules, ruleType, facts, options = {}) => {
   audit.reason = 'highest_priority_specificity';
 
   const issues = [];
-  if (allowNonProductionRules && !top.productionReady) {
+  if (allowNonProductionRules && !top.productionReady && !top.accountantApproved) {
     issues.push(createFiscalIssue(
       'RULE_NOT_PRODUCTION_READY',
-      `Regra ${top.id} aplicada em modo experimental (allowNonProductionRules).`,
+      `Regra ${top.id} aplicada em modo experimental (allowNonProductionRules — TEST-ONLY).`,
       {
         severity: 'INFO',
         blocksEmission: false,

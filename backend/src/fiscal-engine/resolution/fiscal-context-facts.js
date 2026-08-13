@@ -12,8 +12,8 @@ export const extractFactsFromContext = (context, treatmentPartial = {}) => ({
   crt: context.emitente?.crt ?? null,
   location: context.operacao?.localizacao ?? null,
   itemSource: context.item?.itemSource ?? null,
-  priorStStatus: context.allocation?.priorStStatus
-    ?? context.estoque?.priorStStatus
+  priorStStatus: context.estoque?.priorStStatus
+    ?? context.allocation?.priorStStatus
     ?? null,
   currentOperationSt: treatmentPartial.currentOperationSt
     ?? CURRENT_OPERATION_ST.UNKNOWN,

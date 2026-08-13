@@ -471,6 +471,139 @@ export { resolvePisCofinsSimplesNacional } from './simples-nacional/pis-cofins-l
 export { resolveIpiFromContext } from './simples-nacional/ipi-layer.js';
 export { resolveFcpFromStateRule } from './simples-nacional/fcp-resolver.js';
 
+export {
+  FISCAL_PROFILE_STATUS,
+  ACCOUNTANT_RULE_STATUS,
+  APPROVED_RULE_MATCH_STATUS,
+  FISCAL_CONFIGURATION_READINESS,
+  FISCAL_TRAFFIC_LIGHT,
+  PRODUCT_ITEM_SOURCE,
+  OPERATION_SCOPE,
+  PIS_COFINS_CLASSIFICATION,
+  APPROVED_RULE_SPECIFICITY_WEIGHTS,
+  FISCAL_CONFIG_PERMISSIONS,
+  FISCAL_RULE_SOURCE_TYPE,
+  FISCAL_ENGINE_CAPABILITY,
+  FISCAL_ENGINE_CAPABILITY_VERSION,
+  FORBIDDEN_MATCH_CONDITION_KEYS,
+} from './fiscal-configuration/constants.js';
+
+export { sanitizeMatchConditions, getMatchConditionsFromRule, detectForbiddenMatchConditions } from './fiscal-configuration/accountant-rule-conditions.js';
+
+export {
+  evaluateAccountantRuleEngineCapability,
+  resolveRequiredCapabilities,
+  getSupportedEngineCapabilities,
+} from './fiscal-configuration/fiscal-engine-capability.js';
+
+export {
+  validateAccountantRuleForApproval,
+  previewAccountantFiscalRule,
+} from './fiscal-configuration/accountant-rule-validation.js';
+
+export {
+  buildFiscalRulesFromApprovedRule,
+  translateApprovedConditionsToFiscalRuleConditions,
+  isAccountantApprovedConfigurationRule,
+} from './fiscal-configuration/approved-rule-to-fiscal-rules.js';
+
+export {
+  normalizeTestOnlyResolverOptions,
+  isRuleEligibleForExecution,
+} from './rules/fiscal-rule-execution-policy.js';
+
+export {
+  __setFiscalConfigurationPostgresEnabledForTests,
+  __isFiscalConfigurationPostgresEnabledForTests,
+  __resetFiscalConfigurationRepositoryServiceForTests,
+  listAccountantApprovedRulesForTenantSync,
+} from './fiscal-configuration/fiscal-configuration-repository.service.js';
+
+export {
+  __ensureFiscalConfigurationSchemaForTests,
+  __deleteFiscalConfigurationForTenantTests,
+} from './fiscal-configuration/fiscal-configuration.repository.js';
+
+export { extractMatchingFactsFromContext, REQUIRED_FACT_FIELDS } from './fiscal-configuration/matching-facts.js';
+
+export {
+  resolveAccountantApprovedFiscalRule,
+  isApprovedRuleEffectiveOn,
+  computeApprovedRuleSpecificity,
+  approvedRuleMatchesFacts,
+} from './fiscal-configuration/approved-rule-matcher.js';
+
+export {
+  resolveFiscalFromContextWithAccountantConfig,
+  resolveFiscalFromContextWithAccountantConfigPure,
+  previewAccountantRuleMatch,
+  previewAccountantRuleMatchPure,
+} from './fiscal-configuration/resolve-with-accountant-config.js';
+
+export {
+  evaluateFiscalConfigurationReadiness,
+  evaluateFiscalConfigurationReadinessForTenant,
+  evaluateFiscalConfigurationReadinessFromData,
+  mapMatchStatusToTrafficLight,
+} from './fiscal-configuration/configuration-readiness.js';
+
+export {
+  loadAccountantApprovedRulesForTenant,
+  loadFiscalConfigurationSnapshotForTenant,
+} from './fiscal-configuration/fiscal-configuration-loader.js';
+
+export {
+  upsertCompanyFiscalProfile,
+  fetchCompanyFiscalProfile,
+  fetchCompanyFiscalProfiles,
+  upsertProductFiscalProfile,
+  fetchProductFiscalProfile,
+  fetchProductFiscalProfiles,
+  upsertCustomerTaxProfile,
+  fetchCustomerTaxProfile,
+  fetchCustomerTaxProfiles,
+  createAccountantApprovedRuleDraft,
+  approveAccountantFiscalRule,
+  suspendAccountantFiscalRule,
+  revokeAccountantFiscalRule,
+  createAccountantRuleNewVersion,
+  listTenantAccountantRules,
+  previewRuleMatchForContext,
+  getFiscalConfigurationReadiness,
+  registerFiscalRuleTemplate,
+  getFiscalRuleTemplates,
+  getFiscalRuleTemplateById,
+  registerTaxCatalogEntry,
+  getTaxCatalog,
+  validateAccountantRuleForAuthoritativeUse,
+  assertActorPermission,
+  previewAccountantFiscalRuleForDraft,
+  updateAccountantApprovedRuleDraft,
+} from './fiscal-configuration/fiscal-configuration.service.js';
+
+export {
+  saveCompanyFiscalProfile,
+  getCompanyFiscalProfile,
+  listCompanyFiscalProfiles,
+  saveProductFiscalProfile,
+  getProductFiscalProfile,
+  listProductFiscalProfiles,
+  saveCustomerTaxProfile,
+  getCustomerTaxProfile,
+  listCustomerTaxProfiles,
+  saveAccountantApprovedRule,
+  insertApprovedRuleForFixture,
+  listAccountantApprovedRulesForTenant,
+  getAccountantApprovedRule,
+  saveFiscalRuleTemplate,
+  listFiscalRuleTemplates,
+  getFiscalRuleTemplate,
+  saveTaxCatalogEntry,
+  listTaxCatalogEntries,
+  resetFiscalConfigurationRepository,
+  __getFiscalConfigurationStoreForTests,
+} from './fiscal-configuration/fiscal-configuration-memory.repository.js';
+
 /**
  * Stub — resolução fiscal completa nas Fases 2+.
  * @returns {{ status: 'UNSUPPORTED_SCENARIO', issues: import('./types/fiscal-issue.js').FiscalIssue[] }}
