@@ -8,7 +8,7 @@ import { assertCsosnInvariantForCurrentSt } from '../simples-nacional/csosn-inva
 import { OFFICIAL_CSOSN_CODES_CRT1, getCsosnCatalogEntryCrt1 } from '../simples-nacional/csosn-catalog-crt1.js';
 import { sanitizeMatchConditions, getApprovedResultFromRule, detectForbiddenMatchConditions } from './accountant-rule-conditions.js';
 import { evaluateAccountantRuleEngineCapability } from './fiscal-engine-capability.js';
-import { FORBIDDEN_MATCH_CONDITION_KEYS } from './constants.js';
+import { validateApprovedResultContract } from './accountant-approved-result-contract.js';
 
 const CFOP_PATTERN = /^[1-7]\d{3}$/;
 
@@ -24,6 +24,15 @@ export const validateAccountantRuleForApproval = (rule, options = {}) => {
   const crt = conditions.crt?.[0] ?? rule.crt ?? null;
 
   issues.push(...detectForbiddenMatchConditions(conditions));
+  issues.push(...validateApprovedResultContract(approvedResult));
+
+  if ((approvedResult.cfop || approvedResult.csosn) && crt == null) {
+    issues.push(createFiscalIssue(
+      'ACCOUNTANT_RULE_VALIDATION_FAILED',
+      'CRT é obrigatório em conditions quando CFOP ou CSOSN são configurados.',
+      { blocksEmission: true, overrideAllowed: false, meta: { field: 'crt' } },
+    ));
+  }
 
   if (crt != null && !crtSupportsCsosn(crt) && approvedResult.csosn) {
     issues.push(createFiscalIssue(

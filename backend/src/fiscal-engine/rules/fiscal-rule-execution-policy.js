@@ -10,6 +10,7 @@ import { isAccountantApprovedConfigurationRule } from '../fiscal-configuration/a
 export const normalizeResolverOptions = (options = {}) => ({
   allowNonProductionRules: options.allowNonProductionRules === true,
   allowAccountantApprovedConfiguration: options.allowAccountantApprovedConfiguration === true,
+  matchingFacts: options.matchingFacts ?? {},
 });
 
 export const DEFAULT_RESOLVER_OPTIONS = Object.freeze({

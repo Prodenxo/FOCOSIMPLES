@@ -8,9 +8,17 @@
 import { FISCAL_RULE_TYPE } from '../types/fiscal-rule.js';
 import { OPERATION_SCOPE, FISCAL_RULE_SOURCE_TYPE } from './constants.js';
 import { getMatchConditionsFromRule, getApprovedResultFromRule } from './accountant-rule-conditions.js';
+import { resolveExecutableIcmsGroupForCsosn } from './accountant-approved-result-contract.js';
+
+/** Chaves removidas na tradução — CRT vai para applicableCrt; operationScope vira location. */
+export const APPROVED_CONDITION_KEYS_OMITTED_FROM_FISCAL_RULE = Object.freeze([
+  'operationScope',
+  'crt',
+]);
 
 /**
  * Traduz condições da regra aprovada pelo contador para chaves do fiscal-rule-engine.
+ * Preserva condições semanticamente relevantes (productId, UFs, priorStStatus, etc.).
  * @param {Record<string, unknown>} conditions
  */
 export const translateApprovedConditionsToFiscalRuleConditions = (conditions = {}) => {
@@ -24,20 +32,9 @@ export const translateApprovedConditionsToFiscalRuleConditions = (conditions = {
     if (scope === OPERATION_SCOPE.FOREIGN) out.location = ['EXTERIOR'];
   }
 
-  delete out.operationScope;
-  delete out.crt;
-  delete out.productId;
-  delete out.customerId;
-  delete out.establishmentId;
-  delete out.fiscalProductGroupId;
-  delete out.issuerUf;
-  delete out.destinationUf;
-  delete out.recipientPersonType;
-  delete out.recipientFinalConsumer;
-  delete out.operationPurpose;
-  delete out.origem;
-  delete out.cest;
-  delete out.ncm;
+  for (const key of APPROVED_CONDITION_KEYS_OMITTED_FROM_FISCAL_RULE) {
+    delete out[key];
+  }
 
   return out;
 };
@@ -50,13 +47,13 @@ export const buildFiscalRulesFromApprovedRule = (approvedRule) => {
   const result = getApprovedResultFromRule(approvedRule);
   const matchConditions = getMatchConditionsFromRule(approvedRule);
   const conditions = translateApprovedConditionsToFiscalRuleConditions(matchConditions);
-  const crt = approvedRule.conditions?.crt?.[0] ?? approvedRule.crt ?? 1;
-  const effectiveFrom = approvedRule.validFrom ?? '2020-01-01';
+  const crt = approvedRule.conditions?.crt?.[0] ?? approvedRule.crt ?? null;
+  const effectiveFrom = approvedRule.validFrom ?? undefined;
   const effectiveTo = approvedRule.validUntil ?? undefined;
   const base = {
     schemaVersion: '1.0.0',
     rulePackageId: `accountant-approved-${approvedRule.id}`,
-    applicableCrt: [crt],
+    applicableCrt: crt != null ? [crt] : [],
     effectiveFrom,
     effectiveTo,
     productionReady: false,
@@ -92,13 +89,10 @@ export const buildFiscalRulesFromApprovedRule = (approvedRule) => {
       ruleType: FISCAL_RULE_TYPE.CSOSN,
       priority: 200,
       specificity: approvedRule.baseSpecificity ?? 20,
-      conditions: {
-        ...conditions,
-        ...(result.priorStStatus ? { priorStStatus: [result.priorStStatus] } : {}),
-      },
+      conditions: { ...conditions },
       result: {
         csosn: result.csosn,
-        icmsGroup: result.icmsGroup ?? `ICMSSN${result.csosn}`,
+        icmsGroup: resolveExecutableIcmsGroupForCsosn(String(result.csosn), result.icmsGroup ?? null),
         requiredXmlFields: Array.isArray(result.requiredXmlFields) ? result.requiredXmlFields : [],
       },
     });

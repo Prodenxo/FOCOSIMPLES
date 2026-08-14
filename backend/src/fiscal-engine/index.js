@@ -504,9 +504,22 @@ export {
 } from './fiscal-configuration/accountant-rule-validation.js';
 
 export {
+  APPROVED_RESULT_ALLOWED_KEYS,
+  EXECUTABLE_CSOSN_CODES,
+  EXECUTABLE_ICMS_GROUPS,
+  EXECUTABLE_CURRENT_OPERATION_ST,
+  CERTIFIED_ACCOUNTANT_ICMS_XML_FIELDS,
+  CERTIFIED_ACCOUNTANT_ICMS_XML_FIELD_NAMES,
+  detectUnsupportedApprovedResultFields,
+  validateApprovedResultContract,
+  resolveExecutableIcmsGroupForCsosn,
+} from './fiscal-configuration/accountant-approved-result-contract.js';
+
+export {
   buildFiscalRulesFromApprovedRule,
   translateApprovedConditionsToFiscalRuleConditions,
   isAccountantApprovedConfigurationRule,
+  APPROVED_CONDITION_KEYS_OMITTED_FROM_FISCAL_RULE,
 } from './fiscal-configuration/approved-rule-to-fiscal-rules.js';
 
 export {

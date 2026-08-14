@@ -32,7 +32,7 @@ export const resolveCurrentStLiability = (context, rules, options = {}) => {
     };
   }
 
-  const facts = extractFactsFromContext(context);
+  const facts = extractFactsFromContext(context, {}, options);
 
   if (facts.supplierCest || facts.catalogCest) {
     // CEST é fato — nunca inferir ST atual a partir dele.

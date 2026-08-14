@@ -103,7 +103,6 @@ export const APPROVED_RULE_SPECIFICITY_WEIGHTS = Object.freeze({
   operationType: 10,
   itemSource: 10,
   priorStStatus: 10,
-  currentOperationSt: 10,
   operationScope: 8,
   recipientPersonType: 8,
 });
@@ -133,7 +132,7 @@ export const FISCAL_ENGINE_CAPABILITY = Object.freeze({
   CROSS_VALIDATOR: 'CROSS_VALIDATOR',
 });
 
-export const FISCAL_ENGINE_CAPABILITY_VERSION = '8c-hardening-1';
+export const FISCAL_ENGINE_CAPABILITY_VERSION = '8e-contract-1';
 
 /**
  * Condições proibidas no matching — são RESULTADOS da resolução, não fatos observáveis.

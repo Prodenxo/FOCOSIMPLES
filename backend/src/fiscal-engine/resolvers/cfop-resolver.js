@@ -28,7 +28,7 @@ export const resolveCfop = (context, treatment, rules, options = {}) => {
     };
   }
 
-  const facts = extractFactsFromContext(context, treatment);
+  const facts = extractFactsFromContext(context, treatment, options);
   const resolution = resolveFiscalRule(rules, FISCAL_RULE_TYPE.CFOP, facts, options);
 
   if (!resolution.ok) {

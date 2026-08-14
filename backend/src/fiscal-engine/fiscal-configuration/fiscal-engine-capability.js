@@ -1,19 +1,16 @@
 /**
  * Capability gate — configuração aprovada só executa se o engine suporta tecnicamente.
- * NÃO valida correção fiscal/jurídica — apenas suporte técnico e invariants conhecidos.
+ * Catálogo (CSOSN conhecido) ≠ executável (builder completo) — Phase 8E.2.
  */
 import { createFiscalIssue } from '../types/fiscal-issue.js';
 import { FISCAL_ENGINE_CAPABILITY, FISCAL_ENGINE_CAPABILITY_VERSION } from './constants.js';
-import { OFFICIAL_CSOSN_CODES_CRT1 } from '../simples-nacional/csosn-catalog-crt1.js';
-
-const KNOWN_ICMS_GROUPS = new Set([
-  'ICMSSN101', 'ICMSSN102', 'ICMSSN103', 'ICMSSN201', 'ICMSSN202', 'ICMSSN203',
-  'ICMSSN300', 'ICMSSN400', 'ICMSSN500', 'ICMSSN900',
-]);
-
-const KNOWN_XML_FIELDS = new Set([
-  'vBCSTRet', 'vICMSSTRet', 'pST', 'vBCST', 'vICMSST',
-]);
+import {
+  CERTIFIED_ACCOUNTANT_ICMS_XML_FIELD_NAMES,
+  EXECUTABLE_CSOSN_CODES,
+  EXECUTABLE_ICMS_GROUPS,
+  EXECUTABLE_CURRENT_OPERATION_ST,
+  resolveExecutableIcmsGroupForCsosn,
+} from './accountant-approved-result-contract.js';
 
 /**
  * @param {object} approvedResult
@@ -25,20 +22,28 @@ export const resolveRequiredCapabilities = (approvedResult = {}) => {
   if (approvedResult.cfop) {
     required.push(FISCAL_ENGINE_CAPABILITY.CFOP_RESOLUTION);
   }
-  if (approvedResult.csosn) {
+
+  const csosn = approvedResult.csosn ? String(approvedResult.csosn) : null;
+  if (csosn && EXECUTABLE_CSOSN_CODES.has(csosn)) {
     required.push(FISCAL_ENGINE_CAPABILITY.CSOSN_RESOLUTION);
-    const group = approvedResult.icmsGroup ?? `ICMSSN${approvedResult.csosn}`;
-    if (group === 'ICMSSN102' || approvedResult.csosn === '102') {
+    const group = resolveExecutableIcmsGroupForCsosn(csosn, approvedResult.icmsGroup ?? null);
+    if (group === 'ICMSSN102' || csosn === '102') {
       required.push(FISCAL_ENGINE_CAPABILITY.ICMSSN102_BUILDER);
     }
-    if (group === 'ICMSSN500' || approvedResult.csosn === '500') {
+    if (group === 'ICMSSN500' || csosn === '500') {
       required.push(FISCAL_ENGINE_CAPABILITY.ICMSSN500_BUILDER);
     }
   }
-  if (approvedResult.currentOperationSt) {
+
+  if (approvedResult.currentOperationSt
+    && EXECUTABLE_CURRENT_OPERATION_ST.has(String(approvedResult.currentOperationSt))) {
     required.push(FISCAL_ENGINE_CAPABILITY.CURRENT_ST_RESOLUTION);
   }
-  if (Array.isArray(approvedResult.requiredXmlFields) && approvedResult.requiredXmlFields.length) {
+
+  const xmlFields = Array.isArray(approvedResult.requiredXmlFields)
+    ? approvedResult.requiredXmlFields
+    : [];
+  if (xmlFields.some((field) => CERTIFIED_ACCOUNTANT_ICMS_XML_FIELD_NAMES.includes(String(field)))) {
     required.push(FISCAL_ENGINE_CAPABILITY.XML_FIELDS_BUILDER);
   }
 
@@ -46,7 +51,7 @@ export const resolveRequiredCapabilities = (approvedResult = {}) => {
 };
 
 /**
- * Capabilities atualmente suportadas pelo engine v3.1 Phase 8C.
+ * Capabilities atualmente suportadas pelo engine v3.1 Phase 8E.2.
  */
 export const getSupportedEngineCapabilities = () => new Set([
   FISCAL_ENGINE_CAPABILITY.CFOP_RESOLUTION,
@@ -70,29 +75,39 @@ export const evaluateAccountantRuleEngineCapability = (rule) => {
   /** @type {import('../types/fiscal-issue.js').FiscalIssue[]} */
   const issues = [];
 
-  if (approvedResult.csosn && !OFFICIAL_CSOSN_CODES_CRT1.includes(String(approvedResult.csosn))) {
+  const csosn = approvedResult.csosn ? String(approvedResult.csosn) : null;
+  if (csosn && !EXECUTABLE_CSOSN_CODES.has(csosn)) {
     issues.push(createFiscalIssue(
       'ACCOUNTANT_RULE_NOT_EXECUTABLE',
-      `CSOSN ${approvedResult.csosn} não possui builder/catálogo suportado.`,
-      { blocksEmission: true, overrideAllowed: false },
+      `CSOSN ${csosn} existe no catálogo mas não possui builder executável no engine.`,
+      { blocksEmission: true, overrideAllowed: false, meta: { csosn } },
     ));
   }
 
-  const icmsGroup = approvedResult.icmsGroup ?? (approvedResult.csosn ? `ICMSSN${approvedResult.csosn}` : null);
-  if (icmsGroup && !KNOWN_ICMS_GROUPS.has(icmsGroup)) {
+  const icmsGroup = resolveExecutableIcmsGroupForCsosn(csosn, approvedResult.icmsGroup ?? null);
+  if (icmsGroup && csosn && !EXECUTABLE_ICMS_GROUPS.has(icmsGroup)) {
     issues.push(createFiscalIssue(
       'ACCOUNTANT_RULE_NOT_EXECUTABLE',
-      `Grupo XML ${icmsGroup} não implementado no engine.`,
-      { blocksEmission: true, overrideAllowed: false },
+      `Grupo XML ${icmsGroup} não possui builder executável no engine.`,
+      { blocksEmission: true, overrideAllowed: false, meta: { icmsGroup } },
+    ));
+  }
+
+  if (approvedResult.currentOperationSt
+    && !EXECUTABLE_CURRENT_OPERATION_ST.has(String(approvedResult.currentOperationSt))) {
+    issues.push(createFiscalIssue(
+      'ACCOUNTANT_RULE_NOT_EXECUTABLE',
+      `currentOperationSt ${approvedResult.currentOperationSt} não é executável.`,
+      { blocksEmission: true, overrideAllowed: false, meta: { field: 'currentOperationSt' } },
     ));
   }
 
   for (const field of approvedResult.requiredXmlFields ?? []) {
-    if (!KNOWN_XML_FIELDS.has(field)) {
+    if (!CERTIFIED_ACCOUNTANT_ICMS_XML_FIELD_NAMES.includes(String(field))) {
       issues.push(createFiscalIssue(
         'ACCOUNTANT_RULE_NOT_EXECUTABLE',
-        `Campo XML ${field} não suportado pelo engine.`,
-        { blocksEmission: true, overrideAllowed: false },
+        `Campo XML ${field} não certificado para execução via configuração do contador.`,
+        { blocksEmission: true, overrideAllowed: false, meta: { field } },
       ));
     }
   }
