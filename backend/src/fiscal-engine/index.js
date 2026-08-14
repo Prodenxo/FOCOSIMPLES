@@ -317,7 +317,12 @@ export {
   countProductionReadyFiscalRules,
 } from './rollout/rollout-production-rules-gate.js';
 export {
+  hasAuthoritativeAccountantConfigReadiness,
+  countExecutableAccountantApprovedRules,
+} from './rollout/rollout-accountant-config-gate.js';
+export {
   evaluateAuthorityDecision,
+  markAuthoritativeFiscalBlocked,
   markAuthorityNotEligibleAfterPreflight,
   assumeV3Authority,
 } from './rollout/authority-decision.js';
@@ -331,6 +336,19 @@ export {
   validateAuthoritativeSplitInvariants,
   allocateCommercialValueByQuantityShare,
 } from './authoritative/authoritative-payload-builder.js';
+export {
+  resolveAuthoritativeFiscalFromContexts,
+  collectAuthoritativeAccountantConfigIssues,
+} from './authoritative/resolve-authoritative-fiscal.js';
+export {
+  mapFiscalV3IcmsToPlugnotasTributos,
+  mapFiscalV3PisCofinsToPlugnotasTributos,
+  mapFiscalV3TaxesToPlugnotasTributos,
+  evaluatePlugnotasNfeTaxBridgeCapability,
+  applyPlugnotasTributosBridgeToAuthoritativeItem,
+  applyAuthoritativePlugnotasTributosBridge,
+  PLUGNOTAS_NFE_TAX_BRIDGE_CAPABILITY,
+} from './authoritative/plugnotas-fiscal-v3-bridge.js';
 export {
   evaluateAuthoritativeEmissionRouting,
   prepareAuthoritativeEmissionCandidate,

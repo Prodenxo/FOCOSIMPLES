@@ -40,8 +40,13 @@ import {
   __resetReadinessDataForTests,
 } from '../../src/fiscal-engine/rollout/rollout-readiness.js';
 import {
-  hasProductionReadyFiscalRules,
-} from '../../src/fiscal-engine/rollout/rollout-production-rules-gate.js';
+  hasAuthoritativeAccountantConfigReadiness,
+} from '../../src/fiscal-engine/rollout/rollout-accountant-config-gate.js';
+import {
+  resetFiscalConfigurationRepository,
+  bootstrapPhase8cFixtures,
+  PHASE8C_TENANT_ID,
+} from '../../src/fiscal-engine/fiscal-configuration/fixtures/phase8c-test-fixtures.js';
 import {
   runAuthoritativePreflightReadOnly,
   assertLegacyPayloadUnmutated,
@@ -134,7 +139,8 @@ test('A6. tenant diferente — namespace separado', () => {
   assert.notEqual(bA, bB);
 });
 
-test('A7. NOT_READY_NO_PRODUCTION_RULES bloqueia authoritative', async () => {
+test('A7. NOT_READY_NO_ACCOUNTANT_CONFIG bloqueia authoritative fail-closed', async () => {
+  resetFiscalConfigurationRepository();
   await __withFiscalEngineFlagsForTests({ v3: true, shadow: false }, async () => {
     upsertInMemoryRolloutPolicy(EMP, {
       mode: ROLLOUT_MODE.AUTHORITATIVE,
@@ -147,28 +153,30 @@ test('A7. NOT_READY_NO_PRODUCTION_RULES bloqueia authoritative', async () => {
       documentType: 'NFE',
       meiNotaRecordId: EMISSION_ID,
     });
-    assert.equal(decision.engine, AUTHORITY_ENGINE.LEGACY);
-    assert.ok(decision.reasons.includes(AUTHORITY_DECISION_REASON.NOT_READY_NO_PRODUCTION_RULES));
+    assert.equal(decision.engine, AUTHORITY_ENGINE.BLOCKED);
+    assert.ok(decision.reasons.includes(AUTHORITY_DECISION_REASON.NOT_READY_NO_ACCOUNTANT_CONFIG));
+    assert.equal(decision.authoritativeFiscalBlocked, true);
+    assert.equal(hasAuthoritativeAccountantConfigReadiness(EMP), false);
   });
 });
 
-test('A8. com productionReady rule → V3 candidate (gates pass)', async () => {
-  registerFiscalRules([createValidatedProductionReadyCurrentStRule()]);
+test('A8. com accountant config executável → V3 candidate (gates pass)', async () => {
+  bootstrapPhase8cFixtures();
   await __withFiscalEngineFlagsForTests({ v3: true, shadow: false }, async () => {
-    upsertInMemoryRolloutPolicy(EMP, {
+    upsertInMemoryRolloutPolicy(PHASE8C_TENANT_ID, {
       mode: ROLLOUT_MODE.AUTHORITATIVE,
       enabled: true,
       minimumShadowSamples: 0,
       readinessRequired: false,
     });
     const decision = await evaluateAuthorityDecision({
-      empresaId: EMP,
+      empresaId: PHASE8C_TENANT_ID,
       documentType: 'NFE',
       meiNotaRecordId: EMISSION_ID,
     });
     assert.equal(decision.engine, AUTHORITY_ENGINE.V3);
     assert.ok(decision.reasons.includes(AUTHORITY_DECISION_REASON.V3_CANDIDATE));
-    assert.equal(hasProductionReadyFiscalRules(EMP), true);
+    assert.equal(hasAuthoritativeAccountantConfigReadiness(PHASE8C_TENANT_ID), true);
   });
 });
 

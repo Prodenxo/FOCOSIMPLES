@@ -11,7 +11,7 @@ import {
   assessReadinessGate,
   evaluateFiscalV3RolloutReadiness,
 } from './rollout-readiness.js';
-import { hasProductionReadyFiscalRules } from './rollout-production-rules-gate.js';
+import { hasAuthoritativeAccountantConfigReadiness } from './rollout-accountant-config-gate.js';
 import { isCanarySelected, resolveEmissionStableId } from './rollout-canary.js';
 import {
   AUTHORITY_ENGINE,
@@ -23,7 +23,7 @@ import {
 
 /**
  * @typedef {object} AuthorityDecision
- * @property {'LEGACY' | 'V3'} engine
+ * @property {'LEGACY' | 'V3' | 'BLOCKED'} engine
  * @property {string[]} reasons
  * @property {string | null} rolloutMode
  * @property {boolean | null} canarySelected
@@ -110,14 +110,23 @@ export const evaluateAuthorityDecision = async (params) => {
     }
   }
 
-  if (!hasProductionReadyFiscalRules(empresaId)) {
-    reasons.push(AUTHORITY_DECISION_REASON.NOT_READY_NO_PRODUCTION_RULES);
+  if (!hasAuthoritativeAccountantConfigReadiness(empresaId)) {
+    reasons.push(AUTHORITY_DECISION_REASON.NOT_READY_NO_ACCOUNTANT_CONFIG);
     issues.push(createFiscalIssue(
-      'RULE_NOT_PRODUCTION_READY',
-      'Nenhuma regra fiscal productionReady=true — authoritative v3 bloqueado',
+      'ACCOUNTANT_CONFIGURATION_INCOMPLETE',
+      'Configuração fiscal do contador indisponível ou sem regra APPROVED executável — authoritative fail-closed',
       { severity: 'ERROR', blocksEmission: true, overrideAllowed: false },
     ));
-    return buildDecision({ engine: AUTHORITY_ENGINE.LEGACY, reasons, rolloutMode, canarySelected, readiness: null, issues });
+    return buildDecision({
+      engine: AUTHORITY_ENGINE.BLOCKED,
+      reasons: [...reasons, AUTHORITY_DECISION_REASON.AUTHORITATIVE_FISCAL_BLOCKED],
+      rolloutMode,
+      canarySelected,
+      readiness: null,
+      v3Candidate: true,
+      authoritativeFiscalBlocked: true,
+      issues,
+    });
   }
 
   const readiness = params.readiness ?? await evaluateFiscalV3RolloutReadiness(empresaId);
@@ -142,22 +151,38 @@ export const evaluateAuthorityDecision = async (params) => {
 };
 
 /**
- * Após preflight falhar — roteamento prévio para legado (não fallback pós-assunção).
+ * Fail-closed após seleção authoritative — nunca degradar fiscal para legacy.
  * @param {AuthorityDecision} priorDecision
- * @param {object} preflightResult
+ * @param {object} failureResult
+ * @param {string} [blockReason]
  */
-export const markAuthorityNotEligibleAfterPreflight = (priorDecision, preflightResult) => ({
-  ...priorDecision,
-  engine: AUTHORITY_ENGINE.LEGACY,
-  reasons: [
-    ...priorDecision.reasons.filter((r) => r !== AUTHORITY_DECISION_REASON.V3_CANDIDATE),
-    AUTHORITY_DECISION_REASON.PREFLIGHT_FAILED,
-    AUTHORITY_DECISION_REASON.AUTHORITATIVE_NOT_ELIGIBLE,
-  ],
-  preflightId: preflightResult.preflightId ?? null,
-  v3Candidate: false,
-  issues: [...(priorDecision.issues ?? []), ...(preflightResult.issues ?? [])],
-});
+export const markAuthoritativeFiscalBlocked = (
+  priorDecision,
+  failureResult,
+  blockReason = AUTHORITY_DECISION_REASON.AUTHORITATIVE_FISCAL_BLOCKED,
+) => {
+  /** @type {string[]} */
+  const extraReasons = [blockReason, AUTHORITY_DECISION_REASON.PREFLIGHT_FAILED];
+  if (failureResult?.reasonCode) {
+    extraReasons.unshift(failureResult.reasonCode);
+  }
+
+  return {
+    ...priorDecision,
+    engine: AUTHORITY_ENGINE.BLOCKED,
+    reasons: [
+      ...priorDecision.reasons.filter((r) => r !== AUTHORITY_DECISION_REASON.V3_CANDIDATE),
+      ...extraReasons,
+    ],
+    preflightId: failureResult?.preflightId ?? priorDecision.preflightId ?? null,
+    v3Candidate: true,
+    authoritativeFiscalBlocked: true,
+    issues: [...(priorDecision.issues ?? []), ...(failureResult?.issues ?? [])],
+  };
+};
+
+/** @deprecated Use markAuthoritativeFiscalBlocked — mantido para compatibilidade de import. */
+export const markAuthorityNotEligibleAfterPreflight = markAuthoritativeFiscalBlocked;
 
 /**
  * Assunção explícita de autoridade V3 — ponto sem retorno silencioso ao legado.
@@ -181,6 +206,7 @@ const buildDecision = ({
   readiness,
   preflightId = null,
   v3Candidate = false,
+  authoritativeFiscalBlocked = false,
   issues = [],
 }) => ({
   engine,
@@ -191,5 +217,6 @@ const buildDecision = ({
   preflightId,
   engineVersion: DEFAULT_ENGINE_VERSION,
   v3Candidate,
+  authoritativeFiscalBlocked,
   issues,
 });

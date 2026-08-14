@@ -32,6 +32,8 @@ export const NFE_EMIT_PIPELINE_ORDER = Object.freeze([
   { step: 'resolveIdIntegracaoForEmit', class: NFE_EMIT_TRANSFORM_CLASS.TECHNICAL },
   { step: 'getBusinessTypeMirror', class: NFE_EMIT_TRANSFORM_CLASS.COMMERCIAL },
   { step: 'prepareFiscalAuthorityRouting', class: NFE_EMIT_TRANSFORM_CLASS.VALIDATION },
+  { step: 'buildAuthoritativeNfePayloadFromFiscalResults', class: NFE_EMIT_TRANSFORM_CLASS.VALIDATION },
+  { step: 'applyAuthoritativePlugnotasTributosBridge', class: NFE_EMIT_TRANSFORM_CLASS.TECHNICAL, skipWhenV3: false },
   { step: 'recalculateNfeLikePayloadTaxForEmit', class: NFE_EMIT_TRANSFORM_CLASS.LEGACY_FISCAL, skipWhenV3: true },
   { step: 'validatePayloadByDocumentType', class: NFE_EMIT_TRANSFORM_CLASS.VALIDATION },
   { step: 'applyIbptTransparenciaToNfePayload', class: NFE_EMIT_TRANSFORM_CLASS.TECHNICAL },
@@ -68,6 +70,22 @@ export const prepareFiscalAuthorityRouting = async (params) => {
     legacyPayload: commercialPayload,
   });
 
+  if (candidate.route === AUTHORITY_ENGINE.BLOCKED || candidate.authoritativeFiscalBlocked) {
+    return {
+      engine: AUTHORITY_ENGINE.BLOCKED,
+      blocked: true,
+      payloadToEmit: commercialPayload,
+      authorityDecision: candidate.authorityDecision,
+      attemptId: candidate.attemptId ?? null,
+      allocationRequestIds: [],
+      authorityAssumed: false,
+      authoritativeFiscalBlocked: true,
+      legacyFiscalApplied: false,
+      preflight: candidate.preflight ?? null,
+      issues: candidate.authorityDecision?.issues ?? [],
+    };
+  }
+
   if (candidate.route === AUTHORITY_ENGINE.V3 && candidate.authorityAssumed && candidate.candidatePayload) {
     await updateEmissionAttempt(candidate.attemptId, {
       attemptStatus: EMISSION_ATTEMPT_STATUS.PREPARED,
@@ -100,7 +118,8 @@ export const prepareFiscalAuthorityRouting = async (params) => {
     attemptId: candidate.attemptId ?? null,
     allocationRequestIds: [],
     authorityAssumed: false,
-    authoritativeNotEligible: candidate.authoritativeNotEligible ?? true,
+    authoritativeNotEligible: candidate.authoritativeNotEligible ?? false,
+    legacyFiscalApplied: false,
   };
 };
 
@@ -115,6 +134,15 @@ export const resolveNfeEmitPayloadForPlugnotas = async (params) => {
     ...params,
     commercialPayload,
   });
+
+  if (routing.engine === AUTHORITY_ENGINE.BLOCKED || routing.blocked) {
+    return {
+      ...routing,
+      payloadToEmit: commercialPayload,
+      legacyFiscalApplied: false,
+      blocked: true,
+    };
+  }
 
   if (routing.engine === AUTHORITY_ENGINE.V3) {
     const payloadToEmit = params.applyTechnicalTransforms

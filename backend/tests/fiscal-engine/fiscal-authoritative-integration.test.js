@@ -67,13 +67,65 @@ import { resolveFiscalFromContext } from '../../src/fiscal-engine/resolution/res
 import { triggerNfeEmissionShadowComparisonAfterSuccess } from '../../src/fiscal-engine/shadow/nfe-emission-shadow-hook.js';
 import { countProductionReadyFiscalRules } from '../../src/fiscal-engine/rollout/rollout-production-rules-gate.js';
 import { ALLOCATION_STATUS } from '../../src/fiscal-engine/allocation/allocation-constants.js';
+import {
+  insertApprovedRuleForFixture,
+  resetFiscalConfigurationRepository,
+  saveCompanyFiscalProfile,
+  ACCOUNTANT_RULE_STATUS,
+  FISCAL_PROFILE_STATUS,
+} from '../../src/fiscal-engine/index.js';
 
 const EMP = randomUUID();
 const PROD = 'prod-auth-int';
 const MEI_NOTA_ID = randomUUID();
 
+const registerAuthoritativeAccountantRule = () => {
+  saveCompanyFiscalProfile({
+    id: 'cfp-auth-int',
+    tenantId: EMP,
+    companyId: EMP,
+    establishmentId: 'default',
+    crt: 1,
+    taxRegime: 'SIMPLES_NACIONAL',
+    issuerUf: 'RJ',
+    status: FISCAL_PROFILE_STATUS.ACTIVE,
+    validFrom: '2020-01-01',
+    configuredBy: 'acc-test',
+    approvedBy: 'acc-test',
+  });
+
+  insertApprovedRuleForFixture({
+    id: 'auth-int-accountant-102',
+    tenantId: EMP,
+    version: 1,
+    status: ACCOUNTANT_RULE_STATUS.APPROVED,
+    baseSpecificity: 200,
+    conditions: {
+      crt: [1],
+      operationType: ['VENDA'],
+      operationScope: ['INTERNAL'],
+      itemSource: ['THIRD_PARTY'],
+      recipientTaxpayerStatus: ['NON_TAXPAYER'],
+      priorStStatus: ['NO_ST_EVIDENCE'],
+      issuerUf: ['RJ'],
+      destinationUf: ['RJ'],
+    },
+    approvedResult: {
+      cfop: '5102',
+      csosn: '102',
+      currentOperationSt: 'NOT_DUE',
+      pis: { cst: '07' },
+      cofins: { cst: '08' },
+    },
+    validFrom: '2020-01-01',
+    approvedBy: 'acc-test',
+  });
+};
+
 const registerAuthoritativeTestRules = () => {
+  resetFiscalConfigurationRepository();
   bootstrapDefaultTestRules();
+  registerAuthoritativeAccountantRule();
   registerFiscalRules([
     createValidatedProductionReadyCurrentStRule(),
     {
@@ -160,6 +212,7 @@ test.beforeEach(() => {
   __resetEmissionAttemptsMemoryForTests();
   __resetEmissionAttemptServiceForTests();
   resetFiscalRulesRepository();
+  resetFiscalConfigurationRepository();
   __resetFiscalPurchaseMemoryRepo();
   __resetStockAllocationMemoryRepo();
   __resetStockAllocationRepoForTests();
@@ -213,6 +266,9 @@ test('H2. V3=true + gates — adapter boundary recebe payload V3 fiscal', async 
     const item = result.payloadToEmit.itens[0];
     assert.equal(item.cfop, '5102');
     assert.equal(item.impostos?.icms?.CSOSN, '102');
+    assert.equal(item.tributos?.icms?.csosn, '102');
+    assert.equal(item.tributos?.pis?.cst, '07');
+    assert.equal(item.tributos?.cofins?.cst, '08');
     assert.notEqual(item.impostos?.icms?.CSOSN, '999');
     assert.ok(result.allocationRequestIds?.length >= 1);
     const attempt = findEmissionAttemptById(result.attemptId);
@@ -257,12 +313,13 @@ test('H4. LEGACY emit não cria reserva real', async () => {
 test('H5. preflight read-only não reserva', async () => {
   const lot = seedLot();
   registerAuthoritativeTestRules();
-  await runAuthoritativePreflightReadOnly({
+  const preflight = await runAuthoritativePreflightReadOnly({
     empresaId: EMP,
     businessType: 'RESELLER',
     legacyPayload: commercialPayload(),
     inMemoryLotsByProduct: { [PROD]: [lot] },
   });
+  assert.ok(preflight.fiscalResults[0]?.audit?.accountantConfig?.accountantApprovedRuleId);
   assert.equal(__getLotsByIdMapForTests().get(lot.id).quantidade_disponivel, lot.quantidade_disponivel);
 });
 

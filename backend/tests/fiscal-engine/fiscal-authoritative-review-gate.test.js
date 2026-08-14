@@ -60,6 +60,14 @@ import {
 import { normalizePlugnotasNfePayload } from '../../src/services/plugnotas/plugnotas-nfe-payload.js';
 import { applyMeiNfeEmitForcePolicy } from '../../src/services/plugnotas/plugnotas-mei-nfe-emit-force.js';
 import { ST_ALLOCATION_METHOD } from '../../src/fiscal-engine/types/st-allocation.js';
+import {
+  insertApprovedRuleForFixture,
+  resetFiscalConfigurationRepository,
+  saveCompanyFiscalProfile,
+  ACCOUNTANT_RULE_STATUS,
+  FISCAL_PROFILE_STATUS,
+  PIS_COFINS_CALCULATION_MODES,
+} from '../../src/fiscal-engine/index.js';
 
 const EMP = randomUUID();
 const PROD = 'prod-rg';
@@ -71,8 +79,88 @@ const V3_CFOP = '5102';
 const V3_CSOSN = '102';
 const V3_ORIGEM = '0';
 
+const seedAuthoritativeCompanyProfile = () => {
+  saveCompanyFiscalProfile({
+    id: 'cfp-rg-auth',
+    tenantId: EMP,
+    companyId: EMP,
+    establishmentId: 'default',
+    crt: 1,
+    taxRegime: 'SIMPLES_NACIONAL',
+    issuerUf: 'RJ',
+    status: FISCAL_PROFILE_STATUS.ACTIVE,
+    validFrom: '2020-01-01',
+    configuredBy: 'acc-rg',
+    approvedBy: 'acc-rg',
+  });
+};
+
+const registerAuthoritativeAccountantRule = (overrides = {}) => {
+  seedAuthoritativeCompanyProfile();
+  insertApprovedRuleForFixture({
+    id: 'rg-accountant-102',
+    tenantId: EMP,
+    version: 1,
+    status: ACCOUNTANT_RULE_STATUS.APPROVED,
+    baseSpecificity: 200,
+    conditions: {
+      crt: [1],
+      operationType: ['VENDA'],
+      operationScope: ['INTERNAL'],
+      itemSource: ['THIRD_PARTY'],
+      recipientTaxpayerStatus: ['NON_TAXPAYER'],
+      priorStStatus: ['NO_ST_EVIDENCE'],
+      issuerUf: ['RJ'],
+      destinationUf: ['RJ'],
+    },
+    approvedResult: {
+      cfop: '5102',
+      csosn: '102',
+      currentOperationSt: 'NOT_DUE',
+      pis: { cst: '07' },
+      cofins: { cst: '08' },
+    },
+    validFrom: '2020-01-01',
+    approvedBy: 'acc-rg',
+    ...overrides,
+  });
+};
+
+const registerAuthoritativeStRetainedAccountantRule = () => {
+  seedAuthoritativeCompanyProfile();
+  insertApprovedRuleForFixture({
+    id: 'rg-accountant-500-retained',
+    tenantId: EMP,
+    version: 1,
+    status: ACCOUNTANT_RULE_STATUS.APPROVED,
+    baseSpecificity: 250,
+    conditions: {
+      crt: [1],
+      operationType: ['VENDA'],
+      operationScope: ['INTERNAL'],
+      itemSource: ['THIRD_PARTY'],
+      recipientTaxpayerStatus: ['NON_TAXPAYER'],
+      priorStStatus: ['RETAINED'],
+      issuerUf: ['RJ'],
+      destinationUf: ['RJ'],
+    },
+    approvedResult: {
+      cfop: '5102',
+      csosn: '500',
+      currentOperationSt: 'NOT_DUE',
+      requiredXmlFields: ['vBCSTRet', 'vICMSSTRet'],
+      pis: { cst: '07' },
+      cofins: { cst: '08' },
+    },
+    validFrom: '2020-01-01',
+    approvedBy: 'acc-rg-st',
+  });
+};
+
 const registerAuthoritativeTestRules = () => {
+  resetFiscalConfigurationRepository();
   bootstrapDefaultTestRules();
+  registerAuthoritativeAccountantRule();
   registerFiscalRules([
     createValidatedProductionReadyCurrentStRule(),
     {
@@ -104,7 +192,9 @@ const registerAuthoritativeTestRules = () => {
 
 /** Réplica productionReady=true da fixture csosn-crt1-retained-not-due-internal (default-test-rules). */
 const registerAuthoritativeStRetainedTestRules = () => {
+  resetFiscalConfigurationRepository();
   bootstrapDefaultTestRules();
+  registerAuthoritativeStRetainedAccountantRule();
   registerFiscalRules([
     createValidatedProductionReadyCurrentStRule(),
     {
@@ -278,6 +368,7 @@ test.beforeEach(() => {
   __resetEmissionAttemptsMemoryForTests();
   __resetEmissionAttemptServiceForTests();
   resetFiscalRulesRepository();
+  resetFiscalConfigurationRepository();
   __resetFiscalPurchaseMemoryRepo();
   __resetStockAllocationMemoryRepo();
   __resetStockAllocationRepoForTests();

@@ -9,7 +9,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   evaluateAuthorityDecision,
-  markAuthorityNotEligibleAfterPreflight,
+  markAuthoritativeFiscalBlocked,
   assumeV3Authority,
 } from '../rollout/authority-decision.js';
 import {
@@ -17,6 +17,7 @@ import {
   runAuthoritativePreflightPostReservation,
 } from './authoritative-preflight.js';
 import { buildAuthoritativeNfePayloadFromFiscalResults } from './authoritative-payload-builder.js';
+import { applyAuthoritativePlugnotasTributosBridge } from './plugnotas-fiscal-v3-bridge.js';
 import { allocateFiscalStockForSaleItem, releaseFiscalStockAllocation } from '../allocation/stock-allocation.service.js';
 import {
   persistAuthorityRoutingAttempt,
@@ -30,6 +31,7 @@ import {
 } from './reservation-lifecycle.js';
 import {
   AUTHORITY_ENGINE,
+  AUTHORITY_DECISION_REASON,
   EMISSION_ATTEMPT_STATUS,
   REQUEST_OUTCOME,
 } from '../rollout/rollout-constants.js';
@@ -62,8 +64,21 @@ export const evaluateAuthoritativeEmissionRouting = async (params) => {
     authorityDecision,
     attemptStatus: authorityDecision.engine === AUTHORITY_ENGINE.V3
       ? EMISSION_ATTEMPT_STATUS.AUTHORITATIVE_NOT_ELIGIBLE
-      : EMISSION_ATTEMPT_STATUS.ROUTING_LEGACY,
+      : authorityDecision.engine === AUTHORITY_ENGINE.BLOCKED
+        ? EMISSION_ATTEMPT_STATUS.AUTHORITATIVE_NOT_ELIGIBLE
+        : EMISSION_ATTEMPT_STATUS.ROUTING_LEGACY,
   });
+
+  if (authorityDecision.engine === AUTHORITY_ENGINE.BLOCKED) {
+    return {
+      route: AUTHORITY_ENGINE.BLOCKED,
+      authorityDecision,
+      attemptId: attempt.attemptId,
+      preflight: null,
+      candidatePayload: null,
+      authoritativeFiscalBlocked: true,
+    };
+  }
 
   if (authorityDecision.engine !== AUTHORITY_ENGINE.V3) {
     return {
@@ -82,19 +97,19 @@ export const evaluateAuthoritativeEmissionRouting = async (params) => {
   });
 
   if (!preflight.ok) {
-    const notEligible = markAuthorityNotEligibleAfterPreflight(authorityDecision, preflight);
+    const blocked = markAuthoritativeFiscalBlocked(authorityDecision, preflight);
     await updateEmissionAttempt(attempt.attemptId, {
       attemptStatus: EMISSION_ATTEMPT_STATUS.PREFLIGHT_FAILED,
       preflightResult: preflight,
-      issues: notEligible.issues,
+      issues: blocked.issues,
     });
     return {
-      route: AUTHORITY_ENGINE.LEGACY,
-      authorityDecision: notEligible,
+      route: AUTHORITY_ENGINE.BLOCKED,
+      authorityDecision: blocked,
       attemptId: attempt.attemptId,
       preflight,
       candidatePayload: null,
-      authoritativeNotEligible: true,
+      authoritativeFiscalBlocked: true,
     };
   }
 
@@ -145,19 +160,20 @@ export const prepareAuthoritativeEmissionCandidate = async (params) => {
       for (const reqId of allocationRequestIds) {
         await releaseFiscalStockAllocation(params.empresaId ?? params.userId, reqId);
       }
-      const notEligible = markAuthorityNotEligibleAfterPreflight(routing.authorityDecision, {
+      const blocked = markAuthoritativeFiscalBlocked(routing.authorityDecision, {
         preflightId: routing.preflight.preflightId,
         issues: reserveResult.issues,
       });
       await updateEmissionAttempt(routing.attemptId, {
         attemptStatus: EMISSION_ATTEMPT_STATUS.PREFLIGHT_FAILED,
-        issues: notEligible.issues,
+        issues: blocked.issues,
       });
       return {
         ...routing,
-        route: AUTHORITY_ENGINE.LEGACY,
-        authorityDecision: notEligible,
+        route: AUTHORITY_ENGINE.BLOCKED,
+        authorityDecision: blocked,
         reservationFailed: true,
+        authoritativeFiscalBlocked: true,
       };
     }
 
@@ -188,17 +204,18 @@ export const prepareAuthoritativeEmissionCandidate = async (params) => {
     for (const reqId of allocationRequestIds) {
       await releaseFiscalStockAllocation(params.empresaId ?? params.userId, reqId);
     }
-    const notEligible = markAuthorityNotEligibleAfterPreflight(routing.authorityDecision, postPreflight);
+    const blocked = markAuthoritativeFiscalBlocked(routing.authorityDecision, postPreflight);
     await updateEmissionAttempt(routing.attemptId, {
       attemptStatus: EMISSION_ATTEMPT_STATUS.PREFLIGHT_FAILED,
       preflightResult: postPreflight,
-      issues: notEligible.issues,
+      issues: blocked.issues,
     });
     return {
       ...routing,
-      route: AUTHORITY_ENGINE.LEGACY,
-      authorityDecision: notEligible,
+      route: AUTHORITY_ENGINE.BLOCKED,
+      authorityDecision: blocked,
       postReservationFailed: true,
+      authoritativeFiscalBlocked: true,
     };
   }
 
@@ -219,6 +236,34 @@ export const prepareAuthoritativeEmissionCandidate = async (params) => {
     itemGroups,
   });
 
+  const bridged = applyAuthoritativePlugnotasTributosBridge({
+    payload: built.payload,
+    itemGroups,
+  });
+
+  if (!bridged.ok) {
+    for (const reqId of allocationRequestIds) {
+      await releaseFiscalStockAllocation(params.empresaId ?? params.userId, reqId);
+    }
+    const blocked = markAuthoritativeFiscalBlocked(routing.authorityDecision, {
+      preflightId: postPreflight.preflightId,
+      issues: bridged.issues,
+      reasonCode: AUTHORITY_DECISION_REASON.AUTHORITATIVE_PROVIDER_BRIDGE_NOT_EXECUTABLE,
+    });
+    await updateEmissionAttempt(routing.attemptId, {
+      attemptStatus: EMISSION_ATTEMPT_STATUS.PREFLIGHT_FAILED,
+      preflightResult: postPreflight,
+      issues: blocked.issues,
+    });
+    return {
+      ...routing,
+      route: AUTHORITY_ENGINE.BLOCKED,
+      authorityDecision: blocked,
+      bridgeFailed: true,
+      authoritativeFiscalBlocked: true,
+    };
+  }
+
   const assumed = assumeV3Authority(routing.authorityDecision, {
     preflightId: postPreflight.preflightId,
   });
@@ -226,7 +271,7 @@ export const prepareAuthoritativeEmissionCandidate = async (params) => {
   await updateEmissionAttempt(routing.attemptId, {
     attemptStatus: EMISSION_ATTEMPT_STATUS.AUTHORITY_ASSUMED_V3,
     allocationRequestIds,
-    candidatePayloadHash: hashPayloadForAudit(built.payload),
+    candidatePayloadHash: hashPayloadForAudit(bridged.payload),
     preflightResult: postPreflight,
   });
 
@@ -234,7 +279,7 @@ export const prepareAuthoritativeEmissionCandidate = async (params) => {
     ...routing,
     authorityDecision: assumed,
     allocationRequestIds,
-    candidatePayload: built.payload,
+    candidatePayload: bridged.payload,
     candidateAudit: built.audit,
     postPreflight,
     authorityAssumed: true,

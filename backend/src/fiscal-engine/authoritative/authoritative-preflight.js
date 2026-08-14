@@ -4,8 +4,10 @@
 import { randomUUID } from 'node:crypto';
 import { clonePayloadForShadow } from '../shadow/clone-payload-for-shadow.js';
 import { buildFiscalV3ShadowInput } from '../shadow/build-fiscal-v3-shadow-input.js';
-import { resolveFiscalFromContext, resolveFiscalFromContexts } from '../resolution/resolve-fiscal-from-context.js';
-import { crossValidateFiscalResolution } from '../validation/cross-validator.js';
+import {
+  resolveAuthoritativeFiscalFromContexts,
+  collectAuthoritativeAccountantConfigIssues,
+} from './resolve-authoritative-fiscal.js';
 import { createFiscalIssue } from '../types/fiscal-issue.js';
 import { RESOLUTION_STATUS } from '../types/resolution-status.js';
 import { buildFiscalContextFromAllocation } from '../context/build-allocation-fiscal-context.js';
@@ -30,6 +32,10 @@ const PREFLIGHT_BLOCKING_CODES = new Set([
   'XML_INVALID',
   'REQUIRED_FIELD_MISSING',
   'UNSUPPORTED_SCENARIO',
+  'REQUIRES_ACCOUNTANT_REVIEW',
+  'FISCAL_CONFIGURATION_INCOMPLETE',
+  'ACCOUNTANT_RULE_NOT_EXECUTABLE',
+  'ACCOUNTANT_RULE_PIS_COFINS_PAIR_REQUIRED',
 ]);
 
 /**
@@ -92,9 +98,7 @@ export const runAuthoritativePreflightReadOnly = async (params) => {
     lotFetcher: params.lotFetcher,
   });
 
-  const fiscalResults = resolveFiscalFromContexts(shadowInput.fiscalContexts, {
-    allowNonProductionRules: false,
-  });
+  const fiscalResults = await resolveAuthoritativeFiscalFromContexts(shadowInput.fiscalContexts);
 
   /** @type {import('../types/fiscal-issue.js').FiscalIssue[]} */
   const allIssues = [...(shadowInput.planningIssues ?? [])];
@@ -114,6 +118,7 @@ export const runAuthoritativePreflightReadOnly = async (params) => {
   }
 
   for (const result of fiscalResults) {
+    allIssues.push(...collectAuthoritativeAccountantConfigIssues(result));
     allIssues.push(...collectPreflightIssues(result));
     if (result.resolutionStatus !== RESOLUTION_STATUS.OK) {
       allIssues.push(createFiscalIssue(
@@ -229,11 +234,10 @@ export const runAuthoritativePreflightPostReservation = async (params) => {
     }
   }
 
-  const fiscalResults = resolveFiscalFromContexts(fiscalContexts, {
-    allowNonProductionRules: false,
-  });
+  const fiscalResults = await resolveAuthoritativeFiscalFromContexts(fiscalContexts);
 
   for (const result of fiscalResults) {
+    allIssues.push(...collectAuthoritativeAccountantConfigIssues(result));
     allIssues.push(...collectPreflightIssues(result));
     if (result.resolutionStatus !== RESOLUTION_STATUS.OK) {
       allIssues.push(createFiscalIssue(
