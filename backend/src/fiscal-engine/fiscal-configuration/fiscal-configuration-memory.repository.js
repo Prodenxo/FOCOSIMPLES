@@ -38,6 +38,12 @@ const ruleTemplates = new Map();
 
 const taxCatalogEntries = new Map();
 
+/** @type {Map<string, object>} */
+const fiscalProductGroups = new Map();
+
+/** @type {Map<string, object>} */
+const fiscalProductGroupMemberships = new Map();
+
 
 
 const tenantKey = (tenantId) => String(tenantId ?? '');
@@ -57,6 +63,10 @@ export const resetFiscalConfigurationRepository = () => {
   ruleTemplates.clear();
 
   taxCatalogEntries.clear();
+
+  fiscalProductGroups.clear();
+
+  fiscalProductGroupMemberships.clear();
 
 };
 
@@ -450,4 +460,111 @@ export const __getFiscalConfigurationStoreForTests = () => ({
 
   taxCatalogEntries,
 
+  fiscalProductGroups,
+
+  fiscalProductGroupMemberships,
+
 });
+
+// --- Fiscal Product Groups (Phase 8D) ---
+
+const groupKey = (tenantId, id) => `${tenantKey(tenantId)}:${id}`;
+const membershipKey = (tenantId, productId) => `${tenantKey(tenantId)}:${productId}`;
+
+export const saveFiscalProductGroupMemory = (group) => {
+  const stored = {
+    ...group,
+    updatedAt: new Date().toISOString(),
+  };
+  fiscalProductGroups.set(groupKey(group.tenantId, group.id), stored);
+  return stored;
+};
+
+export const getFiscalProductGroupMemory = (tenantId, id) => (
+  fiscalProductGroups.get(groupKey(tenantId, id)) ?? null
+);
+
+export const listFiscalProductGroupsMemory = (tenantId) => (
+  [...fiscalProductGroups.values()].filter((g) => g.tenantId === tenantId)
+);
+
+export const getFiscalProductGroupMembershipMemory = (tenantId, productId) => (
+  fiscalProductGroupMemberships.get(membershipKey(tenantId, productId)) ?? null
+);
+
+export const listFiscalProductGroupMembershipsByGroupMemory = (tenantId, fiscalProductGroupId) => (
+  [...fiscalProductGroupMemberships.values()]
+    .filter((m) => m.tenantId === tenantId && m.fiscalProductGroupId === fiscalProductGroupId)
+);
+
+export const listFiscalProductGroupMembershipsMemory = (tenantId) => (
+  [...fiscalProductGroupMemberships.values()].filter((m) => m.tenantId === tenantId)
+);
+
+export const upsertFiscalProductGroupMembershipMemory = (membership) => {
+  const stored = {
+    ...membership,
+    updatedAt: new Date().toISOString(),
+    assignedAt: membership.assignedAt ?? new Date().toISOString(),
+  };
+  fiscalProductGroupMemberships.set(
+    membershipKey(membership.tenantId, membership.productId),
+    stored,
+  );
+  return stored;
+};
+
+export const removeFiscalProductGroupMembershipMemory = (tenantId, productId) => {
+  const key = membershipKey(tenantId, productId);
+  const existed = fiscalProductGroupMemberships.has(key);
+  fiscalProductGroupMemberships.delete(key);
+  return existed;
+};
+
+export const bulkAssignProductsToFiscalGroupMemory = ({
+  tenantId,
+  fiscalProductGroupId,
+  productIds,
+  replaceExisting,
+  assignedBy,
+}) => {
+  const results = { assigned: [], skipped: [], replaced: [], conflicts: [] };
+  /** @type {string[]} */
+  const pending = [];
+
+  for (const productId of productIds) {
+    const existing = getFiscalProductGroupMembershipMemory(tenantId, productId);
+    if (existing && existing.fiscalProductGroupId === fiscalProductGroupId) {
+      results.skipped.push(productId);
+      continue;
+    }
+    if (existing && existing.fiscalProductGroupId !== fiscalProductGroupId) {
+      if (!replaceExisting) {
+        results.conflicts.push({ productId, currentGroupId: existing.fiscalProductGroupId });
+        continue;
+      }
+      results.replaced.push(productId);
+    }
+    pending.push(productId);
+  }
+
+  if (results.conflicts.length > 0 && !replaceExisting) {
+    const err = new Error('FISCAL_PRODUCT_GROUP_MEMBERSHIP_CONFLICT');
+    err.code = 'FISCAL_PRODUCT_GROUP_MEMBERSHIP_CONFLICT';
+    err.conflicts = results.conflicts;
+    throw err;
+  }
+
+  for (const productId of pending) {
+    upsertFiscalProductGroupMembershipMemory({
+      tenantId,
+      productId,
+      fiscalProductGroupId,
+      assignedBy,
+      updatedBy: assignedBy,
+    });
+    results.assigned.push(productId);
+  }
+
+  return results;
+};

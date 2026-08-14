@@ -29,6 +29,7 @@ export const translateApprovedConditionsToFiscalRuleConditions = (conditions = {
   delete out.productId;
   delete out.customerId;
   delete out.establishmentId;
+  delete out.fiscalProductGroupId;
   delete out.issuerUf;
   delete out.destinationUf;
   delete out.recipientPersonType;

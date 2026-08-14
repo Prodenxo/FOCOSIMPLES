@@ -17,6 +17,16 @@ import {
   previewRuleMatchForContext,
   getFiscalConfigurationReadiness,
 } from '../fiscal-engine/fiscal-configuration/fiscal-configuration.service.js';
+import {
+  createFiscalProductGroup,
+  updateFiscalProductGroup,
+  listFiscalProductGroupsForTenant,
+  assignProductsToFiscalGroup,
+  listProductsByFiscalProductGroupId,
+  removeProductFromFiscalGroup,
+  listUnassignedFiscalProducts,
+  createFiscalScenarioDraft,
+} from '../fiscal-engine/fiscal-configuration/fiscal-product-group.service.js';
 import { buildFiscalContextFromAllocation } from '../fiscal-engine/context/build-allocation-fiscal-context.js';
 
 const tenantFromReq = (req) => {
@@ -228,6 +238,120 @@ export const getReadiness = async (req, res, next) => {
     const tenantId = tenantFromReq(req);
     const readiness = await getFiscalConfigurationReadiness({ tenantId });
     return res.json(readiness);
+  } catch (err) {
+    return next(err);
+  }
+};
+
+export const listProductGroups = async (req, res, next) => {
+  try {
+    const tenantId = tenantFromReq(req);
+    const groups = await listFiscalProductGroupsForTenant(tenantId);
+    return res.json({ groups });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+export const postProductGroup = async (req, res, next) => {
+  try {
+    const tenantId = tenantFromReq(req);
+    const group = await createFiscalProductGroup(
+      { ...req.body, tenantId },
+      req.actor,
+      req.actorContext,
+    );
+    return res.status(201).json({ group });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+export const patchProductGroup = async (req, res, next) => {
+  try {
+    const tenantId = tenantFromReq(req);
+    const group = await updateFiscalProductGroup(
+      tenantId,
+      req.params.id,
+      req.body,
+      req.actor,
+      req.actorContext,
+    );
+    return res.json({ group });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+export const getProductGroupProducts = async (req, res, next) => {
+  try {
+    const tenantId = tenantFromReq(req);
+    const products = await listProductsByFiscalProductGroupId({
+      tenantId,
+      fiscalProductGroupId: req.params.id,
+    });
+    return res.json({ products });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+export const postProductGroupBulkAssign = async (req, res, next) => {
+  try {
+    const tenantId = tenantFromReq(req);
+    const result = await assignProductsToFiscalGroup({
+      tenantId,
+      fiscalProductGroupId: req.params.id,
+      productIds: req.body?.productIds ?? [],
+      replaceExisting: Boolean(req.body?.replaceExisting),
+      actor: req.actor,
+      actorContext: req.actorContext,
+    });
+    return res.json(result);
+  } catch (err) {
+    return next(err);
+  }
+};
+
+export const deleteProductGroupProduct = async (req, res, next) => {
+  try {
+    const tenantId = tenantFromReq(req);
+    const result = await removeProductFromFiscalGroup({
+      tenantId,
+      fiscalProductGroupId: req.params.id,
+      productId: req.params.productId,
+      actor: req.actor,
+      actorContext: req.actorContext,
+    });
+    return res.json(result);
+  } catch (err) {
+    return next(err);
+  }
+};
+
+export const getUnassignedProducts = async (req, res, next) => {
+  try {
+    const tenantId = tenantFromReq(req);
+    const productIds = await listUnassignedFiscalProducts({
+      tenantId,
+      actor: req.actor,
+      actorContext: req.actorContext,
+    });
+    return res.json({ productIds });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+export const postScenarioDraft = async (req, res, next) => {
+  try {
+    const tenantId = tenantFromReq(req);
+    const rule = await createFiscalScenarioDraft(
+      { ...req.body, tenantId },
+      req.actor,
+      req.actorContext,
+    );
+    return res.status(201).json({ rule });
   } catch (err) {
     return next(err);
   }

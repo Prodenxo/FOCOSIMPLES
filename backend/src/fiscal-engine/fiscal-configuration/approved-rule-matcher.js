@@ -85,6 +85,10 @@ export const approvedRuleMatchesFacts = (rule, facts) => {
 
     const actual = facts[key];
 
+    if (key === 'fiscalProductGroupId' && actual === null) {
+      return { matches: false, missingFacts: [], reasons: ['fiscalProductGroupId_absent'] };
+    }
+
     if (actual == null || actual === 'UNKNOWN' || actual === '') {
       const ruleRequires = Array.isArray(expected) ? expected.length > 0 : expected != null;
       if (ruleRequires) {
@@ -120,7 +124,8 @@ export const approvedRuleMatchesFacts = (rule, facts) => {
  * @param {object} [options]
  */
 export const resolveAccountantApprovedFiscalRule = (context, approvedRules, options = {}) => {
-  const facts = extractMatchingFactsFromContext(context, options.treatmentPartial ?? {});
+  const facts = options.matchingFacts
+    ?? extractMatchingFactsFromContext(context, options.treatmentPartial ?? {});
   const referenceDate = facts.referenceDate;
   const list = Array.isArray(approvedRules) ? approvedRules : [];
 

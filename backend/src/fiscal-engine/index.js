@@ -486,6 +486,8 @@ export {
   FISCAL_ENGINE_CAPABILITY,
   FISCAL_ENGINE_CAPABILITY_VERSION,
   FORBIDDEN_MATCH_CONDITION_KEYS,
+  FISCAL_PRODUCT_GROUP_STATUS,
+  ACCOUNTANT_RULE_AUTHORING_TYPE,
 } from './fiscal-configuration/constants.js';
 
 export { sanitizeMatchConditions, getMatchConditionsFromRule, detectForbiddenMatchConditions } from './fiscal-configuration/accountant-rule-conditions.js';
@@ -525,6 +527,26 @@ export {
 } from './fiscal-configuration/fiscal-configuration.repository.js';
 
 export { extractMatchingFactsFromContext, REQUIRED_FACT_FIELDS } from './fiscal-configuration/matching-facts.js';
+export { enrichMatchingFactsForContext } from './fiscal-configuration/matching-facts-enrichment.js';
+
+export {
+  createFiscalProductGroup,
+  updateFiscalProductGroup,
+  listFiscalProductGroupsForTenant,
+  assignProductsToFiscalGroup,
+  listProductsByFiscalProductGroupId,
+  removeProductFromFiscalGroup,
+  listUnassignedFiscalProducts,
+  createFiscalScenarioDraft,
+  getFiscalProductGroupForProduct,
+} from './fiscal-configuration/fiscal-product-group.service.js';
+
+export {
+  __registerCatalogProductForTests,
+  __registerCatalogProductForTenantTests,
+  __setCatalogProductMetadataForTests,
+  __resetFiscalProductCatalogPortForTests,
+} from './fiscal-configuration/fiscal-product-catalog.port.js';
 
 export {
   resolveAccountantApprovedFiscalRule,

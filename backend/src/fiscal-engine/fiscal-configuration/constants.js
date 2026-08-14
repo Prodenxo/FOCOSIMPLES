@@ -9,6 +9,18 @@ export const FISCAL_PROFILE_STATUS = Object.freeze({
   EXPIRED: 'EXPIRED',
 });
 
+/** Status MVP de FiscalProductGroup — subset operacional. */
+export const FISCAL_PRODUCT_GROUP_STATUS = Object.freeze({
+  ACTIVE: 'ACTIVE',
+  SUSPENDED: 'SUSPENDED',
+});
+
+/** Metadata de autoria em AccountantApprovedFiscalRule — cenário vs regra direta. */
+export const ACCOUNTANT_RULE_AUTHORING_TYPE = Object.freeze({
+  DIRECT_RULE: 'DIRECT_RULE',
+  FISCAL_SCENARIO: 'FISCAL_SCENARIO',
+});
+
 export const ACCOUNTANT_RULE_STATUS = Object.freeze({
   DRAFT: 'DRAFT',
   APPROVED: 'APPROVED',
@@ -80,6 +92,7 @@ export const PIS_COFINS_CLASSIFICATION = Object.freeze({
 export const APPROVED_RULE_SPECIFICITY_WEIGHTS = Object.freeze({
   customerId: 50,
   productId: 45,
+  fiscalProductGroupId: 40,
   ncm: 35,
   cest: 30,
   establishmentId: 25,

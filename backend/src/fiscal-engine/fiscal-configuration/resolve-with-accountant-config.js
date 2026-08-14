@@ -13,6 +13,7 @@ import { FISCAL_ENGINE_CAPABILITY_VERSION } from './constants.js';
 import { resolveAccountantApprovedFiscalRule } from './approved-rule-matcher.js';
 import { buildFiscalRulesFromApprovedRule } from './approved-rule-to-fiscal-rules.js';
 import { loadAccountantApprovedRulesForTenant } from './fiscal-configuration-loader.js';
+import { enrichMatchingFactsForContext } from './matching-facts-enrichment.js';
 import { evaluateAccountantRuleEngineCapability } from './fiscal-engine-capability.js';
 
 /**
@@ -130,7 +131,12 @@ export const resolveFiscalFromContextWithAccountantConfig = async (context, opti
   const tenantId = context.empresaId;
   const approvedRules = options.approvedRules
     ?? await loadAccountantApprovedRulesForTenant(tenantId);
-  return resolveFiscalFromContextWithAccountantConfigPure(context, approvedRules, options);
+  const matchingFacts = options.matchingFacts
+    ?? await enrichMatchingFactsForContext(context, options);
+  return resolveFiscalFromContextWithAccountantConfigPure(context, approvedRules, {
+    ...options,
+    matchingFacts,
+  });
 };
 
 /**
@@ -151,5 +157,7 @@ export const previewAccountantRuleMatchPure = (context, approvedRules, options =
 export const previewAccountantRuleMatch = async (context, options = {}) => {
   const approvedRules = options.approvedRules
     ?? await loadAccountantApprovedRulesForTenant(context.empresaId);
-  return previewAccountantRuleMatchPure(context, approvedRules, options);
+  const matchingFacts = options.matchingFacts
+    ?? await enrichMatchingFactsForContext(context, options);
+  return previewAccountantRuleMatchPure(context, approvedRules, { ...options, matchingFacts });
 };

@@ -192,6 +192,12 @@ export const createAccountantApprovedRuleDraft = async (rule, actor, actorContex
 
     version: rule.version ?? 1,
 
+    name: rule.name ?? null,
+
+    description: rule.description ?? null,
+
+    authoringType: rule.authoringType ?? 'DIRECT_RULE',
+
     configuredBy: actor?.userId ?? null,
 
     configuredAt: new Date().toISOString(),

@@ -161,3 +161,78 @@ export const runFiscalConfigurationRepositoryContractTests = async ({
 
   await teardown();
 };
+
+export const runFiscalProductGroupRepositoryContractTests = async ({
+  label,
+  setup,
+  teardown,
+  tenantId,
+  actorId,
+  productId,
+  productIdB,
+  actorContext,
+}) => {
+  await setup();
+
+  const { createFiscalProductGroup, assignProductsToFiscalGroup, listProductsByFiscalProductGroupId, removeProductFromFiscalGroup, listUnassignedFiscalProducts } = await import('../../../src/fiscal-engine/fiscal-configuration/fiscal-product-group.service.js');
+  const { listFiscalProductGroups, getFiscalProductGroupMembership } = await import('../../../src/fiscal-engine/fiscal-configuration/fiscal-configuration-repository.service.js');
+  const { __registerCatalogProductForTests } = await import('../../../src/fiscal-engine/fiscal-configuration/fiscal-product-catalog.port.js');
+
+  __registerCatalogProductForTests(actorId, productId);
+  __registerCatalogProductForTests(actorId, productIdB);
+
+  const actor = { userId: actorId, empresaId: tenantId };
+  const ctx = actorContext ?? { profileRole: 'admin', memberships: [{ role: 'admin' }] };
+
+  const group = await createFiscalProductGroup({ name: `contract-group-${label}`, tenantId }, actor, ctx);
+  assert.equal(group.status, 'ACTIVE');
+
+  const assign = await assignProductsToFiscalGroup({
+    tenantId,
+    fiscalProductGroupId: group.id,
+    productIds: [productId],
+    actor,
+    actorContext: ctx,
+  });
+  assert.deepEqual(assign.assigned, [productId]);
+
+  const idempotent = await assignProductsToFiscalGroup({
+    tenantId,
+    fiscalProductGroupId: group.id,
+    productIds: [productId],
+    actor,
+    actorContext: ctx,
+  });
+  assert.deepEqual(idempotent.skipped, [productId]);
+
+  const members = await listProductsByFiscalProductGroupId({ tenantId, fiscalProductGroupId: group.id });
+  assert.equal(members.length, 1);
+
+  const membership = await getFiscalProductGroupMembership({ tenantId, productId });
+  assert.equal(membership.fiscalProductGroupId, group.id);
+
+  await removeProductFromFiscalGroup({
+    tenantId,
+    fiscalProductGroupId: group.id,
+    productId,
+    actor,
+    actorContext: ctx,
+  });
+  assert.equal((await getFiscalProductGroupMembership({ tenantId, productId })), null);
+
+  await assignProductsToFiscalGroup({
+    tenantId,
+    fiscalProductGroupId: group.id,
+    productIds: [productId, productIdB],
+    actor,
+    actorContext: ctx,
+  });
+  const unassigned = await listUnassignedFiscalProducts({ tenantId, actor, actorContext: ctx });
+  assert.ok(!unassigned.includes(productId));
+  assert.ok(!unassigned.includes(productIdB));
+
+  const groups = await listFiscalProductGroups(tenantId);
+  assert.ok(groups.some((g) => g.id === group.id));
+
+  await teardown();
+};

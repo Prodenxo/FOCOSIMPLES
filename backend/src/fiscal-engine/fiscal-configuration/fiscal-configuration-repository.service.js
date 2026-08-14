@@ -349,6 +349,66 @@ export const listTaxCatalogEntries = route(
 
 
 
+// --- Fiscal Product Groups (Phase 8D) ---
+
+export const saveFiscalProductGroup = route(
+  memoryRepo.saveFiscalProductGroupMemory,
+  pgRepo.upsertFiscalProductGroupPg,
+);
+
+export const getFiscalProductGroup = route(
+  ({ tenantId, id }) => memoryRepo.getFiscalProductGroupMemory(tenantId, id),
+  pgRepo.fetchFiscalProductGroupPg,
+);
+
+export const listFiscalProductGroups = route(
+  memoryRepo.listFiscalProductGroupsMemory,
+  pgRepo.listFiscalProductGroupsPg,
+);
+
+export const getFiscalProductGroupMembership = route(
+  ({ tenantId, productId }) => memoryRepo.getFiscalProductGroupMembershipMemory(tenantId, productId),
+  pgRepo.fetchFiscalProductGroupMembershipPg,
+);
+
+export const listProductsByFiscalProductGroup = route(
+  ({ tenantId, fiscalProductGroupId }) => (
+    memoryRepo.listFiscalProductGroupMembershipsByGroupMemory(tenantId, fiscalProductGroupId)
+  ),
+  pgRepo.listFiscalProductGroupMembershipsByGroupPg,
+);
+
+export const listFiscalProductGroupMemberships = route(
+  memoryRepo.listFiscalProductGroupMembershipsMemory,
+  pgRepo.listFiscalProductGroupMembershipsPg,
+);
+
+export const removeFiscalProductGroupMembership = route(
+  ({ tenantId, productId }) => memoryRepo.removeFiscalProductGroupMembershipMemory(tenantId, productId),
+  pgRepo.removeFiscalProductGroupMembershipPg,
+);
+
+export const bulkAssignProductsToFiscalGroup = async (params) => (
+  usePostgres
+    ? pgRepo.bulkAssignProductsToFiscalGroupPg(params)
+    : memoryRepo.bulkAssignProductsToFiscalGroupMemory(params)
+);
+
+/**
+ * Retorna fiscalProductGroupId apenas se grupo ACTIVE.
+ */
+export const getActiveFiscalProductGroupIdForProduct = async ({ tenantId, productId }) => {
+  if (!tenantId || !productId) return null;
+  if (usePostgres && !pgRepo.isValidPgUuid(productId)) return null;
+  const membership = await getFiscalProductGroupMembership({ tenantId, productId });
+  if (!membership?.fiscalProductGroupId) return null;
+  const group = await getFiscalProductGroup({ tenantId, id: membership.fiscalProductGroupId });
+  if (!group || group.status !== 'ACTIVE') return null;
+  return membership.fiscalProductGroupId;
+};
+
+
+
 /**
 
  * Sync accessor — apenas memory mode. Lança se Postgres ativo (zero fallback).

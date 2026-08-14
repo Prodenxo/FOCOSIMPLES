@@ -11,17 +11,31 @@ import { assertValidAccountantRuleStatusTransition } from './accountant-rule-sta
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const MIGRATION_FILENAME = '20260813180000_fiscal_configuration_phase8c.sql';
+const MIGRATION_FILENAME_8C = '20260813180000_fiscal_configuration_phase8c.sql';
+const MIGRATION_FILENAME_8D = '20260814120000_fiscal_configuration_phase8d_product_groups.sql';
 
-const MIGRATION_CANDIDATE_PATHS = [
-  join(__dirname, '../../../supabase/migrations', MIGRATION_FILENAME),
-  join(__dirname, '../../../../supabase/migrations', MIGRATION_FILENAME),
+const MIGRATION_CANDIDATE_PATHS_8C = [
+  join(__dirname, '../../../supabase/migrations', MIGRATION_FILENAME_8C),
+  join(__dirname, '../../../../supabase/migrations', MIGRATION_FILENAME_8C),
+];
+
+const MIGRATION_CANDIDATE_PATHS_8D = [
+  join(__dirname, '../../../supabase/migrations', MIGRATION_FILENAME_8D),
+  join(__dirname, '../../../../supabase/migrations', MIGRATION_FILENAME_8D),
 ];
 
 const jsonValue = (value) => {
   if (value == null) return null;
   return JSON.stringify(value);
 };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** @param {unknown} value */
+export const isValidPgUuid = (value) => UUID_RE.test(String(value ?? ''));
+
+/** @param {unknown} value */
+const toOptionalPgUuid = (value) => (isValidPgUuid(value) ? String(value) : null);
 
 /** Normaliza colunas date/timestamptz do PG para string ISO YYYY-MM-DD. */
 const toIsoDateString = (value) => {
@@ -57,6 +71,9 @@ const mapAccountantRuleRow = (row) => (row ? {
   justification: row.justification,
   legalSourceRefs: row.legal_source_refs ?? [],
   sourceLegalReference: row.source_legal_reference,
+  name: row.name ?? null,
+  description: row.description ?? null,
+  authoringType: row.authoring_type ?? 'DIRECT_RULE',
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 } : null);
@@ -174,7 +191,16 @@ const mapTaxCatalogEntryRow = (row) => (row ? {
 } : null);
 
 const readPhase8cMigrationSql = () => {
-  for (const path of MIGRATION_CANDIDATE_PATHS) {
+  for (const path of MIGRATION_CANDIDATE_PATHS_8C) {
+    if (existsSync(path)) {
+      return readFileSync(path, 'utf8');
+    }
+  }
+  return null;
+};
+
+const readPhase8dMigrationSql = () => {
+  for (const path of MIGRATION_CANDIDATE_PATHS_8D) {
     if (existsSync(path)) {
       return readFileSync(path, 'utf8');
     }
@@ -427,9 +453,10 @@ export const upsertAccountantRuleDraftPg = async (rule) => {
       required_facts, base_specificity, valid_from, valid_until,
       configured_by, configured_at, approved_by, approved_at,
       suspended_by, suspended_at, revoked_by, revoked_at,
-      justification, legal_source_refs, source_legal_reference, updated_at
+      justification, legal_source_refs, source_legal_reference,
+      name, description, authoring_type, updated_at
     ) VALUES (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,now()
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,now()
     )
     ON CONFLICT (id, tenant_id, version) DO UPDATE SET
       establishment_id = EXCLUDED.establishment_id,
@@ -444,6 +471,9 @@ export const upsertAccountantRuleDraftPg = async (rule) => {
       justification = EXCLUDED.justification,
       legal_source_refs = EXCLUDED.legal_source_refs,
       source_legal_reference = EXCLUDED.source_legal_reference,
+      name = EXCLUDED.name,
+      description = EXCLUDED.description,
+      authoring_type = EXCLUDED.authoring_type,
       updated_at = now()
     WHERE accountant_approved_fiscal_rules.status = 'DRAFT'
     RETURNING *`,
@@ -470,6 +500,9 @@ export const upsertAccountantRuleDraftPg = async (rule) => {
       rule.justification ?? null,
       jsonValue(rule.legalSourceRefs ?? []),
       rule.sourceLegalReference ?? null,
+      rule.name ?? null,
+      rule.description ?? null,
+      rule.authoringType ?? 'DIRECT_RULE',
     ],
   );
 
@@ -560,9 +593,10 @@ export const createAccountantRuleNewVersionPg = async (rule) => {
       required_facts, base_specificity, valid_from, valid_until,
       configured_by, configured_at,
       approved_by, approved_at, suspended_by, suspended_at, revoked_by, revoked_at,
-      justification, legal_source_refs, source_legal_reference, updated_at
+      justification, legal_source_refs, source_legal_reference,
+      name, description, authoring_type, updated_at
     ) VALUES (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,now()
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,now()
     )
     RETURNING *`,
     [
@@ -588,6 +622,9 @@ export const createAccountantRuleNewVersionPg = async (rule) => {
       rule.justification ?? null,
       jsonValue(rule.legalSourceRefs ?? []),
       rule.sourceLegalReference ?? null,
+      rule.name ?? null,
+      rule.description ?? null,
+      rule.authoringType ?? 'DIRECT_RULE',
     ],
   );
 
@@ -958,7 +995,181 @@ export const upsertTaxCatalogEntryPg = async (entry) => {
   return mapTaxCatalogEntryRow(result.rows[0]);
 };
 
-// --- Test helpers ---
+// --- Fiscal Product Groups (Phase 8D) ---
+
+const mapFiscalProductGroupRow = (row) => (row ? {
+  id: row.id,
+  tenantId: row.tenant_id != null ? String(row.tenant_id) : null,
+  name: row.name,
+  description: row.description,
+  status: row.status,
+  createdBy: row.created_by,
+  createdAt: row.created_at,
+  updatedBy: row.updated_by,
+  updatedAt: row.updated_at,
+} : null);
+
+const mapFiscalProductGroupMembershipRow = (row) => (row ? {
+  id: row.id,
+  tenantId: row.tenant_id != null ? String(row.tenant_id) : null,
+  productId: row.product_id != null ? String(row.product_id) : null,
+  fiscalProductGroupId: row.fiscal_product_group_id != null ? String(row.fiscal_product_group_id) : null,
+  assignedBy: row.assigned_by,
+  assignedAt: row.assigned_at,
+  updatedBy: row.updated_by,
+  updatedAt: row.updated_at,
+} : null);
+
+/**
+ * Lock test-only: serializa bootstrap DDL 8D vs DML de testes nas mesmas relações.
+ * NÃO usar no runtime de produção.
+ * @internal
+ */
+export const FISCAL_PRODUCT_GROUP_TEST_DML_SERIAL_LOCK_LABEL = 'fiscal_product_group_test_dml_serial';
+
+/** Prefixo dos advisory locks runtime por tenant+produto. */
+export const FISCAL_PRODUCT_GROUP_MEMBERSHIP_ADVISORY_LOCK_PREFIX = 'fpg-membership';
+
+/** @param {string} tenantId @param {string} productId */
+export const buildFiscalProductGroupMembershipAdvisoryLockKey = (tenantId, productId) => (
+  `${FISCAL_PRODUCT_GROUP_MEMBERSHIP_ADVISORY_LOCK_PREFIX}:${tenantId}:${productId}`
+);
+
+/** @param {import('pg').PoolClient} client @internal testes */
+const acquireFiscalProductGroupTestDmlSerialLock = async (client) => {
+  await client.query(
+    'SELECT pg_advisory_xact_lock(hashtext($1))',
+    [FISCAL_PRODUCT_GROUP_TEST_DML_SERIAL_LOCK_LABEL],
+  );
+};
+
+/** Serialização test harness vs bootstrap DDL — inativo fora do node --test runner. */
+const shouldSerializeFiscalProductGroupTestDml = () => process.argv.includes('--test');
+
+/** @param {import('pg').PoolClient} client */
+const maybeAcquireFiscalProductGroupTestDmlSerialLock = async (client) => {
+  if (shouldSerializeFiscalProductGroupTestDml()) {
+    await acquireFiscalProductGroupTestDmlSerialLock(client);
+  }
+};
+
+export const upsertFiscalProductGroupPg = async (group) => {
+  const pool = getPgPool();
+  const insertSql = `INSERT INTO fiscal_product_groups (
+      id, tenant_id, name, description, status, created_by, created_at, updated_by, updated_at
+    ) VALUES (
+      COALESCE($1, gen_random_uuid()), $2, $3, $4, $5, $6, COALESCE($7, now()), $8, now()
+    )
+    ON CONFLICT (tenant_id, name) DO UPDATE SET
+      description = EXCLUDED.description,
+      status = EXCLUDED.status,
+      updated_by = EXCLUDED.updated_by,
+      updated_at = now()
+    RETURNING *`;
+  const insertParams = [
+    group.id ?? null,
+    group.tenantId,
+    group.name,
+    group.description ?? null,
+    group.status ?? 'ACTIVE',
+    toOptionalPgUuid(group.createdBy),
+    group.createdAt ?? null,
+    toOptionalPgUuid(group.updatedBy),
+  ];
+
+  if (!shouldSerializeFiscalProductGroupTestDml()) {
+    const result = await pool.query(insertSql, insertParams);
+    return mapFiscalProductGroupRow(result.rows[0]);
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await maybeAcquireFiscalProductGroupTestDmlSerialLock(client);
+    const result = await client.query(insertSql, insertParams);
+    await client.query('COMMIT');
+    return mapFiscalProductGroupRow(result.rows[0]);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+export const fetchFiscalProductGroupPg = async ({ tenantId, id }) => {
+  const pool = getPgPool();
+  const result = await pool.query(
+    `SELECT * FROM fiscal_product_groups WHERE tenant_id = $1 AND id = $2 LIMIT 1`,
+    [tenantId, id],
+  );
+  return mapFiscalProductGroupRow(result.rows[0]);
+};
+
+export const listFiscalProductGroupsPg = async (tenantId) => {
+  const pool = getPgPool();
+  const result = await pool.query(
+    `SELECT * FROM fiscal_product_groups WHERE tenant_id = $1 ORDER BY name`,
+    [tenantId],
+  );
+  return result.rows.map(mapFiscalProductGroupRow);
+};
+
+export const fetchFiscalProductGroupMembershipPg = async ({ tenantId, productId }) => {
+  if (!isValidPgUuid(productId)) return null;
+  const pool = getPgPool();
+  const result = await pool.query(
+    `SELECT * FROM fiscal_product_group_memberships
+     WHERE tenant_id = $1 AND product_id = $2 LIMIT 1`,
+    [tenantId, productId],
+  );
+  return mapFiscalProductGroupMembershipRow(result.rows[0]);
+};
+
+export const listFiscalProductGroupMembershipsByGroupPg = async ({ tenantId, fiscalProductGroupId }) => {
+  const pool = getPgPool();
+  const result = await pool.query(
+    `SELECT * FROM fiscal_product_group_memberships
+     WHERE tenant_id = $1 AND fiscal_product_group_id = $2 ORDER BY product_id`,
+    [tenantId, fiscalProductGroupId],
+  );
+  return result.rows.map(mapFiscalProductGroupMembershipRow);
+};
+
+export const listFiscalProductGroupMembershipsPg = async (tenantId) => {
+  const pool = getPgPool();
+  const result = await pool.query(
+    `SELECT * FROM fiscal_product_group_memberships WHERE tenant_id = $1`,
+    [tenantId],
+  );
+  return result.rows.map(mapFiscalProductGroupMembershipRow);
+};
+
+export const removeFiscalProductGroupMembershipPg = async ({ tenantId, productId }) => {
+  if (!isValidPgUuid(productId)) return false;
+  const pool = getPgPool();
+  const deleteSql = `DELETE FROM fiscal_product_group_memberships
+     WHERE tenant_id = $1 AND product_id = $2 RETURNING id`;
+
+  if (!shouldSerializeFiscalProductGroupTestDml()) {
+    const result = await pool.query(deleteSql, [tenantId, productId]);
+    return result.rowCount > 0;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await maybeAcquireFiscalProductGroupTestDmlSerialLock(client);
+    const result = await client.query(deleteSql, [tenantId, productId]);
+    await client.query('COMMIT');
+    return result.rowCount > 0;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
 
 /**
  * Advisory lock exclusivo Phase 8C test schema bootstrap.
@@ -966,6 +1177,115 @@ export const upsertTaxCatalogEntryPg = async (entry) => {
  * @internal
  */
 export const FISCAL_CONFIGURATION_PHASE8C_TEST_SCHEMA_LOCK_LABEL = 'fiscal_configuration_phase8c_test_schema';
+
+export const bulkAssignProductsToFiscalGroupPg = async ({
+  tenantId,
+  fiscalProductGroupId,
+  productIds,
+  replaceExisting,
+  assignedBy,
+}) => {
+  const uniqueSorted = [...new Set((productIds ?? []).map(String))].sort();
+  const pool = getPgPool();
+  const client = await pool.connect();
+  const results = { assigned: [], skipped: [], replaced: [], conflicts: [] };
+  /** @type {string[]} */
+  const pending = [];
+
+  try {
+    await client.query('BEGIN');
+
+    await maybeAcquireFiscalProductGroupTestDmlSerialLock(client);
+
+    const assignedByUuid = toOptionalPgUuid(assignedBy);
+
+    for (const productId of uniqueSorted) {
+      if (!isValidPgUuid(productId)) {
+        throw new Error('FISCAL_PRODUCT_ID_INVALID_UUID');
+      }
+    }
+
+    for (const productId of uniqueSorted) {
+      await client.query(
+        'SELECT pg_advisory_xact_lock(hashtext($1))',
+        [buildFiscalProductGroupMembershipAdvisoryLockKey(tenantId, productId)],
+      );
+    }
+
+    const groupCheck = await client.query(
+      `SELECT id, status FROM fiscal_product_groups WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
+      [tenantId, fiscalProductGroupId],
+    );
+    if (!groupCheck.rows.length) throw new Error('FISCAL_PRODUCT_GROUP_NOT_FOUND');
+    if (groupCheck.rows[0].status !== 'ACTIVE') throw new Error('FISCAL_PRODUCT_GROUP_NOT_ACTIVE');
+
+    for (const productId of uniqueSorted) {
+      const existing = await client.query(
+        `SELECT fiscal_product_group_id FROM fiscal_product_group_memberships
+         WHERE tenant_id = $1 AND product_id = $2`,
+        [tenantId, productId],
+      );
+
+      if (existing.rows.length) {
+        const currentGroupId = String(existing.rows[0].fiscal_product_group_id);
+        if (currentGroupId === String(fiscalProductGroupId)) {
+          results.skipped.push(productId);
+          continue;
+        }
+        if (!replaceExisting) {
+          results.conflicts.push({ productId, currentGroupId });
+          continue;
+        }
+        results.replaced.push(productId);
+      }
+
+      pending.push(productId);
+    }
+
+    if (results.conflicts.length > 0 && !replaceExisting) {
+      const err = new Error('FISCAL_PRODUCT_GROUP_MEMBERSHIP_CONFLICT');
+      err.code = 'FISCAL_PRODUCT_GROUP_MEMBERSHIP_CONFLICT';
+      err.conflicts = results.conflicts;
+      throw err;
+    }
+
+    for (const productId of pending) {
+      try {
+        await client.query(
+          `INSERT INTO fiscal_product_group_memberships (
+            tenant_id, product_id, fiscal_product_group_id, assigned_by, assigned_at, updated_by, updated_at
+          ) VALUES ($1, $2, $3, $4, now(), $4, now())
+          ON CONFLICT (tenant_id, product_id) DO UPDATE SET
+            fiscal_product_group_id = EXCLUDED.fiscal_product_group_id,
+            assigned_by = EXCLUDED.assigned_by,
+            assigned_at = now(),
+            updated_by = EXCLUDED.updated_by,
+            updated_at = now()`,
+          [tenantId, productId, fiscalProductGroupId, assignedByUuid],
+        );
+        results.assigned.push(productId);
+      } catch (insertError) {
+        if (insertError?.code === '23505') {
+          const err = new Error('FISCAL_PRODUCT_GROUP_MEMBERSHIP_CONFLICT');
+          err.code = 'FISCAL_PRODUCT_GROUP_MEMBERSHIP_CONFLICT';
+          err.conflicts = [{ productId, reason: 'unique_violation' }];
+          throw err;
+        }
+        throw insertError;
+      }
+    }
+
+    await client.query('COMMIT');
+    return results;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+// --- Test helpers ---
 
 /** @internal testes — serializa bootstrap DDL entre test files paralelos */
 export const __ensureFiscalConfigurationSchemaForTests = async () => {
@@ -975,11 +1295,14 @@ export const __ensureFiscalConfigurationSchemaForTests = async () => {
 
   try {
     await client.query('BEGIN');
+    await acquireFiscalProductGroupTestDmlSerialLock(client);
     await client.query(
       'SELECT pg_advisory_xact_lock(hashtext($1))',
       [FISCAL_CONFIGURATION_PHASE8C_TEST_SCHEMA_LOCK_LABEL],
     );
     await client.query(migrationSql);
+    const migration8d = readPhase8dMigrationSql();
+    if (migration8d) await client.query(migration8d);
     await client.query(`
       ALTER TABLE accountant_approved_fiscal_rules
         ADD COLUMN IF NOT EXISTS suspended_by uuid,
@@ -1003,10 +1326,23 @@ export const __ensureFiscalConfigurationSchemaForTests = async () => {
 /** @internal testes */
 export const __deleteFiscalConfigurationForTenantTests = async (tenantId) => {
   const pool = getPgPool();
-  await pool.query('DELETE FROM accountant_approved_fiscal_rules WHERE tenant_id = $1', [tenantId]);
-  await pool.query('DELETE FROM company_fiscal_profiles WHERE tenant_id = $1', [tenantId]);
-  await pool.query('DELETE FROM product_fiscal_profiles WHERE tenant_id = $1', [tenantId]);
-  await pool.query('DELETE FROM customer_tax_profiles WHERE tenant_id = $1', [tenantId]);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await acquireFiscalProductGroupTestDmlSerialLock(client);
+    await client.query('DELETE FROM fiscal_product_group_memberships WHERE tenant_id = $1', [tenantId]);
+    await client.query('DELETE FROM fiscal_product_groups WHERE tenant_id = $1', [tenantId]);
+    await client.query('DELETE FROM accountant_approved_fiscal_rules WHERE tenant_id = $1', [tenantId]);
+    await client.query('DELETE FROM company_fiscal_profiles WHERE tenant_id = $1', [tenantId]);
+    await client.query('DELETE FROM product_fiscal_profiles WHERE tenant_id = $1', [tenantId]);
+    await client.query('DELETE FROM customer_tax_profiles WHERE tenant_id = $1', [tenantId]);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 /** @internal testes */

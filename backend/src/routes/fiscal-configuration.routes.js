@@ -30,6 +30,14 @@ export const createFiscalConfigurationRouter = (options = {}) => {
   router.post('/rules/preview', requireFiscalConfigEditDraft, controller.postPreviewRule);
   router.post('/preview-match', requireFiscalConfigView, controller.postPreviewMatch);
   router.get('/readiness', requireFiscalConfigView, controller.getReadiness);
+  router.get('/product-groups', requireFiscalConfigView, controller.listProductGroups);
+  router.post('/product-groups', requireFiscalConfigEditDraft, controller.postProductGroup);
+  router.patch('/product-groups/:id', requireFiscalConfigEditDraft, controller.patchProductGroup);
+  router.get('/product-groups/:id/products', requireFiscalConfigView, controller.getProductGroupProducts);
+  router.post('/product-groups/:id/products/bulk-assign', requireFiscalConfigEditDraft, controller.postProductGroupBulkAssign);
+  router.delete('/product-groups/:id/products/:productId', requireFiscalConfigEditDraft, controller.deleteProductGroupProduct);
+  router.get('/products/unassigned', requireFiscalConfigView, controller.getUnassignedProducts);
+  router.post('/scenarios', requireFiscalConfigEditDraft, controller.postScenarioDraft);
   return router;
 };
 
