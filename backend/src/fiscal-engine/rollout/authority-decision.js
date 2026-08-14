@@ -22,24 +22,22 @@ import {
 } from './rollout-constants.js';
 import { isAuthoritativePersistenceBlockedInRuntime } from '../config/fiscal-repository-mode.js';
 
-/**
- * @typedef {object} AuthorityDecision
- * @property {'LEGACY' | 'V3' | 'BLOCKED'} engine
- * @property {string[]} reasons
- * @property {string | null} rolloutMode
- * @property {boolean | null} canarySelected
- * @property {object | null} readiness
- * @property {string | null} preflightId
- * @property {string} engineVersion
- * @property {boolean} v3Candidate
- * @property {import('../types/fiscal-issue.js').FiscalIssue[]} issues
- */
+/** @internal — capacidade exclusiva do orquestrador dry-run read-only */
+const DRY_RUN_AUTHORITY_EVALUATION_KEY = Symbol('fiscal.engine.dryRunAuthorityEvaluation');
+
+const sanitizeAuthorityDecisionParams = (params = {}) => {
+  const safe = { ...params };
+  delete safe.dryRunEvaluation;
+  delete safe[DRY_RUN_AUTHORITY_EVALUATION_KEY];
+  return safe;
+};
 
 /**
  * @param {object} params
  * @returns {Promise<AuthorityDecision>}
  */
-export const evaluateAuthorityDecision = async (params) => {
+const evaluateAuthorityDecisionInternal = async (params) => {
+  const dryRunEvaluation = params[DRY_RUN_AUTHORITY_EVALUATION_KEY] === true;
   const empresaId = params.empresaId ?? params.userId ?? null;
   const documentType = String(params.documentType ?? 'NFE').trim().toUpperCase();
   const emissionStableId = resolveEmissionStableId({
@@ -54,7 +52,7 @@ export const evaluateAuthorityDecision = async (params) => {
   /** @type {import('../types/fiscal-issue.js').FiscalIssue[]} */
   const issues = [];
 
-  if (!isFiscalEngineV3Enabled()) {
+  if (!dryRunEvaluation && !isFiscalEngineV3Enabled()) {
     return buildDecision({
       engine: AUTHORITY_ENGINE.LEGACY,
       reasons: [AUTHORITY_DECISION_REASON.MASTER_SWITCH_OFF],
@@ -169,6 +167,40 @@ export const evaluateAuthorityDecision = async (params) => {
     issues,
   });
 };
+
+/**
+ * @typedef {object} AuthorityDecision
+ * @property {'LEGACY' | 'V3' | 'BLOCKED'} engine
+ * @property {string[]} reasons
+ * @property {string | null} rolloutMode
+ * @property {boolean | null} canarySelected
+ * @property {object | null} readiness
+ * @property {string | null} preflightId
+ * @property {string} engineVersion
+ * @property {boolean} v3Candidate
+ * @property {import('../types/fiscal-issue.js').FiscalIssue[]} issues
+ */
+
+/**
+ * Avaliação authoritative padrão — ignora dryRunEvaluation de input externo.
+ * @param {object} params
+ * @returns {Promise<AuthorityDecision>}
+ */
+export const evaluateAuthorityDecision = async (params) => (
+  evaluateAuthorityDecisionInternal(sanitizeAuthorityDecisionParams(params))
+);
+
+/**
+ * Avaliação V3 isolada para dry-run read-only — não exposta a HTTP/payload comercial.
+ * @param {object} params
+ * @returns {Promise<AuthorityDecision>}
+ */
+export const evaluateAuthorityDecisionForDryRunReadOnly = async (params) => (
+  evaluateAuthorityDecisionInternal({
+    ...sanitizeAuthorityDecisionParams(params),
+    [DRY_RUN_AUTHORITY_EVALUATION_KEY]: true,
+  })
+);
 
 /**
  * Fail-closed após seleção authoritative — nunca degradar fiscal para legacy.

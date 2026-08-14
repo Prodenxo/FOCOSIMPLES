@@ -324,6 +324,7 @@ export {
 } from './rollout/rollout-accountant-config-gate.js';
 export {
   evaluateAuthorityDecision,
+  evaluateAuthorityDecisionForDryRunReadOnly,
   markAuthoritativeFiscalBlocked,
   markAuthorityNotEligibleAfterPreflight,
   assumeV3Authority,
@@ -367,6 +368,10 @@ export {
   NFE_EMIT_TRANSFORM_CLASS,
   NFE_EMIT_PIPELINE_ORDER,
 } from './authoritative/nfe-emit-authority-integration.js';
+export {
+  runAuthoritativeNfeDryRunReadOnly,
+  runAuthoritativeNfeDryRunReadOnly as resolveAuthoritativeNfeDryRunReadOnly,
+} from './authoritative/authoritative-nfe-dry-run-readonly.js';
 export {
   findEmissionAttemptById,
   findEmissionAttemptByIdIntegracao,
