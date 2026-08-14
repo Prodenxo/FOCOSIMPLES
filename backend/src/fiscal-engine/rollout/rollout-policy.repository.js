@@ -24,6 +24,36 @@ export const fetchRolloutPolicyFromPg = async (empresaId) => {
 };
 
 /** @internal testes */
+export const __upsertRolloutPolicyForTests = async (empresaId, policy) => {
+  const pool = getPgPool();
+  await pool.query(
+    `INSERT INTO fiscal_engine_v3_rollouts (
+      empresa_id, mode, canary_percentage, enabled, engine_version,
+      minimum_shadow_samples, readiness_required, reason
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+    ON CONFLICT (empresa_id) DO UPDATE SET
+      mode = EXCLUDED.mode,
+      canary_percentage = EXCLUDED.canary_percentage,
+      enabled = EXCLUDED.enabled,
+      engine_version = EXCLUDED.engine_version,
+      minimum_shadow_samples = EXCLUDED.minimum_shadow_samples,
+      readiness_required = EXCLUDED.readiness_required,
+      reason = EXCLUDED.reason,
+      updated_at = now()`,
+    [
+      empresaId,
+      policy.mode ?? 'LEGACY',
+      policy.canaryPercentage ?? 0,
+      policy.enabled ?? false,
+      policy.engineVersion ?? '3.1.0',
+      policy.minimumShadowSamples ?? 0,
+      policy.readinessRequired ?? true,
+      policy.reason ?? null,
+    ],
+  );
+};
+
+/** @internal testes */
 export const __ensureRolloutPolicySchemaForTests = async () => {
   const pool = getPgPool();
   await pool.query(`

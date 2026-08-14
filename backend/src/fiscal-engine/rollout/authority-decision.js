@@ -11,7 +11,7 @@ import {
   assessReadinessGate,
   evaluateFiscalV3RolloutReadiness,
 } from './rollout-readiness.js';
-import { hasAuthoritativeAccountantConfigReadiness } from './rollout-accountant-config-gate.js';
+import { hasAuthoritativeAccountantConfigReadinessAsync } from './rollout-accountant-config-gate.js';
 import { isCanarySelected, resolveEmissionStableId } from './rollout-canary.js';
 import {
   AUTHORITY_ENGINE,
@@ -20,6 +20,7 @@ import {
   DEFAULT_ENGINE_VERSION,
   ROLLOUT_MODE,
 } from './rollout-constants.js';
+import { isAuthoritativePersistenceBlockedInRuntime } from '../config/fiscal-repository-mode.js';
 
 /**
  * @typedef {object} AuthorityDecision
@@ -110,7 +111,26 @@ export const evaluateAuthorityDecision = async (params) => {
     }
   }
 
-  if (!hasAuthoritativeAccountantConfigReadiness(empresaId)) {
+  if (isAuthoritativePersistenceBlockedInRuntime()) {
+    reasons.push(AUTHORITY_DECISION_REASON.AUTHORITATIVE_PERSISTENCE_UNAVAILABLE);
+    issues.push(createFiscalIssue(
+      'AUTHORITATIVE_PERSISTENCE_UNAVAILABLE',
+      'Persistência authoritative exige Postgres — runtime bootstrapped em memory fail-closed',
+      { severity: 'ERROR', blocksEmission: true, overrideAllowed: false },
+    ));
+    return buildDecision({
+      engine: AUTHORITY_ENGINE.BLOCKED,
+      reasons: [...reasons, AUTHORITY_DECISION_REASON.AUTHORITATIVE_FISCAL_BLOCKED],
+      rolloutMode,
+      canarySelected,
+      readiness: null,
+      v3Candidate: true,
+      authoritativeFiscalBlocked: true,
+      issues,
+    });
+  }
+
+  if (!(await hasAuthoritativeAccountantConfigReadinessAsync(empresaId))) {
     reasons.push(AUTHORITY_DECISION_REASON.NOT_READY_NO_ACCOUNTANT_CONFIG);
     issues.push(createFiscalIssue(
       'ACCOUNTANT_CONFIGURATION_INCOMPLETE',

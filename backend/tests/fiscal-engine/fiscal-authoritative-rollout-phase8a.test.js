@@ -293,7 +293,7 @@ test('A17. routing persiste attempt com meiNotaRecordId', async () => {
     meiNotaRecordId: EMISSION_ID,
   });
   assert.equal(routing.route, AUTHORITY_ENGINE.LEGACY);
-  const attempt = findEmissionAttempt(routing.attemptId);
+  const attempt = await findEmissionAttempt(routing.attemptId);
   assert.ok(attempt);
   assert.equal(attempt.emissionStableId, EMISSION_ID);
   assert.equal(attempt.attemptStatus, EMISSION_ATTEMPT_STATUS.ROUTING_LEGACY);

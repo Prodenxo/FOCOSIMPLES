@@ -11,6 +11,7 @@ import { startAgendaRemindersScheduler } from './services/agenda-reminders.sched
 import { startMonthlyDasScheduler } from './services/mei-das.service.js';
 import { startNcmCatalogSyncScheduler } from './services/ncm-sync.scheduler.js';
 import { bootstrapDatabase } from './services/db-bootstrap.service.js';
+import { bootstrapFiscalEngineRepositoryMode } from './fiscal-engine/config/fiscal-repository-mode.js';
 
 const app = express();
 
@@ -125,6 +126,9 @@ app.use(errorHandler);
 const startServer = async () => {
   try {
     await bootstrapDatabase();
+    const fiscalRepoMode = bootstrapFiscalEngineRepositoryMode();
+    // eslint-disable-next-line no-console
+    console.info(`[backend] fiscal engine repository mode: ${fiscalRepoMode}`);
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('[backend] falha no bootstrap do banco', error instanceof Error ? error.message : error);

@@ -178,7 +178,7 @@ export const handleAuthoritativeEmitOutcome = async (params) => {
   const attemptId = params.attemptId;
   if (!attemptId) return { handled: false };
 
-  const attempt = findEmissionAttemptById(attemptId);
+  const attempt = await findEmissionAttemptById(attemptId);
   if (!attempt || attempt.authorityEngine !== AUTHORITY_ENGINE.V3) {
     return { handled: false };
   }
@@ -250,7 +250,7 @@ export const reconcileAuthoritativeAttemptOnMeiNotaStatusChange = async (params)
     return { reconciled: false, reason: 'missing_identity' };
   }
 
-  const attempts = findEmissionAttemptsByMeiNotaRecordId(empresaId, meiNotaRecordId)
+  const attempts = (await findEmissionAttemptsByMeiNotaRecordId(empresaId, meiNotaRecordId))
     .filter((a) => a.authorityEngine === AUTHORITY_ENGINE.V3);
 
   if (!attempts.length) {

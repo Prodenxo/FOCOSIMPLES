@@ -318,7 +318,9 @@ export {
 } from './rollout/rollout-production-rules-gate.js';
 export {
   hasAuthoritativeAccountantConfigReadiness,
+  hasAuthoritativeAccountantConfigReadinessAsync,
   countExecutableAccountantApprovedRules,
+  countExecutableAccountantApprovedRulesAsync,
 } from './rollout/rollout-accountant-config-gate.js';
 export {
   evaluateAuthorityDecision,
@@ -367,6 +369,7 @@ export {
 } from './authoritative/nfe-emit-authority-integration.js';
 export {
   findEmissionAttemptById,
+  findEmissionAttemptByIdIntegracao,
   findEmissionAttemptsByMeiNotaRecordId,
 } from './authoritative/emission-attempt.service.js';
 export {
@@ -377,6 +380,18 @@ export {
   __setEmissionAttemptPostgresEnabledForTests,
   __resetEmissionAttemptServiceForTests,
 } from './authoritative/emission-attempt.service.js';
+export {
+  bootstrapFiscalEngineRepositoryMode,
+  resolveFiscalRepositoryMode,
+  isFiscalEnginePostgresEnabled,
+  assertAuthoritativePersistenceAvailable,
+  isAuthoritativePersistenceBlockedInRuntime,
+  FISCAL_REPOSITORY_MODE,
+  __setFiscalRepositoryModeForTests,
+  __resetFiscalRepositoryModeForTests,
+  __resetFiscalEngineRepositoryBootstrapForTests,
+  __forceProductionBootstrapMemoryModeForTests,
+} from './config/fiscal-repository-mode.js';
 export {
   classifyEmitRequestOutcome,
   resolveReservationTransition,

@@ -11,37 +11,27 @@ import * as memoryRepo from './fiscal-configuration-memory.repository.js';
 import * as pgRepo from './fiscal-configuration.repository.js';
 
 import { ACCOUNTANT_RULE_STATUS } from './constants.js';
-
-
-
-let usePostgres = false;
-
-
+import {
+  FISCAL_REPOSITORY_MODE,
+  isFiscalEnginePostgresEnabled,
+  __setFiscalRepositoryModeForTests,
+  __resetFiscalRepositoryModeForTests,
+} from '../config/fiscal-repository-mode.js';
 
 /** @internal */
-
 export const __setFiscalConfigurationPostgresEnabledForTests = (enabled) => {
-
-  usePostgres = Boolean(enabled);
-
+  __setFiscalRepositoryModeForTests(
+    enabled ? FISCAL_REPOSITORY_MODE.POSTGRES : FISCAL_REPOSITORY_MODE.MEMORY,
+  );
 };
 
-
+/** @internal */
+export const __isFiscalConfigurationPostgresEnabledForTests = () => isFiscalEnginePostgresEnabled();
 
 /** @internal */
-
-export const __isFiscalConfigurationPostgresEnabledForTests = () => usePostgres;
-
-
-
-/** @internal */
-
 export const __resetFiscalConfigurationRepositoryServiceForTests = () => {
-
-  usePostgres = false;
-
+  __resetFiscalRepositoryModeForTests();
   memoryRepo.resetFiscalConfigurationRepository();
-
 };
 
 
@@ -51,21 +41,13 @@ export const resetFiscalConfigurationRepository = memoryRepo.resetFiscalConfigur
 
 
 const assertPostgresMode = () => {
-
-  if (!usePostgres) {
-
-    throw new Error('Operação disponível apenas com usePostgres=true');
-
+  if (!isFiscalEnginePostgresEnabled()) {
+    throw new Error('Operação disponível apenas com Postgres repository ativo');
   }
-
 };
 
-
-
 const route = (memoryFn, pgFn) => async (...args) => (
-
-  usePostgres ? pgFn(...args) : memoryFn(...args)
-
+  isFiscalEnginePostgresEnabled() ? pgFn(...args) : memoryFn(...args)
 );
 
 
@@ -232,7 +214,7 @@ export const saveAccountantApprovedRuleDraft = async (rule) => {
 
   const draft = { ...rule, status: ACCOUNTANT_RULE_STATUS.DRAFT };
 
-  if (usePostgres) return pgRepo.upsertAccountantRuleDraftPg(draft);
+  if (isFiscalEnginePostgresEnabled()) return pgRepo.upsertAccountantRuleDraftPg(draft);
 
   return memoryRepo.saveAccountantApprovedRule(draft);
 
@@ -242,7 +224,7 @@ export const saveAccountantApprovedRuleDraft = async (rule) => {
 
 export const updateAccountantApprovedRuleDraft = async (tenantId, ruleId, version, patch) => {
 
-  if (usePostgres) {
+  if (isFiscalEnginePostgresEnabled()) {
 
     const existing = await pgRepo.fetchAccountantRulePg({ tenantId, ruleId, version });
 
@@ -266,7 +248,7 @@ export const updateAccountantApprovedRuleDraft = async (tenantId, ruleId, versio
 
 export const approveAccountantRuleAtomic = async (params) => {
 
-  if (usePostgres) return pgRepo.approveAccountantRulePg(params);
+  if (isFiscalEnginePostgresEnabled()) return pgRepo.approveAccountantRulePg(params);
 
   return memoryRepo.approveAccountantRuleMemory(params);
 
@@ -276,7 +258,7 @@ export const approveAccountantRuleAtomic = async (params) => {
 
 export const suspendAccountantRule = async (params) => {
 
-  if (usePostgres) return pgRepo.suspendAccountantRulePg(params);
+  if (isFiscalEnginePostgresEnabled()) return pgRepo.suspendAccountantRulePg(params);
 
   return memoryRepo.suspendAccountantRuleMemory(params);
 
@@ -286,7 +268,7 @@ export const suspendAccountantRule = async (params) => {
 
 export const revokeAccountantRule = async (params) => {
 
-  if (usePostgres) return pgRepo.revokeAccountantRulePg(params);
+  if (isFiscalEnginePostgresEnabled()) return pgRepo.revokeAccountantRulePg(params);
 
   return memoryRepo.revokeAccountantRuleMemory(params);
 
@@ -296,7 +278,7 @@ export const revokeAccountantRule = async (params) => {
 
 export const createAccountantRuleNewVersion = async (rule) => {
 
-  if (usePostgres) return pgRepo.createAccountantRuleNewVersionPg(rule);
+  if (isFiscalEnginePostgresEnabled()) return pgRepo.createAccountantRuleNewVersionPg(rule);
 
   return memoryRepo.createAccountantRuleNewVersionMemory(rule);
 
@@ -389,7 +371,7 @@ export const removeFiscalProductGroupMembership = route(
 );
 
 export const bulkAssignProductsToFiscalGroup = async (params) => (
-  usePostgres
+  isFiscalEnginePostgresEnabled()
     ? pgRepo.bulkAssignProductsToFiscalGroupPg(params)
     : memoryRepo.bulkAssignProductsToFiscalGroupMemory(params)
 );
@@ -399,7 +381,7 @@ export const bulkAssignProductsToFiscalGroup = async (params) => (
  */
 export const getActiveFiscalProductGroupIdForProduct = async ({ tenantId, productId }) => {
   if (!tenantId || !productId) return null;
-  if (usePostgres && !pgRepo.isValidPgUuid(productId)) return null;
+  if (isFiscalEnginePostgresEnabled() && !pgRepo.isValidPgUuid(productId)) return null;
   const membership = await getFiscalProductGroupMembership({ tenantId, productId });
   if (!membership?.fiscalProductGroupId) return null;
   const group = await getFiscalProductGroup({ tenantId, id: membership.fiscalProductGroupId });
@@ -416,41 +398,30 @@ export const getActiveFiscalProductGroupIdForProduct = async ({ tenantId, produc
  */
 
 export const getCompanyFiscalProfileSync = (tenantId, establishmentId = 'default') => {
-  if (usePostgres) {
-    throw new Error('getCompanyFiscalProfileSync indisponível com usePostgres=true');
+  if (isFiscalEnginePostgresEnabled()) {
+    throw new Error('getCompanyFiscalProfileSync indisponível com Postgres — use async');
   }
   return memoryRepo.getCompanyFiscalProfile(tenantId, establishmentId);
 };
 
 export const listProductFiscalProfilesSync = (tenantId) => {
-  if (usePostgres) {
-    throw new Error('listProductFiscalProfilesSync indisponível com usePostgres=true');
+  if (isFiscalEnginePostgresEnabled()) {
+    throw new Error('listProductFiscalProfilesSync indisponível com Postgres — use async');
   }
   return memoryRepo.listProductFiscalProfiles(tenantId);
 };
 
 export const listAccountantApprovedRulesForTenantSync = (tenantId) => {
-
-  if (usePostgres) {
-
-    throw new Error('listAccountantApprovedRulesForTenantSync indisponível com usePostgres=true — use async');
-
+  if (isFiscalEnginePostgresEnabled()) {
+    throw new Error('listAccountantApprovedRulesForTenantSync indisponível com Postgres — use async');
   }
-
   return memoryRepo.listAccountantApprovedRulesForTenant(tenantId);
-
 };
 
-
-
 export const getAccountantApprovedRuleSync = (tenantId, ruleId, version) => {
-
-  if (usePostgres) {
-
-    throw new Error('getAccountantApprovedRuleSync indisponível com usePostgres=true — use async');
-
+  if (isFiscalEnginePostgresEnabled()) {
+    throw new Error('getAccountantApprovedRuleSync indisponível com Postgres — use async');
   }
-
   return memoryRepo.getAccountantApprovedRule(tenantId, ruleId, version);
 
 };

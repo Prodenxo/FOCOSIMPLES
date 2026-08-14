@@ -95,7 +95,7 @@ test('8C-CK-B: usePostgres=true não faz fallback memory no sync accessor', () =
   __setFiscalConfigurationPostgresEnabledForTests(true);
   assert.throws(
     () => listAccountantApprovedRulesForTenantSync(TENANT),
-    /usePostgres=true/,
+    /Postgres.*async/i,
   );
 });
 

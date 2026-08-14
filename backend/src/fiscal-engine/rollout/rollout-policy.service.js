@@ -5,17 +5,23 @@ import { createFiscalIssue } from '../types/fiscal-issue.js';
 import { getInMemoryRolloutPolicy } from './rollout-policy-memory.repository.js';
 import * as pgRepo from './rollout-policy.repository.js';
 import { DEFAULT_ROLLOUT_POLICY, ROLLOUT_MODE } from './rollout-constants.js';
-
-let usePostgres = false;
+import {
+  FISCAL_REPOSITORY_MODE,
+  isFiscalEnginePostgresEnabled,
+  __setFiscalRepositoryModeForTests,
+  __resetFiscalRepositoryModeForTests,
+} from '../config/fiscal-repository-mode.js';
 
 /** @internal */
 export const __setRolloutPolicyPostgresEnabledForTests = (enabled) => {
-  usePostgres = Boolean(enabled);
+  __setFiscalRepositoryModeForTests(
+    enabled ? FISCAL_REPOSITORY_MODE.POSTGRES : FISCAL_REPOSITORY_MODE.MEMORY,
+  );
 };
 
 /** @internal */
 export const __resetRolloutPolicyServiceForTests = () => {
-  usePostgres = false;
+  __resetFiscalRepositoryModeForTests();
 };
 
 /**
@@ -33,7 +39,7 @@ export const getRolloutPolicyForEmpresa = async (empresaId) => {
 
   let policy;
   try {
-    policy = usePostgres
+    policy = isFiscalEnginePostgresEnabled()
       ? await pgRepo.fetchRolloutPolicyFromPg(empresaId)
       : getInMemoryRolloutPolicy(empresaId);
   } catch (error) {

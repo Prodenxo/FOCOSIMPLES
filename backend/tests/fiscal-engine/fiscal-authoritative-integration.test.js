@@ -271,7 +271,7 @@ test('H2. V3=true + gates — adapter boundary recebe payload V3 fiscal', async 
     assert.equal(item.tributos?.cofins?.cst, '08');
     assert.notEqual(item.impostos?.icms?.CSOSN, '999');
     assert.ok(result.allocationRequestIds?.length >= 1);
-    const attempt = findEmissionAttemptById(result.attemptId);
+    const attempt = await findEmissionAttemptById(result.attemptId);
     assert.equal(attempt.attemptStatus, EMISSION_ATTEMPT_STATUS.PREPARED);
     assert.ok(attempt.candidatePayloadHash);
   });
@@ -289,7 +289,7 @@ test('H3. PREPARED persistido antes do network (TX1)', async () => {
   await __withFiscalEngineFlagsForTests({ v3: true }, async () => {
     const result = await prepareFiscalAuthorityRouting(authoritativeRoutingParams(lot));
     assert.equal(result.engine, AUTHORITY_ENGINE.V3);
-    const attempt = findEmissionAttemptById(result.attemptId);
+    const attempt = await findEmissionAttemptById(result.attemptId);
     assert.equal(attempt.attemptStatus, EMISSION_ATTEMPT_STATUS.PREPARED);
     assert.ok(attempt.allocationRequestIds.length >= 1);
     assert.equal(hashPayloadForAudit(result.payloadToEmit), attempt.candidatePayloadHash);
@@ -341,7 +341,7 @@ test('H6. network unknown pós-send — HOLD reserva, attempt REQUEST_OUTCOME_UN
     });
     assert.equal(outcome.outcome, REQUEST_OUTCOME.NETWORK_ERROR);
     assert.equal(outcome.transition.releaseReservation, false);
-    const attempt = findEmissionAttemptById(prep.attemptId);
+    const attempt = await findEmissionAttemptById(prep.attemptId);
     assert.equal(attempt.attemptStatus, EMISSION_ATTEMPT_STATUS.REQUEST_OUTCOME_UNKNOWN);
   });
 });
@@ -490,7 +490,7 @@ test('H11. numeração recovery — bind idIntegracao sem nova reserva', async (
     const prep2 = await prepareFiscalAuthorityRouting(authoritativeRoutingParams(lot));
     assert.notEqual(prep2.attemptId, prep.attemptId);
     assert.deepEqual(idsBefore, prep.allocationRequestIds);
-    const attempt = findEmissionAttemptById(prep.attemptId);
+    const attempt = await findEmissionAttemptById(prep.attemptId);
     assert.equal(attempt.idIntegracao, 'novo-id-integracao-recovery');
   });
 });

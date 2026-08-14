@@ -286,6 +286,9 @@ const resolveInputDocumentType = (input = {}) => {
 };
 
 const getAdapterByDocumentType = (documentType) => {
+  if (meiNfeEmitTestDeps.adapterFactory) {
+    return meiNfeEmitTestDeps.adapterFactory(documentType);
+  }
   const normalized = normalizeDocumentType(documentType);
   if (normalized === DOCUMENT_TYPE_NFSE) {
     return {
@@ -1018,6 +1021,25 @@ export const __setGetDbForTests = (fn) => {
 
 export const __resetGetDbForTests = () => {
   getDbOverride = null;
+};
+
+/** @internal Apenas testes — deps do pipeline NF-e authoritative. */
+let meiNfeEmitTestDeps = {
+  ensurePlugnotasCadastro: null,
+  adapterFactory: null,
+};
+
+/** @internal */
+export const __setMeiNfeEmitTestDepsForTests = (deps = {}) => {
+  meiNfeEmitTestDeps = {
+    ensurePlugnotasCadastro: deps.ensurePlugnotasCadastro ?? meiNfeEmitTestDeps.ensurePlugnotasCadastro,
+    adapterFactory: deps.adapterFactory ?? meiNfeEmitTestDeps.adapterFactory,
+  };
+};
+
+/** @internal */
+export const __resetMeiNfeEmitTestDepsForTests = () => {
+  meiNfeEmitTestDeps = { ensurePlugnotasCadastro: null, adapterFactory: null };
 };
 
 const getDb = () => (getDbOverride ? getDbOverride() : defaultGetDb());
@@ -1987,7 +2009,9 @@ export const emitirNota = async (userId, input) => {
         || String(payload?.emitente?.cpfCnpj || payload?.prestador?.cpfCnpj || '').replace(/\D/g, '');
       let empresaPlugnotas = null;
       if (cnpjEmitente.length === 14) {
-        empresaPlugnotas = await ensureMeiNfePlugnotasCadastroBeforeEmit(cnpjEmitente);
+        empresaPlugnotas = meiNfeEmitTestDeps.ensurePlugnotasCadastro
+          ? await meiNfeEmitTestDeps.ensurePlugnotasCadastro(cnpjEmitente)
+          : await ensureMeiNfePlugnotasCadastroBeforeEmit(cnpjEmitente);
       }
 
       const applyTechnicalTransforms = async (nfePayload) => {
@@ -2022,6 +2046,19 @@ export const emitirNota = async (userId, input) => {
       });
 
       emitPayload = resolved.payloadToEmit;
+      if (resolved.blocked === true || resolved.engine === AUTHORITY_ENGINE.BLOCKED) {
+        throw badRequest(
+          'Emissão fiscal authoritative bloqueada — fail-closed',
+          {
+            code: 'AUTHORITATIVE_FISCAL_BLOCKED',
+            engine: resolved.engine,
+            reasons: resolved.authorityDecision?.reasons ?? [],
+            issues: resolved.issues ?? resolved.authorityDecision?.issues ?? [],
+            attemptId: resolved.attemptId ?? null,
+            legacyFiscalApplied: false,
+          },
+        );
+      }
       if (resolved.engine === AUTHORITY_ENGINE.V3 && resolved.authorityAssumed) {
         authorityEmitContext = resolved;
       }

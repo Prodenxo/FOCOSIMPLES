@@ -28,6 +28,13 @@ export const findEmissionAttemptsByMeiNotaMemory = (empresaId, meiNotaRecordId) 
   ))
 );
 
+export const findEmissionAttemptByIdIntegracaoMemory = (empresaId, idIntegracao) => (
+  [...attemptsById.values()].find((a) => (
+    String(a.empresaId) === String(empresaId)
+    && String(a.idIntegracao) === String(idIntegracao)
+  )) ?? null
+);
+
 export const listEmissionAttemptsByEmpresaMemory = (empresaId) => (
   [...attemptsById.values()].filter((a) => String(a.empresaId) === String(empresaId))
 );

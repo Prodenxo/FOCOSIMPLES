@@ -7,21 +7,38 @@ import {
   updateEmissionAttemptMemory,
   findEmissionAttemptMemory,
   findEmissionAttemptsByMeiNotaMemory,
+  findEmissionAttemptByIdIntegracaoMemory,
+  __resetEmissionAttemptsMemoryForTests,
 } from './emission-attempt-memory.repository.js';
 import * as pgRepo from './emission-attempt.repository.js';
 import { EMISSION_ATTEMPT_STATUS, AUTHORITY_ENGINE } from '../rollout/rollout-constants.js';
 import { resolveEmissionStableId } from '../rollout/rollout-canary.js';
-
-let usePostgres = false;
+import {
+  FISCAL_REPOSITORY_MODE,
+  isFiscalEnginePostgresEnabled,
+  __setFiscalRepositoryModeForTests,
+  __resetFiscalRepositoryModeForTests,
+} from '../config/fiscal-repository-mode.js';
 
 /** @internal */
 export const __setEmissionAttemptPostgresEnabledForTests = (enabled) => {
-  usePostgres = Boolean(enabled);
+  __setFiscalRepositoryModeForTests(
+    enabled ? FISCAL_REPOSITORY_MODE.POSTGRES : FISCAL_REPOSITORY_MODE.MEMORY,
+  );
 };
 
 /** @internal */
 export const __resetEmissionAttemptServiceForTests = () => {
-  usePostgres = false;
+  __resetFiscalRepositoryModeForTests();
+  __resetEmissionAttemptsMemoryForTests();
+};
+
+const isCriticalAuthoritativeAttempt = (row) => {
+  const engine = row.authorityEngine ?? row.authorityDecision?.engine;
+  return engine === AUTHORITY_ENGINE.V3
+    || engine === AUTHORITY_ENGINE.BLOCKED
+    || row.authorityDecision?.v3Candidate === true
+    || row.authorityDecision?.authoritativeFiscalBlocked === true;
 };
 
 /**
@@ -49,37 +66,65 @@ export const persistAuthorityRoutingAttempt = async (params) => {
     engineVersion: params.authorityDecision?.engineVersion ?? '3.1.0',
   };
 
+  const critical = isCriticalAuthoritativeAttempt(row);
+
   try {
-    if (usePostgres) {
+    if (isFiscalEnginePostgresEnabled()) {
       await pgRepo.insertEmissionAttemptPg(row);
     } else {
       insertEmissionAttemptMemory(row);
     }
   } catch (error) {
-    console.warn('[fiscal-v3] emission attempt persist fail-open:', error instanceof Error ? error.message : error);
+    const message = error instanceof Error ? error.message : String(error);
+    if (critical && isFiscalEnginePostgresEnabled()) {
+      throw new Error(`FISCAL_EMISSION_ATTEMPT_PERSIST_FAILED: ${message}`);
+    }
+    console.warn('[fiscal-v3] emission attempt persist fail-open:', message);
   }
 
   return { attemptId, row };
 };
 
 export const updateEmissionAttempt = async (attemptId, patch) => {
+  const existing = await findEmissionAttemptById(attemptId);
+  const critical = isCriticalAuthoritativeAttempt({ ...existing, ...patch });
+
   try {
-    if (usePostgres) {
+    if (isFiscalEnginePostgresEnabled()) {
       await pgRepo.updateEmissionAttemptPg(attemptId, patch);
     } else {
       updateEmissionAttemptMemory(attemptId, patch);
     }
   } catch (error) {
-    console.warn('[fiscal-v3] emission attempt update fail-open:', error instanceof Error ? error.message : error);
+    const message = error instanceof Error ? error.message : String(error);
+    if (critical && isFiscalEnginePostgresEnabled()) {
+      throw new Error(`FISCAL_EMISSION_ATTEMPT_UPDATE_FAILED: ${message}`);
+    }
+    console.warn('[fiscal-v3] emission attempt update fail-open:', message);
   }
 };
 
-export const findEmissionAttempt = (attemptId) => findEmissionAttemptMemory(attemptId);
+export const findEmissionAttempt = async (attemptId) => findEmissionAttemptById(attemptId);
 
-export const findEmissionAttemptById = (attemptId) => findEmissionAttemptMemory(attemptId);
+export const findEmissionAttemptById = async (attemptId) => {
+  if (isFiscalEnginePostgresEnabled()) {
+    return pgRepo.findEmissionAttemptPg(attemptId);
+  }
+  return findEmissionAttemptMemory(attemptId);
+};
 
-export const findEmissionAttemptsByMeiNotaRecordId = (empresaId, meiNotaRecordId) => (
-  findEmissionAttemptsByMeiNotaMemory(empresaId, meiNotaRecordId)
-);
+export const findEmissionAttemptByIdIntegracao = async (empresaId, idIntegracao) => {
+  if (isFiscalEnginePostgresEnabled()) {
+    return pgRepo.findEmissionAttemptByIdIntegracaoPg(empresaId, idIntegracao);
+  }
+  return findEmissionAttemptByIdIntegracaoMemory(empresaId, idIntegracao);
+};
+
+export const findEmissionAttemptsByMeiNotaRecordId = async (empresaId, meiNotaRecordId) => {
+  if (isFiscalEnginePostgresEnabled()) {
+    return pgRepo.findEmissionAttemptsByMeiNotaPg(empresaId, meiNotaRecordId);
+  }
+  return findEmissionAttemptsByMeiNotaMemory(empresaId, meiNotaRecordId);
+};
 
 export { hashPayloadForAudit } from './emission-attempt.repository.js';

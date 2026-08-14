@@ -1336,6 +1336,22 @@ export const __ensureFiscalConfigurationSchemaForTests = async () => {
         ADD COLUMN IF NOT EXISTS revoked_by uuid,
         ADD COLUMN IF NOT EXISTS revoked_at timestamptz
     `);
+    await client.query(`
+      ALTER TABLE company_fiscal_profiles
+        ADD COLUMN IF NOT EXISTS secondary_cnaes jsonb DEFAULT '[]'::jsonb,
+        ADD COLUMN IF NOT EXISTS is_icms_taxpayer boolean,
+        ADD COLUMN IF NOT EXISTS simples_nacional_since date,
+        ADD COLUMN IF NOT EXISTS simples_nacional_until date,
+        ADD COLUMN IF NOT EXISTS special_tax_regime text,
+        ADD COLUMN IF NOT EXISTS tax_benefit_profile jsonb,
+        ADD COLUMN IF NOT EXISTS state_incentives jsonb,
+        ADD COLUMN IF NOT EXISTS configured_by uuid,
+        ADD COLUMN IF NOT EXISTS configured_at timestamptz,
+        ADD COLUMN IF NOT EXISTS approved_by uuid,
+        ADD COLUMN IF NOT EXISTS approved_at timestamptz,
+        ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now(),
+        ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now()
+    `);
     await client.query('COMMIT');
   } catch (error) {
     try {

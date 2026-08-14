@@ -483,7 +483,7 @@ test('RG5. PREPARED — reserva + authority + hash antes do provider', async () 
     assert.equal(prep.engine, AUTHORITY_ENGINE.V3);
     assert.ok(prep.allocationRequestIds.length >= 1);
 
-    const attempt = findEmissionAttemptById(prep.attemptId);
+    const attempt = await findEmissionAttemptById(prep.attemptId);
     assert.equal(attempt.attemptStatus, EMISSION_ATTEMPT_STATUS.PREPARED);
     assert.ok(attempt.candidatePayloadHash);
     assert.ok(attempt.allocationRequestIds.length >= 1);
@@ -496,7 +496,7 @@ test('RG5. PREPARED — reserva + authority + hash antes do provider', async () 
     const mockAdapter = {
       emitir: async (payload) => {
         adapterCalled = true;
-        assert.equal(findEmissionAttemptById(prep.attemptId).attemptStatus, EMISSION_ATTEMPT_STATUS.PREPARED);
+        assert.equal((await findEmissionAttemptById(prep.attemptId)).attemptStatus, EMISSION_ATTEMPT_STATUS.PREPARED);
         return { status: 'processando', payload };
       },
     };
@@ -549,7 +549,7 @@ test('RG6. provider call count — sucesso e network unknown = 1 emit cada', asy
       sentToProvider: true,
     });
     assert.equal(unknownEmitCount, 1);
-    assert.equal(findEmissionAttemptById(prepUnknown.attemptId).attemptStatus, EMISSION_ATTEMPT_STATUS.REQUEST_OUTCOME_UNKNOWN);
+    assert.equal((await findEmissionAttemptById(prepUnknown.attemptId)).attemptStatus, EMISSION_ATTEMPT_STATUS.REQUEST_OUTCOME_UNKNOWN);
   });
 });
 
@@ -583,7 +583,7 @@ test('RG7. recovery numeração — retry provider sem nova reserva nem fallback
 
     assert.equal(emitCount, 2);
 
-    const attempt = findEmissionAttemptById(prep.attemptId);
+    const attempt = await findEmissionAttemptById(prep.attemptId);
     assert.deepEqual(attempt.allocationRequestIds, allocationIdsBefore);
     assert.equal(attempt.idIntegracao, 'recovery-id-2');
 
