@@ -212,9 +212,13 @@ test('8E-CONTRACT-10: CSOSN 500 capability EXECUTABLE somente para shape suporta
 });
 
 for (const csosn of ['201', '202', '203']) {
-  test(`8E-CONTRACT-${csosn === '201' ? '11' : csosn === '202' ? '12' : '13'}: CSOSN ${csosn} NÃO é EXECUTABLE`, () => {
+  test(`8E-CONTRACT-${csosn === '201' ? '11' : csosn === '202' ? '12' : '13'}: CSOSN ${csosn} sem stParameters NÃO é EXECUTABLE`, () => {
     const cap = evaluateAccountantRuleEngineCapability(draftRule({
-      approvedResult: { ...stdApproved, csosn },
+      approvedResult: {
+        cfop: '5405',
+        csosn,
+        currentOperationSt: 'DUE_BY_ISSUER',
+      },
     }));
     assert.equal(cap.executable, false);
     assert.ok(cap.issues.some((i) => i.code === 'ACCOUNTANT_RULE_NOT_EXECUTABLE'));
@@ -331,6 +335,6 @@ test('8E-REG-C: interestadual contribuinte CSOSN102 preservada', async () => {
 
 test('8E-META: allowlist approvedResult documentada', () => {
   assert.deepEqual([...APPROVED_RESULT_ALLOWED_KEYS], [
-    'cfop', 'csosn', 'icmsGroup', 'currentOperationSt', 'requiredXmlFields', 'cfopConstraints',
+    'cfop', 'csosn', 'icmsGroup', 'currentOperationSt', 'stParameters', 'requiredXmlFields', 'cfopConstraints',
   ]);
 });

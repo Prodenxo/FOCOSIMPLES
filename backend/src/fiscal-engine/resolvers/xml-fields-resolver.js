@@ -1,9 +1,15 @@
 /**
  * XmlFieldsResolver — product + taxes.icms (1 grupo ICMS por item).
+ * Phase 8E.3 — ST devida CSOSN 201/202/203 via cálculo pré-computado.
  */
 import { createFiscalIssue } from '../types/fiscal-issue.js';
 import { formatFieldByPolicy } from '../money/decimal-field-policy.js';
 import { toDecimal } from '../money/decimal.js';
+import { CURRENT_OPERATION_ST } from '../types/st-allocation.js';
+import {
+  buildIssuerStDueIcmsFields,
+  isIssuerStDueCsosn,
+} from '../simples-nacional/issuer-st-due-xml-builder.js';
 
 /** @type {Record<string, (context: object) => string | null | undefined>} */
 const RULE_DRIVEN_FIELD_RESOLVERS = {
@@ -39,6 +45,7 @@ export const resolveXmlFields = ({
   treatment,
   csosnResolution,
   cfopResolution,
+  stDueCalculation = null,
 }) => {
   const issues = [];
   const csosn = csosnResolution?.csosn ?? null;
@@ -49,6 +56,8 @@ export const resolveXmlFields = ({
   const requiredFields = Array.isArray(csosnResolution?.requiredXmlFields)
     ? csosnResolution.requiredXmlFields
     : [];
+  const currentOperationSt = treatment?.currentOperationSt ?? CURRENT_OPERATION_ST.UNKNOWN;
+  const stCalculation = stDueCalculation ?? context.fiscalExtensions?.stCalculation ?? null;
 
   if (!csosn && !cst) {
     return {
@@ -89,6 +98,39 @@ export const resolveXmlFields = ({
   const icmsFields = { orig: origem };
   if (csosn) icmsFields.CSOSN = csosn;
   if (cst) icmsFields.CST = cst;
+
+  if (isIssuerStDueCsosn(csosn) && currentOperationSt === CURRENT_OPERATION_ST.DUE_BY_ISSUER) {
+    const stParameters = context.fiscalExtensions?.accountantApprovedStParameters
+      ?? csosnResolution?.stParameters
+      ?? null;
+
+    if (!stCalculation?.ok) {
+      issues.push(createFiscalIssue(
+        'REQUIRED_FIELD_MISSING',
+        'Cálculo ST devida ausente ou inválido para CSOSN 201/202/203.',
+        { blocksEmission: true, overrideAllowed: false },
+      ));
+      return { xmlFields: null, icmsGroups: [], resolved: false, issues };
+    }
+
+    const stDueFields = buildIssuerStDueIcmsFields({
+      csosn,
+      stParameters,
+      stCalculation,
+      referenceDate,
+    });
+
+    if (!stDueFields) {
+      issues.push(createFiscalIssue(
+        'UNSUPPORTED_SCENARIO',
+        'Builder ST devida não produziu campos XML.',
+        { blocksEmission: true, overrideAllowed: false },
+      ));
+      return { xmlFields: null, icmsGroups: [], resolved: false, issues };
+    }
+
+    Object.assign(icmsFields, stDueFields);
+  }
 
   for (const fieldName of requiredFields) {
     const value = resolveRuleDrivenField(fieldName, context);

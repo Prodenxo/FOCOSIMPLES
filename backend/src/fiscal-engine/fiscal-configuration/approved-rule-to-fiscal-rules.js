@@ -93,6 +93,7 @@ export const buildFiscalRulesFromApprovedRule = (approvedRule) => {
       result: {
         csosn: result.csosn,
         icmsGroup: resolveExecutableIcmsGroupForCsosn(String(result.csosn), result.icmsGroup ?? null),
+        stParameters: result.stParameters ?? null,
         requiredXmlFields: Array.isArray(result.requiredXmlFields) ? result.requiredXmlFields : [],
       },
     });

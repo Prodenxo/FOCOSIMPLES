@@ -5,6 +5,7 @@ import { ICMS_GROUP_TAGS } from './constants.js';
 import { decimalFieldOf, textOf } from './purchase-xml-parse-utils.js';
 
 const ICMS_ST_OPERATION_FIELDS = ['vBCST', 'pICMSST', 'vICMSST', 'pMVAST', 'pRedBCST', 'vBCFCPST', 'pFCPST', 'vFCPST'];
+export { ICMS_ST_OPERATION_FIELDS };
 const ICMS_PRIOR_RETAINED_FIELDS = ['vBCSTRet', 'pST', 'vICMSSTRet', 'vICMSSubstituto', 'vBCFCPSTRet', 'pFCPSTRet', 'vFCPSTRet'];
 const ICMS_EFETIVO_FIELDS = ['pRedBCEfet', 'vBCEfet', 'pICMSEfet', 'vICMSEfet'];
 

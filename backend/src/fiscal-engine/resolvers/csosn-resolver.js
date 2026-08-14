@@ -99,6 +99,7 @@ export const resolveCsosn = (context, treatment, rules, options = {}) => {
     requiredXmlFields: Array.isArray(resolution.result?.requiredXmlFields)
       ? resolution.result.requiredXmlFields
       : [],
+    stParameters: resolution.result?.stParameters ?? null,
     resolved: Boolean(resolution.result?.csosn || resolution.result?.cst),
     ruleRef: resolution.ruleRef,
     audit: resolution.audit,

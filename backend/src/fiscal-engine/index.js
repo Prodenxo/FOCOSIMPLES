@@ -510,10 +510,44 @@ export {
   EXECUTABLE_CURRENT_OPERATION_ST,
   CERTIFIED_ACCOUNTANT_ICMS_XML_FIELDS,
   CERTIFIED_ACCOUNTANT_ICMS_XML_FIELD_NAMES,
+  INTRINSIC_ST_DUE_XML_FIELD_NAMES,
+  CONDITIONAL_ST_DUE_XML_FIELD_NAMES,
+  CSOSN_ST_DUE_BY_ISSUER_CODES,
   detectUnsupportedApprovedResultFields,
   validateApprovedResultContract,
   resolveExecutableIcmsGroupForCsosn,
 } from './fiscal-configuration/accountant-approved-result-contract.js';
+
+export {
+  ST_PARAMETERS_ALLOWED_KEYS,
+  ST_MOD_BCST_MVA,
+  ST_MOD_BCST_SUPPORTED,
+  ST_PERCENT_FIELD_RULES,
+  validateStParametersContract,
+  detectUnsupportedStParameterFields,
+  hasCompleteStParametersForExecution,
+} from './fiscal-configuration/accountant-st-parameters-contract.js';
+
+export {
+  resolveIssuerStDueCalculation,
+  resolveCommercialBaseForStDue,
+} from './simples-nacional/issuer-st-due-calculation.js';
+
+export {
+  buildIssuerStDueIcmsFields,
+  buildStCalculationAuditMetadata,
+  isIssuerStDueCsosn,
+} from './simples-nacional/issuer-st-due-xml-builder.js';
+
+export { calculateAccountantStDueFromParameters, ST_DUE_OWN_ICMS_POLICY } from './simples-nacional/st-calculation.js';
+
+export {
+  ISSUER_ST_DUE_XML_GROUP_CONTRACT,
+  assertIssuerStDueXmlFieldsComplete,
+  getIssuerStDueXmlGroupContract,
+} from './simples-nacional/issuer-st-due-xml-group-contract.js';
+
+export { resolveCanonicalCommercialBase } from './simples-nacional/commercial-base-policy.js';
 
 export {
   buildFiscalRulesFromApprovedRule,

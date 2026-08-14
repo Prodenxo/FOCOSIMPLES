@@ -7,6 +7,7 @@ import { CURRENT_OPERATION_ST } from '../types/st-allocation.js';
 import { isRuleEffectiveOn } from '../rules/fiscal-rule-engine.js';
 import { assertCsosnInvariantForCurrentSt } from '../simples-nacional/csosn-invariants.js';
 import { assertCfopCsosnIndependence } from '../simples-nacional/cfop-nature-resolver.js';
+import { CSOSN_ST_DUE_BY_ISSUER_CODES } from '../fiscal-configuration/accountant-st-parameters-contract.js';
 
 /**
  * @param {object} params
@@ -157,6 +158,33 @@ export const crossValidateFiscalResolution = ({
       'REQUIRED_FIELD_MISSING',
       'Resolução completa exige exatamente um grupo ICMS.',
     ));
+  }
+
+  if (csosn && CSOSN_ST_DUE_BY_ISSUER_CODES.has(String(csosn)) && xmlResolution?.resolved) {
+    if (currentSt !== CURRENT_OPERATION_ST.DUE_BY_ISSUER) {
+      issues.push(createFiscalIssue(
+        'FISCAL_COMBINATION_FORBIDDEN',
+        `CSOSN ${csosn} exige currentOperationSt DUE_BY_ISSUER.`,
+        { blocksEmission: true, overrideAllowed: false },
+      ));
+    }
+    const icmsFields = xmlResolution?.xmlFields?.taxes?.icms?.fields ?? {};
+    for (const field of ['modBCST', 'pICMSST', 'vBCST', 'vICMSST']) {
+      if (icmsFields[field] == null || icmsFields[field] === '') {
+        issues.push(createFiscalIssue(
+          'REQUIRED_FIELD_MISSING',
+          `Campo ${field} ausente no grupo ICMSSN${csosn} com ST devida.`,
+          { blocksEmission: true, overrideAllowed: false, meta: { field } },
+        ));
+      }
+    }
+    if (icmsFields.modBCST === '4' && (icmsFields.pMVAST == null || icmsFields.pMVAST === '')) {
+      issues.push(createFiscalIssue(
+        'REQUIRED_FIELD_MISSING',
+        'pMVAST ausente para modBCST=4 (MVA).',
+        { blocksEmission: true, overrideAllowed: false, meta: { field: 'pMVAST' } },
+      ));
+    }
   }
 
   if (!shouldHaveGroup && icmsGroups.length > 0) {

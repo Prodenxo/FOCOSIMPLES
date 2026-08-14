@@ -100,7 +100,15 @@ export const resolveFiscalFromContextWithAccountantConfigPure = (
   }
 
   const syntheticRules = buildFiscalRulesFromApprovedRule(match.rule);
-  const result = resolveFiscalFromContext(context, {
+  const approvedResult = match.rule.approvedResult ?? {};
+  const enrichedContext = {
+    ...context,
+    fiscalExtensions: {
+      ...(context.fiscalExtensions ?? {}),
+      accountantApprovedStParameters: approvedResult.stParameters ?? null,
+    },
+  };
+  const result = resolveFiscalFromContext(enrichedContext, {
     ...options,
     rules: syntheticRules,
     allowAccountantApprovedConfiguration: true,

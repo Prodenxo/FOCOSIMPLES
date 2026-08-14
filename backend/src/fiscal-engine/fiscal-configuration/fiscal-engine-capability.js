@@ -1,6 +1,6 @@
 /**
  * Capability gate — configuração aprovada só executa se o engine suporta tecnicamente.
- * Catálogo (CSOSN conhecido) ≠ executável (builder completo) — Phase 8E.2.
+ * Catálogo (CSOSN conhecido) ≠ executável (builder completo) — Phase 8E.2/8E.3.
  */
 import { createFiscalIssue } from '../types/fiscal-issue.js';
 import { FISCAL_ENGINE_CAPABILITY, FISCAL_ENGINE_CAPABILITY_VERSION } from './constants.js';
@@ -9,8 +9,20 @@ import {
   EXECUTABLE_CSOSN_CODES,
   EXECUTABLE_ICMS_GROUPS,
   EXECUTABLE_CURRENT_OPERATION_ST,
+  CSOSN_ST_DUE_BY_ISSUER_CODES,
+  INTRINSIC_ST_DUE_XML_FIELD_NAMES,
   resolveExecutableIcmsGroupForCsosn,
 } from './accountant-approved-result-contract.js';
+import { hasCompleteStParametersForExecution } from './accountant-st-parameters-contract.js';
+import { getIssuerStDueXmlGroupContract } from '../simples-nacional/issuer-st-due-xml-group-contract.js';
+
+const BUILDER_CAPABILITY_BY_GROUP = Object.freeze({
+  ICMSSN102: FISCAL_ENGINE_CAPABILITY.ICMSSN102_BUILDER,
+  ICMSSN500: FISCAL_ENGINE_CAPABILITY.ICMSSN500_BUILDER,
+  ICMSSN201: FISCAL_ENGINE_CAPABILITY.ICMSSN201_BUILDER,
+  ICMSSN202: FISCAL_ENGINE_CAPABILITY.ICMSSN202_BUILDER,
+  ICMSSN203: FISCAL_ENGINE_CAPABILITY.ICMSSN203_BUILDER,
+});
 
 /**
  * @param {object} approvedResult
@@ -27,11 +39,10 @@ export const resolveRequiredCapabilities = (approvedResult = {}) => {
   if (csosn && EXECUTABLE_CSOSN_CODES.has(csosn)) {
     required.push(FISCAL_ENGINE_CAPABILITY.CSOSN_RESOLUTION);
     const group = resolveExecutableIcmsGroupForCsosn(csosn, approvedResult.icmsGroup ?? null);
-    if (group === 'ICMSSN102' || csosn === '102') {
-      required.push(FISCAL_ENGINE_CAPABILITY.ICMSSN102_BUILDER);
-    }
-    if (group === 'ICMSSN500' || csosn === '500') {
-      required.push(FISCAL_ENGINE_CAPABILITY.ICMSSN500_BUILDER);
+    const builderCap = BUILDER_CAPABILITY_BY_GROUP[group];
+    if (builderCap) required.push(builderCap);
+    if (CSOSN_ST_DUE_BY_ISSUER_CODES.has(csosn)) {
+      required.push(FISCAL_ENGINE_CAPABILITY.ST_DUE_CALCULATION);
     }
   }
 
@@ -43,7 +54,12 @@ export const resolveRequiredCapabilities = (approvedResult = {}) => {
   const xmlFields = Array.isArray(approvedResult.requiredXmlFields)
     ? approvedResult.requiredXmlFields
     : [];
-  if (xmlFields.some((field) => CERTIFIED_ACCOUNTANT_ICMS_XML_FIELD_NAMES.includes(String(field)))) {
+  if (xmlFields.some((field) => CERTIFIED_ACCOUNTANT_ICMS_XML_FIELD_NAMES.includes(String(field))
+    && !INTRINSIC_ST_DUE_XML_FIELD_NAMES.includes(String(field)))) {
+    required.push(FISCAL_ENGINE_CAPABILITY.XML_FIELDS_BUILDER);
+  }
+
+  if (CSOSN_ST_DUE_BY_ISSUER_CODES.has(csosn ?? '')) {
     required.push(FISCAL_ENGINE_CAPABILITY.XML_FIELDS_BUILDER);
   }
 
@@ -51,7 +67,7 @@ export const resolveRequiredCapabilities = (approvedResult = {}) => {
 };
 
 /**
- * Capabilities atualmente suportadas pelo engine v3.1 Phase 8E.2.
+ * Capabilities atualmente suportadas pelo engine v3.1 Phase 8E.3.
  */
 export const getSupportedEngineCapabilities = () => new Set([
   FISCAL_ENGINE_CAPABILITY.CFOP_RESOLUTION,
@@ -59,6 +75,10 @@ export const getSupportedEngineCapabilities = () => new Set([
   FISCAL_ENGINE_CAPABILITY.CURRENT_ST_RESOLUTION,
   FISCAL_ENGINE_CAPABILITY.ICMSSN102_BUILDER,
   FISCAL_ENGINE_CAPABILITY.ICMSSN500_BUILDER,
+  FISCAL_ENGINE_CAPABILITY.ICMSSN201_BUILDER,
+  FISCAL_ENGINE_CAPABILITY.ICMSSN202_BUILDER,
+  FISCAL_ENGINE_CAPABILITY.ICMSSN203_BUILDER,
+  FISCAL_ENGINE_CAPABILITY.ST_DUE_CALCULATION,
   FISCAL_ENGINE_CAPABILITY.XML_FIELDS_BUILDER,
   FISCAL_ENGINE_CAPABILITY.CROSS_VALIDATOR,
 ]);
@@ -80,6 +100,23 @@ export const evaluateAccountantRuleEngineCapability = (rule) => {
     issues.push(createFiscalIssue(
       'ACCOUNTANT_RULE_NOT_EXECUTABLE',
       `CSOSN ${csosn} existe no catálogo mas não possui builder executável no engine.`,
+      { blocksEmission: true, overrideAllowed: false, meta: { csosn } },
+    ));
+  }
+
+  if (CSOSN_ST_DUE_BY_ISSUER_CODES.has(csosn ?? '') && !hasCompleteStParametersForExecution(approvedResult)) {
+    issues.push(createFiscalIssue(
+      'ACCOUNTANT_RULE_NOT_EXECUTABLE',
+      `CSOSN ${csosn} exige stParameters completos para ST devida.`,
+      { blocksEmission: true, overrideAllowed: false, meta: { csosn } },
+    ));
+  }
+
+  const groupContract = csosn ? getIssuerStDueXmlGroupContract(csosn) : null;
+  if (CSOSN_ST_DUE_BY_ISSUER_CODES.has(csosn ?? '') && !groupContract?.executable) {
+    issues.push(createFiscalIssue(
+      'ACCOUNTANT_RULE_NOT_EXECUTABLE',
+      `CSOSN ${csosn} não possui builder XML ST devida certificado.`,
       { blocksEmission: true, overrideAllowed: false, meta: { csosn } },
     ));
   }
@@ -107,6 +144,13 @@ export const evaluateAccountantRuleEngineCapability = (rule) => {
       issues.push(createFiscalIssue(
         'ACCOUNTANT_RULE_NOT_EXECUTABLE',
         `Campo XML ${field} não certificado para execução via configuração do contador.`,
+        { blocksEmission: true, overrideAllowed: false, meta: { field } },
+      ));
+    }
+    if (INTRINSIC_ST_DUE_XML_FIELD_NAMES.includes(String(field))) {
+      issues.push(createFiscalIssue(
+        'ACCOUNTANT_RULE_NOT_EXECUTABLE',
+        `Campo ${field} é intrínseco ao builder ST devida — remova de requiredXmlFields.`,
         { blocksEmission: true, overrideAllowed: false, meta: { field } },
       ));
     }

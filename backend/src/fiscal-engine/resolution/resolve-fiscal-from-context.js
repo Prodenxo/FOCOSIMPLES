@@ -17,6 +17,9 @@ import {
 } from '../rules/fiscal-rule-memory.repository.js';
 import { normalizeResolverOptions } from '../rules/fiscal-rule-execution-policy.js';
 import { CURRENT_OPERATION_ST } from '../types/st-allocation.js';
+import { resolveIssuerStDueCalculation } from '../simples-nacional/issuer-st-due-calculation.js';
+import { buildStCalculationAuditMetadata } from '../simples-nacional/issuer-st-due-xml-builder.js';
+import { isIssuerStDueCsosn } from '../simples-nacional/issuer-st-due-xml-builder.js';
 
 /**
  * @param {object} context FiscalContext (Fase 4)
@@ -89,11 +92,24 @@ export const resolveFiscalFromContext = (context, options = {}) => {
     if (rule) appliedRules.push(rule);
   }
 
+  let stDueCalculation = null;
+  const csosn = csosnResolution?.csosn ?? null;
+  if (csosn
+    && isIssuerStDueCsosn(csosn)
+    && treatment.currentOperationSt === CURRENT_OPERATION_ST.DUE_BY_ISSUER) {
+    stDueCalculation = resolveIssuerStDueCalculation(context, {
+      stParameters: context.fiscalExtensions?.accountantApprovedStParameters,
+    });
+    audit.steps.stCalculation = buildStCalculationAuditMetadata(stDueCalculation)
+      ?? { reason: stDueCalculation.ok ? 'ok' : 'failed' };
+  }
+
   const xmlResolution = resolveXmlFields({
     context,
     treatment,
     csosnResolution,
     cfopResolution,
+    stDueCalculation,
   });
   audit.steps.xmlFields = {
     resolved: xmlResolution.resolved,
@@ -116,6 +132,7 @@ export const resolveFiscalFromContext = (context, options = {}) => {
     ...currentStResolution.issues,
     ...csosnResolution.issues,
     ...cfopResolution.issues,
+    ...(stDueCalculation?.issues ?? []),
     ...xmlResolution.issues,
     ...cross.issues,
   ];
@@ -126,12 +143,14 @@ export const resolveFiscalFromContext = (context, options = {}) => {
     cst: csosnResolution.cst,
     cfop: cfopResolution.cfop,
     xmlFields: xmlResolution.xmlFields,
+    stCalculation: stDueCalculation?.ok ? stDueCalculation.result : null,
   };
 
   const fullyResolved = currentStResolution.resolved
     && csosnResolution.resolved
     && cfopResolution.resolved
-    && xmlResolution.resolved;
+    && xmlResolution.resolved
+    && (stDueCalculation == null || stDueCalculation.ok);
 
   let fiscalNFeItem = null;
   if (fullyResolved && xmlResolution.icmsGroups?.length === 1) {

@@ -353,6 +353,52 @@ const MINIMAL_FISCAL_CONFIGURATION_SCHEMA_SQL = `
   );
 `;
 
+/** Lock test-only: serializa bootstrap DDL vs DML de testes nas mesmas relações. */
+export const FISCAL_PRODUCT_GROUP_TEST_DML_SERIAL_LOCK_LABEL = 'fiscal_product_group_test_dml_serial';
+
+/** Serialização test harness vs bootstrap DDL — inativo fora do node --test runner. */
+const shouldSerializeFiscalConfigurationTestDml = () => process.argv.includes('--test');
+
+/** @param {import('pg').PoolClient} client @internal testes */
+const acquireFiscalConfigurationTestDmlSerialLock = async (client) => {
+  await client.query(
+    'SELECT pg_advisory_xact_lock(hashtext($1))',
+    [FISCAL_PRODUCT_GROUP_TEST_DML_SERIAL_LOCK_LABEL],
+  );
+};
+
+/** @param {import('pg').PoolClient} client */
+const maybeAcquireFiscalConfigurationTestDmlSerialLock = async (client) => {
+  if (shouldSerializeFiscalConfigurationTestDml()) {
+    await acquireFiscalConfigurationTestDmlSerialLock(client);
+  }
+};
+
+/**
+ * Executa mutação PG com serialização test-only vs bootstrap DDL Phase 8C/8D.
+ * @template T
+ * @param {(db: import('pg').Pool | import('pg').PoolClient) => Promise<T>} fn
+ */
+const runFiscalConfigurationPgMutation = async (fn) => {
+  const pool = getPgPool();
+  if (!shouldSerializeFiscalConfigurationTestDml()) {
+    return fn(pool);
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await maybeAcquireFiscalConfigurationTestDmlSerialLock(client);
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
 /**
  * Transição atômica de status — SELECT FOR UPDATE + UPDATE com predicado de status.
  * @internal
@@ -373,6 +419,7 @@ const transitionAccountantRulePg = async ({
 
   try {
     await client.query('BEGIN');
+    await acquireFiscalConfigurationTestDmlSerialLock(client);
 
     const locked = await client.query(
       `SELECT * FROM accountant_approved_fiscal_rules
@@ -445,9 +492,8 @@ export const fetchAccountantRulePg = async ({ tenantId, ruleId, version }) => {
   return result.rows[0] ? mapAccountantRuleRow(result.rows[0]) : null;
 };
 
-export const upsertAccountantRuleDraftPg = async (rule) => {
-  const pool = getPgPool();
-  const result = await pool.query(
+export const upsertAccountantRuleDraftPg = async (rule) => runFiscalConfigurationPgMutation(async (db) => {
+  const result = await db.query(
     `INSERT INTO accountant_approved_fiscal_rules (
       id, tenant_id, version, establishment_id, status, conditions, approved_result,
       required_facts, base_specificity, valid_from, valid_until,
@@ -511,7 +557,7 @@ export const upsertAccountantRuleDraftPg = async (rule) => {
   }
 
   return mapAccountantRuleRow(result.rows[0]);
-};
+});
 
 export const approveAccountantRulePg = async ({
   tenantId, ruleId, version, approvedBy, approvedAt, justification,
@@ -575,7 +621,6 @@ export const revokeAccountantRulePg = async ({
 };
 
 export const createAccountantRuleNewVersionPg = async (rule) => {
-  const pool = getPgPool();
   const version = rule.version ?? 1;
 
   const duplicate = await fetchAccountantRulePg({
@@ -587,7 +632,8 @@ export const createAccountantRuleNewVersionPg = async (rule) => {
     throw new Error(`Versão ${version} já existe para regra ${rule.id}`);
   }
 
-  const result = await pool.query(
+  return runFiscalConfigurationPgMutation(async (db) => {
+    const result = await db.query(
     `INSERT INTO accountant_approved_fiscal_rules (
       id, tenant_id, version, establishment_id, status, conditions, approved_result,
       required_facts, base_specificity, valid_from, valid_until,
@@ -626,9 +672,10 @@ export const createAccountantRuleNewVersionPg = async (rule) => {
       rule.description ?? null,
       rule.authoringType ?? 'DIRECT_RULE',
     ],
-  );
+    );
 
-  return mapAccountantRuleRow(result.rows[0]);
+    return mapAccountantRuleRow(result.rows[0]);
+  });
 };
 
 // --- Company Fiscal Profile ---
@@ -645,9 +692,8 @@ export const fetchCompanyFiscalProfilePg = async ({ tenantId, establishmentId = 
   return mapCompanyFiscalProfileRow(result.rows[0]);
 };
 
-export const upsertCompanyFiscalProfilePg = async (profile) => {
-  const pool = getPgPool();
-  const result = await pool.query(
+export const upsertCompanyFiscalProfilePg = async (profile) => runFiscalConfigurationPgMutation(async (db) => {
+  const result = await db.query(
     `INSERT INTO company_fiscal_profiles (
       id, tenant_id, company_id, establishment_id, crt, tax_regime, issuer_uf,
       municipality_code, state_registration, state_registration_status, main_cnae,
@@ -712,7 +758,7 @@ export const upsertCompanyFiscalProfilePg = async (profile) => {
     ],
   );
   return mapCompanyFiscalProfileRow(result.rows[0]);
-};
+});
 
 // --- Product Fiscal Profile ---
 
@@ -739,9 +785,8 @@ export const listProductFiscalProfilesPg = async (tenantId) => {
   return result.rows.map(mapProductFiscalProfileRow);
 };
 
-export const upsertProductFiscalProfilePg = async (profile) => {
-  const pool = getPgPool();
-  const result = await pool.query(
+export const upsertProductFiscalProfilePg = async (profile) => runFiscalConfigurationPgMutation(async (db) => {
+  const result = await db.query(
     `INSERT INTO product_fiscal_profiles (
       id, tenant_id, product_id, ncm, cest, item_source, tax_classification_status,
       pis_cofins_classification, monophase_classification, ipi_classification,
@@ -793,7 +838,7 @@ export const upsertProductFiscalProfilePg = async (profile) => {
     ],
   );
   return mapProductFiscalProfileRow(result.rows[0]);
-};
+});
 
 // --- Customer Tax Profile ---
 
@@ -820,9 +865,8 @@ export const listCustomerTaxProfilesPg = async (tenantId) => {
   return result.rows.map(mapCustomerTaxProfileRow);
 };
 
-export const upsertCustomerTaxProfilePg = async (profile) => {
-  const pool = getPgPool();
-  const result = await pool.query(
+export const upsertCustomerTaxProfilePg = async (profile) => runFiscalConfigurationPgMutation(async (db) => {
+  const result = await db.query(
     `INSERT INTO customer_tax_profiles (
       id, tenant_id, customer_id, person_type, country, uf, municipality_code,
       cpf_cnpj, state_registration, state_registration_status, taxpayer_status,
@@ -871,7 +915,7 @@ export const upsertCustomerTaxProfilePg = async (profile) => {
     ],
   );
   return mapCustomerTaxProfileRow(result.rows[0]);
-};
+});
 
 // --- Fiscal Rule Templates (global) ---
 
@@ -892,9 +936,8 @@ export const listFiscalRuleTemplatesPg = async () => {
   return result.rows.map(mapFiscalRuleTemplateRow);
 };
 
-export const upsertFiscalRuleTemplatePg = async (template) => {
-  const pool = getPgPool();
-  const result = await pool.query(
+export const upsertFiscalRuleTemplatePg = async (template) => runFiscalConfigurationPgMutation(async (db) => {
+  const result = await db.query(
     `INSERT INTO fiscal_rule_templates (
       id, name, description, suggested_conditions, suggested_result,
       production_ready, authoritative_for_tenant, legal_source_refs, updated_at
@@ -921,7 +964,7 @@ export const upsertFiscalRuleTemplatePg = async (template) => {
     ],
   );
   return mapFiscalRuleTemplateRow(result.rows[0]);
-};
+});
 
 // --- Tax Catalog Entries (global) ---
 
@@ -942,9 +985,8 @@ export const listTaxCatalogEntriesPg = async () => {
   return result.rows.map(mapTaxCatalogEntryRow);
 };
 
-export const upsertTaxCatalogEntryPg = async (entry) => {
-  const pool = getPgPool();
-  const result = await pool.query(
+export const upsertTaxCatalogEntryPg = async (entry) => runFiscalConfigurationPgMutation(async (db) => {
+  const result = await db.query(
     `INSERT INTO tax_catalog_entries (
       id, ncm, cest, segment, jurisdiction, issuer_uf, destination_uf,
       tax_classification, st_applicability_metadata, pis_cofins_classification,
@@ -993,7 +1035,7 @@ export const upsertTaxCatalogEntryPg = async (entry) => {
     ],
   );
   return mapTaxCatalogEntryRow(result.rows[0]);
-};
+});
 
 // --- Fiscal Product Groups (Phase 8D) ---
 
@@ -1025,7 +1067,9 @@ const mapFiscalProductGroupMembershipRow = (row) => (row ? {
  * NÃO usar no runtime de produção.
  * @internal
  */
-export const FISCAL_PRODUCT_GROUP_TEST_DML_SERIAL_LOCK_LABEL = 'fiscal_product_group_test_dml_serial';
+const acquireFiscalProductGroupTestDmlSerialLock = acquireFiscalConfigurationTestDmlSerialLock;
+const shouldSerializeFiscalProductGroupTestDml = shouldSerializeFiscalConfigurationTestDml;
+const maybeAcquireFiscalProductGroupTestDmlSerialLock = maybeAcquireFiscalConfigurationTestDmlSerialLock;
 
 /** Prefixo dos advisory locks runtime por tenant+produto. */
 export const FISCAL_PRODUCT_GROUP_MEMBERSHIP_ADVISORY_LOCK_PREFIX = 'fpg-membership';
@@ -1034,24 +1078,6 @@ export const FISCAL_PRODUCT_GROUP_MEMBERSHIP_ADVISORY_LOCK_PREFIX = 'fpg-members
 export const buildFiscalProductGroupMembershipAdvisoryLockKey = (tenantId, productId) => (
   `${FISCAL_PRODUCT_GROUP_MEMBERSHIP_ADVISORY_LOCK_PREFIX}:${tenantId}:${productId}`
 );
-
-/** @param {import('pg').PoolClient} client @internal testes */
-const acquireFiscalProductGroupTestDmlSerialLock = async (client) => {
-  await client.query(
-    'SELECT pg_advisory_xact_lock(hashtext($1))',
-    [FISCAL_PRODUCT_GROUP_TEST_DML_SERIAL_LOCK_LABEL],
-  );
-};
-
-/** Serialização test harness vs bootstrap DDL — inativo fora do node --test runner. */
-const shouldSerializeFiscalProductGroupTestDml = () => process.argv.includes('--test');
-
-/** @param {import('pg').PoolClient} client */
-const maybeAcquireFiscalProductGroupTestDmlSerialLock = async (client) => {
-  if (shouldSerializeFiscalProductGroupTestDml()) {
-    await acquireFiscalProductGroupTestDmlSerialLock(client);
-  }
-};
 
 export const upsertFiscalProductGroupPg = async (group) => {
   const pool = getPgPool();
@@ -1295,7 +1321,7 @@ export const __ensureFiscalConfigurationSchemaForTests = async () => {
 
   try {
     await client.query('BEGIN');
-    await acquireFiscalProductGroupTestDmlSerialLock(client);
+    await acquireFiscalConfigurationTestDmlSerialLock(client);
     await client.query(
       'SELECT pg_advisory_xact_lock(hashtext($1))',
       [FISCAL_CONFIGURATION_PHASE8C_TEST_SCHEMA_LOCK_LABEL],
@@ -1329,7 +1355,7 @@ export const __deleteFiscalConfigurationForTenantTests = async (tenantId) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await acquireFiscalProductGroupTestDmlSerialLock(client);
+    await acquireFiscalConfigurationTestDmlSerialLock(client);
     await client.query('DELETE FROM fiscal_product_group_memberships WHERE tenant_id = $1', [tenantId]);
     await client.query('DELETE FROM fiscal_product_groups WHERE tenant_id = $1', [tenantId]);
     await client.query('DELETE FROM accountant_approved_fiscal_rules WHERE tenant_id = $1', [tenantId]);
