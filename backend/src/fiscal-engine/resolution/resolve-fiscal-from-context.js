@@ -20,6 +20,8 @@ import { CURRENT_OPERATION_ST } from '../types/st-allocation.js';
 import { resolveIssuerStDueCalculation } from '../simples-nacional/issuer-st-due-calculation.js';
 import { buildStCalculationAuditMetadata } from '../simples-nacional/issuer-st-due-xml-builder.js';
 import { isIssuerStDueCsosn } from '../simples-nacional/issuer-st-due-xml-builder.js';
+import { resolveAccountantPisCofinsCalculation } from '../simples-nacional/pis-cofins-calculation.js';
+import { buildPisCofinsAuditMetadata } from '../simples-nacional/pis-cofins-xml-builder.js';
 
 /**
  * @param {object} context FiscalContext (Fase 4)
@@ -104,12 +106,22 @@ export const resolveFiscalFromContext = (context, options = {}) => {
       ?? { reason: stDueCalculation.ok ? 'ok' : 'failed' };
   }
 
+  let pisCofinsCalculation = null;
+  const hasPisCofinsConfig = context.fiscalExtensions?.accountantApprovedPis != null
+    || context.fiscalExtensions?.accountantApprovedCofins != null;
+  if (hasPisCofinsConfig) {
+    pisCofinsCalculation = resolveAccountantPisCofinsCalculation(context);
+    audit.steps.pisCofins = buildPisCofinsAuditMetadata(pisCofinsCalculation)
+      ?? { reason: pisCofinsCalculation.ok ? 'ok' : 'failed' };
+  }
+
   const xmlResolution = resolveXmlFields({
     context,
     treatment,
     csosnResolution,
     cfopResolution,
     stDueCalculation,
+    pisCofinsCalculation,
   });
   audit.steps.xmlFields = {
     resolved: xmlResolution.resolved,
@@ -125,6 +137,7 @@ export const resolveFiscalFromContext = (context, options = {}) => {
     xmlResolution,
     ruleRefs,
     appliedRules,
+    pisCofinsResolution: pisCofinsCalculation,
   });
 
   const allIssues = [
@@ -133,6 +146,7 @@ export const resolveFiscalFromContext = (context, options = {}) => {
     ...csosnResolution.issues,
     ...cfopResolution.issues,
     ...(stDueCalculation?.issues ?? []),
+    ...(pisCofinsCalculation?.issues ?? []),
     ...xmlResolution.issues,
     ...cross.issues,
   ];
@@ -144,13 +158,18 @@ export const resolveFiscalFromContext = (context, options = {}) => {
     cfop: cfopResolution.cfop,
     xmlFields: xmlResolution.xmlFields,
     stCalculation: stDueCalculation?.ok ? stDueCalculation.result : null,
+    pisCofins: pisCofinsCalculation?.ok ? {
+      pis: pisCofinsCalculation.pis?.result ?? null,
+      cofins: pisCofinsCalculation.cofins?.result ?? null,
+    } : null,
   };
 
   const fullyResolved = currentStResolution.resolved
     && csosnResolution.resolved
     && cfopResolution.resolved
     && xmlResolution.resolved
-    && (stDueCalculation == null || stDueCalculation.ok);
+    && (stDueCalculation == null || stDueCalculation.ok)
+    && (pisCofinsCalculation == null || pisCofinsCalculation.ok);
 
   let fiscalNFeItem = null;
   if (fullyResolved && xmlResolution.icmsGroups?.length === 1) {
@@ -166,7 +185,11 @@ export const resolveFiscalFromContext = (context, options = {}) => {
       valorTotal: context.item?.valorTotal ?? '0',
       origemMercadoria: context.allocation?.origem ?? context.estoque?.origemMercadoria ?? 'UNKNOWN',
       itemSource: context.item?.itemSource ?? 'UNKNOWN',
-      taxes: { icms: xmlResolution.xmlFields?.taxes?.icms?.fields ?? {} },
+      taxes: {
+        icms: xmlResolution.xmlFields?.taxes?.icms?.fields ?? {},
+        ...(xmlResolution.xmlFields?.taxes?.pis ? { pis: xmlResolution.xmlFields.taxes.pis } : {}),
+        ...(xmlResolution.xmlFields?.taxes?.cofins ? { cofins: xmlResolution.xmlFields.taxes.cofins } : {}),
+      },
       status: deriveResolutionStatusFromIssues(allIssues),
       issues: allIssues,
     });

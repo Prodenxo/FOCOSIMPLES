@@ -8,6 +8,10 @@ import { isRuleEffectiveOn } from '../rules/fiscal-rule-engine.js';
 import { assertCsosnInvariantForCurrentSt } from '../simples-nacional/csosn-invariants.js';
 import { assertCfopCsosnIndependence } from '../simples-nacional/cfop-nature-resolver.js';
 import { CSOSN_ST_DUE_BY_ISSUER_CODES } from '../fiscal-configuration/accountant-st-parameters-contract.js';
+import {
+  assertPisCofinsXmlFieldsComplete,
+  getPisCofinsGroupForCst,
+} from '../simples-nacional/pis-cofins-xml-group-contract.js';
 
 /**
  * @param {object} params
@@ -21,6 +25,7 @@ export const crossValidateFiscalResolution = ({
   xmlResolution,
   ruleRefs = [],
   appliedRules = [],
+  pisCofinsResolution = null,
 }) => {
   const issues = [];
 
@@ -192,6 +197,67 @@ export const crossValidateFiscalResolution = ({
       'FISCAL_COMBINATION_FORBIDDEN',
       'Grupo ICMS presente com resolução tributária incompleta.',
     ));
+  }
+
+  const pisConfig = context.fiscalExtensions?.accountantApprovedPis;
+  const cofinsConfig = context.fiscalExtensions?.accountantApprovedCofins;
+  const pisXml = xmlResolution?.xmlFields?.taxes?.pis;
+  const cofinsXml = xmlResolution?.xmlFields?.taxes?.cofins;
+
+  if (pisConfig != null && xmlResolution?.resolved) {
+    if (!pisXml) {
+      issues.push(createFiscalIssue(
+        'REQUIRED_FIELD_MISSING',
+        'PIS configurado pelo contador mas ausente no XML resolvido.',
+        { blocksEmission: true, overrideAllowed: false },
+      ));
+    } else {
+      const cst = String(pisConfig.cst ?? '').padStart(2, '0').slice(0, 2);
+      const expected = getPisCofinsGroupForCst(cst, 'pis');
+      if (expected && pisXml.group !== expected.group) {
+        issues.push(createFiscalIssue(
+          'FISCAL_COMBINATION_FORBIDDEN',
+          `Grupo PIS ${pisXml.group} incompatível com CST ${cst} (esperado ${expected.group}).`,
+          { blocksEmission: true, overrideAllowed: false },
+        ));
+      }
+      const completeness = assertPisCofinsXmlFieldsComplete(cst, pisXml.fields ?? {}, 'pis');
+      for (const field of completeness.missing ?? []) {
+        issues.push(createFiscalIssue(
+          'REQUIRED_FIELD_MISSING',
+          `Campo PIS ${field} ausente no grupo ${pisXml.group}.`,
+          { blocksEmission: true, overrideAllowed: false, meta: { field, tax: 'pis' } },
+        ));
+      }
+    }
+  }
+
+  if (cofinsConfig != null && xmlResolution?.resolved) {
+    if (!cofinsXml) {
+      issues.push(createFiscalIssue(
+        'REQUIRED_FIELD_MISSING',
+        'COFINS configurado pelo contador mas ausente no XML resolvido.',
+        { blocksEmission: true, overrideAllowed: false },
+      ));
+    } else {
+      const cst = String(cofinsConfig.cst ?? '').padStart(2, '0').slice(0, 2);
+      const expected = getPisCofinsGroupForCst(cst, 'cofins');
+      if (expected && cofinsXml.group !== expected.group) {
+        issues.push(createFiscalIssue(
+          'FISCAL_COMBINATION_FORBIDDEN',
+          `Grupo COFINS ${cofinsXml.group} incompatível com CST ${cst} (esperado ${expected.group}).`,
+          { blocksEmission: true, overrideAllowed: false },
+        ));
+      }
+      const completeness = assertPisCofinsXmlFieldsComplete(cst, cofinsXml.fields ?? {}, 'cofins');
+      for (const field of completeness.missing ?? []) {
+        issues.push(createFiscalIssue(
+          'REQUIRED_FIELD_MISSING',
+          `Campo COFINS ${field} ausente no grupo ${cofinsXml.group}.`,
+          { blocksEmission: true, overrideAllowed: false, meta: { field, tax: 'cofins' } },
+        ));
+      }
+    }
   }
 
   const referenceDate = context.operacao?.referenceDate ?? context.dataOperacao;

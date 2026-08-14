@@ -86,7 +86,7 @@ test.afterEach(() => resetFiscalConfigurationRepository());
 // --- approvedResult allowlist ---
 test('8E-CONTRACT-01: approvedResult desconhecido bloqueia aprovação', () => {
   const result = validateAccountantRuleForApproval(draftRule({
-    approvedResult: { ...stdApproved, pis: { cst: '49' } },
+    approvedResult: { ...stdApproved, ipi: { cst: '99' } },
   }));
   assert.equal(result.ok, false);
   assert.ok(result.issues.some((i) => i.code === 'ACCOUNTANT_RULE_UNSUPPORTED_RESULT_FIELD'));
@@ -335,6 +335,6 @@ test('8E-REG-C: interestadual contribuinte CSOSN102 preservada', async () => {
 
 test('8E-META: allowlist approvedResult documentada', () => {
   assert.deepEqual([...APPROVED_RESULT_ALLOWED_KEYS], [
-    'cfop', 'csosn', 'icmsGroup', 'currentOperationSt', 'stParameters', 'requiredXmlFields', 'cfopConstraints',
+    'cfop', 'csosn', 'icmsGroup', 'currentOperationSt', 'stParameters', 'pis', 'cofins', 'requiredXmlFields', 'cfopConstraints',
   ]);
 });

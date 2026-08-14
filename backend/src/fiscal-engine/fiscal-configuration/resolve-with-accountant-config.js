@@ -106,6 +106,8 @@ export const resolveFiscalFromContextWithAccountantConfigPure = (
     fiscalExtensions: {
       ...(context.fiscalExtensions ?? {}),
       accountantApprovedStParameters: approvedResult.stParameters ?? null,
+      accountantApprovedPis: approvedResult.pis ?? null,
+      accountantApprovedCofins: approvedResult.cofins ?? null,
     },
   };
   const result = resolveFiscalFromContext(enrichedContext, {

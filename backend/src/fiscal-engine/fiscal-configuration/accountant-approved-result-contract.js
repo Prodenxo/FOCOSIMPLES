@@ -1,9 +1,11 @@
 /**
  * Contrato Phase 8E — approvedResult allowlist, CSOSN executável vs catálogo, XML fields certificados.
  * Phase 8E.3 — ST devida CSOSN 201/202/203 + stParameters.
+ * Phase 8E.4 — PIS/COFINS parametrizáveis pelo contador.
  */
 import { createFiscalIssue } from '../types/fiscal-issue.js';
 import { validateStParametersContract, CSOSN_ST_DUE_BY_ISSUER_CODES } from './accountant-st-parameters-contract.js';
+import { validatePisCofinsContract } from './accountant-pis-cofins-contract.js';
 
 export { CSOSN_ST_DUE_BY_ISSUER_CODES };
 
@@ -14,6 +16,8 @@ export const APPROVED_RESULT_ALLOWED_KEYS = Object.freeze([
   'icmsGroup',
   'currentOperationSt',
   'stParameters',
+  'pis',
+  'cofins',
   'requiredXmlFields',
   'cfopConstraints',
 ]);
@@ -134,6 +138,7 @@ export const validateApprovedResultContract = (approvedResult = {}) => {
   }
 
   issues.push(...validateStParametersContract(approvedResult));
+  issues.push(...validatePisCofinsContract(approvedResult));
 
   for (const field of approvedResult.requiredXmlFields ?? []) {
     const meta = CERTIFIED_ACCOUNTANT_ICMS_XML_FIELDS[String(field)];

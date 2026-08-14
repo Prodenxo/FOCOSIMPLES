@@ -550,6 +550,40 @@ export {
 export { resolveCanonicalCommercialBase } from './simples-nacional/commercial-base-policy.js';
 
 export {
+  PIS_COFINS_CONFIG_ALLOWED_KEYS,
+  PIS_COFINS_FORBIDDEN_VALUE_KEYS,
+  PIS_COFINS_NT_DERIVABLE_CSTS,
+  PIS_COFINS_EXPLICIT_MODE_CSTS,
+  detectUnsupportedPisCofinsFields,
+  resolvePisCofinsCalculationMode,
+  validatePisCofinsPairAtomicity,
+  validatePisCofinsConfigBlock,
+  validatePisCofinsContract,
+  isPisCofinsConfigExecutable,
+  hasCompletePisCofinsForExecution,
+} from './fiscal-configuration/accountant-pis-cofins-contract.js';
+
+export {
+  PIS_COFINS_CALCULATION_MODES,
+  PIS_XML_GROUP_CONTRACT,
+  COFINS_XML_GROUP_CONTRACT,
+  PIS_COFINS_KNOWN_CSTS,
+  PIS_COFINS_EXECUTABLE_CSTS,
+  getPisCofinsGroupForCst,
+  assertPisCofinsXmlFieldsComplete,
+} from './simples-nacional/pis-cofins-xml-group-contract.js';
+
+export {
+  calculatePisCofinsFromConfig,
+  resolveAccountantPisCofinsCalculation,
+} from './simples-nacional/pis-cofins-calculation.js';
+
+export {
+  buildPisCofinsXmlEntry,
+  buildPisCofinsAuditMetadata,
+} from './simples-nacional/pis-cofins-xml-builder.js';
+
+export {
   buildFiscalRulesFromApprovedRule,
   translateApprovedConditionsToFiscalRuleConditions,
   isAccountantApprovedConfigurationRule,

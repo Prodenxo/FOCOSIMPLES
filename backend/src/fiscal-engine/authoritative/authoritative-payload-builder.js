@@ -55,6 +55,8 @@ const buildSplitNfeItem = (legacyItem, fiscalResult, allocation, splitMeta) => {
   const xmlFields = fiscalResult.resolutions?.xmlFields ?? {};
   const icmsBlock = xmlFields.taxes?.icms ?? fiscalResult.resolutions?.xmlFields?.icms ?? null;
   const icmsFields = icmsBlock?.fields ?? {};
+  const pisBlock = xmlFields.taxes?.pis ?? null;
+  const cofinsBlock = xmlFields.taxes?.cofins ?? null;
   const resolvedOrigem = icmsFields.orig
     ?? fiscalResult.context?.estoque?.origemMercadoria
     ?? fiscalResult.context?.origemMercadoria?.code
@@ -75,6 +77,8 @@ const buildSplitNfeItem = (legacyItem, fiscalResult, allocation, splitMeta) => {
     impostos: {
       ...(legacyItem.impostos ?? {}),
       icms: icmsFields ?? legacyItem.impostos?.icms,
+      ...(pisBlock ? { pis: pisBlock } : {}),
+      ...(cofinsBlock ? { cofins: cofinsBlock } : {}),
     },
     _fiscalEngine: {
       nfeItemKey: fiscalResult.fiscalNFeItem?.nfeItemKey ?? null,

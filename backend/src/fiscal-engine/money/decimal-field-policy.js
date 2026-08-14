@@ -111,6 +111,36 @@ export const DEFAULT_DECIMAL_FIELD_POLICIES = Object.freeze([
     technicalSource: 'MOC NF-e 7.0',
     effectiveFrom: '2020-01-01',
   },
+  {
+    field: 'vPIS',
+    maxScale: 2,
+    roundingMode: ROUNDING_MODES.HALF_UP,
+    technicalSource: 'MOC NF-e 7.0 — PIS',
+    effectiveFrom: '2020-01-01',
+  },
+  {
+    field: 'vCOFINS',
+    maxScale: 2,
+    roundingMode: ROUNDING_MODES.HALF_UP,
+    technicalSource: 'MOC NF-e 7.0 — COFINS',
+    effectiveFrom: '2020-01-01',
+  },
+  {
+    field: 'pPIS',
+    maxScale: 4,
+    minScale: 2,
+    roundingMode: ROUNDING_MODES.HALF_UP,
+    technicalSource: 'MOC NF-e 7.0 — PIS',
+    effectiveFrom: '2020-01-01',
+  },
+  {
+    field: 'pCOFINS',
+    maxScale: 4,
+    minScale: 2,
+    roundingMode: ROUNDING_MODES.HALF_UP,
+    technicalSource: 'MOC NF-e 7.0 — COFINS',
+    effectiveFrom: '2020-01-01',
+  },
 ]);
 
 /**

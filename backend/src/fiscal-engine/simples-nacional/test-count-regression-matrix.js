@@ -73,7 +73,12 @@ export const FISCAL_ENGINE_TEST_COUNT_AUDIT = Object.freeze({
   phase8e3StDueAdded: 22,
   phase8e3HardeningAdded: 8,
   reported647: 428 + 38 + 36 + 22 + 15 + 8 + 45 + 25 + 22 + 8,
+  phase8e4PisCofinsAdded: 30,
+  phase8e4HardeningAdded: 12,
+  reported689: 428 + 38 + 36 + 22 + 15 + 8 + 45 + 25 + 22 + 8 + 30 + 12,
+  reported677: 428 + 38 + 36 + 22 + 15 + 8 + 45 + 25 + 22 + 8 + 30,
+  reported673: 428 + 38 + 36 + 22 + 15 + 8 + 45 + 25 + 22 + 8 + 26,
   reported639: 428 + 38 + 36 + 22 + 15 + 8 + 45 + 25 + 22,
   reported524: 428 + 38 + 36 + 22,
-  explanation: '524 baseline hardening; phase8e contract +25 = 617; phase8e3 ST devida +22 = 639; phase8e3 hardening +8 = 647; zero remoção em Phase 5/6/8A',
+  explanation: '524 baseline hardening; phase8e contract +25 = 617; phase8e3 ST devida +22 = 639; phase8e3 hardening +8 = 647; phase8e4 PIS/COFINS +30 = 677; phase8e4 hardening +12 = 689; zero remoção em Phase 5/6/8A',
 });

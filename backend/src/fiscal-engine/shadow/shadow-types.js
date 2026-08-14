@@ -35,6 +35,10 @@
  * @property {string | null} [currentOperationSt]
  * @property {string | null} [priorStStatus]
  * @property {string | null} [icmsGroup]
+ * @property {string | null} [pisGroup]
+ * @property {Record<string, string> | null} [pisFields]
+ * @property {string | null} [cofinsGroup]
+ * @property {Record<string, string> | null} [cofinsFields]
  * @property {import('../types/fiscal-issue.js').FiscalIssue[]} issues
  * @property {string} resolutionStatus
  * @property {boolean} blocked

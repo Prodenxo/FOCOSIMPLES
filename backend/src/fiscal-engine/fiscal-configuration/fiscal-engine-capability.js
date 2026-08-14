@@ -14,7 +14,9 @@ import {
   resolveExecutableIcmsGroupForCsosn,
 } from './accountant-approved-result-contract.js';
 import { hasCompleteStParametersForExecution } from './accountant-st-parameters-contract.js';
+import { isPisCofinsConfigExecutable } from './accountant-pis-cofins-contract.js';
 import { getIssuerStDueXmlGroupContract } from '../simples-nacional/issuer-st-due-xml-group-contract.js';
+import { getPisCofinsGroupForCst } from '../simples-nacional/pis-cofins-xml-group-contract.js';
 
 const BUILDER_CAPABILITY_BY_GROUP = Object.freeze({
   ICMSSN102: FISCAL_ENGINE_CAPABILITY.ICMSSN102_BUILDER,
@@ -63,6 +65,16 @@ export const resolveRequiredCapabilities = (approvedResult = {}) => {
     required.push(FISCAL_ENGINE_CAPABILITY.XML_FIELDS_BUILDER);
   }
 
+  if (approvedResult.pis != null) {
+    required.push(FISCAL_ENGINE_CAPABILITY.PIS_RESOLUTION);
+    required.push(FISCAL_ENGINE_CAPABILITY.PIS_XML_BUILDER);
+  }
+
+  if (approvedResult.cofins != null) {
+    required.push(FISCAL_ENGINE_CAPABILITY.COFINS_RESOLUTION);
+    required.push(FISCAL_ENGINE_CAPABILITY.COFINS_XML_BUILDER);
+  }
+
   return [...new Set(required)];
 };
 
@@ -79,6 +91,10 @@ export const getSupportedEngineCapabilities = () => new Set([
   FISCAL_ENGINE_CAPABILITY.ICMSSN202_BUILDER,
   FISCAL_ENGINE_CAPABILITY.ICMSSN203_BUILDER,
   FISCAL_ENGINE_CAPABILITY.ST_DUE_CALCULATION,
+  FISCAL_ENGINE_CAPABILITY.PIS_RESOLUTION,
+  FISCAL_ENGINE_CAPABILITY.PIS_XML_BUILDER,
+  FISCAL_ENGINE_CAPABILITY.COFINS_RESOLUTION,
+  FISCAL_ENGINE_CAPABILITY.COFINS_XML_BUILDER,
   FISCAL_ENGINE_CAPABILITY.XML_FIELDS_BUILDER,
   FISCAL_ENGINE_CAPABILITY.CROSS_VALIDATOR,
 ]);
@@ -154,6 +170,30 @@ export const evaluateAccountantRuleEngineCapability = (rule) => {
         { blocksEmission: true, overrideAllowed: false, meta: { field } },
       ));
     }
+  }
+
+  if (approvedResult.pis != null && !isPisCofinsConfigExecutable(approvedResult.pis, 'pis')) {
+    const pisCst = String(approvedResult.pis.cst ?? '').padStart(2, '0').slice(0, 2);
+    const groupMeta = getPisCofinsGroupForCst(pisCst, 'pis');
+    issues.push(createFiscalIssue(
+      'ACCOUNTANT_RULE_NOT_EXECUTABLE',
+      groupMeta?.executable === false
+        ? `CST PIS ${pisCst} conhecido mas sem builder executável.`
+        : `Configuração PIS inválida ou incompleta para execução.`,
+      { blocksEmission: true, overrideAllowed: false, meta: { cst: pisCst, tax: 'pis' } },
+    ));
+  }
+
+  if (approvedResult.cofins != null && !isPisCofinsConfigExecutable(approvedResult.cofins, 'cofins')) {
+    const cofinsCst = String(approvedResult.cofins.cst ?? '').padStart(2, '0').slice(0, 2);
+    const groupMeta = getPisCofinsGroupForCst(cofinsCst, 'cofins');
+    issues.push(createFiscalIssue(
+      'ACCOUNTANT_RULE_NOT_EXECUTABLE',
+      groupMeta?.executable === false
+        ? `CST COFINS ${cofinsCst} conhecido mas sem builder executável.`
+        : `Configuração COFINS inválida ou incompleta para execução.`,
+      { blocksEmission: true, overrideAllowed: false, meta: { cst: cofinsCst, tax: 'cofins' } },
+    ));
   }
 
   for (const cap of missing) {

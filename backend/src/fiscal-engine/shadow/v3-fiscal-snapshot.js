@@ -16,6 +16,8 @@ export const buildV3FiscalSnapshotFromResult = (fiscalResult, meta = {}) => {
   const xmlFields = resolutions.xmlFields ?? null;
   const icmsFields = xmlFields?.taxes?.icms?.fields ?? {};
   const icmsGroup = xmlFields?.taxes?.icms?.group ?? null;
+  const pisBlock = xmlFields?.taxes?.pis ?? null;
+  const cofinsBlock = xmlFields?.taxes?.cofins ?? null;
   const sourceItem = meta.sourceItem ?? {};
 
   const correlation = ctx.commercialSaleItemId
@@ -41,6 +43,10 @@ export const buildV3FiscalSnapshotFromResult = (fiscalResult, meta = {}) => {
       ?? ctx.allocation?.priorStStatus
       ?? null,
     icmsGroup,
+    pisGroup: pisBlock?.group ?? null,
+    pisFields: pisBlock?.fields ?? null,
+    cofinsGroup: cofinsBlock?.group ?? null,
+    cofinsFields: cofinsBlock?.fields ?? null,
     issues: fiscalResult?.issues ?? [],
     resolutionStatus: fiscalResult?.resolutionStatus ?? 'UNKNOWN',
     blocked: fiscalResult?.blocked ?? false,
