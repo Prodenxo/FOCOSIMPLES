@@ -141,6 +141,7 @@ export const allocateFiscalStockForSaleItem = async (commercialSaleItem) => {
 
   const {
     empresaId,
+    establishmentId = null,
     produtoCatalogoId,
     quantidade,
     allocationRequestId,
@@ -148,7 +149,7 @@ export const allocateFiscalStockForSaleItem = async (commercialSaleItem) => {
     commercialSaleItemId = null,
   } = commercialSaleItem;
 
-  const criteria = { empresaId, produtoCatalogoId };
+  const criteria = { empresaId, produtoCatalogoId, establishmentId };
   const boundaryQty = resolveBoundaryAllocationQuantity(quantidade);
   if (!boundaryQty.ok) {
     const issues = boundaryQty.reason === 'precision'
@@ -212,6 +213,7 @@ export const allocateFiscalStockForSaleItem = async (commercialSaleItem) => {
       requestRow: {
         id: allocationRequestUuid,
         empresa_id: empresaId,
+        establishment_id: establishmentId,
         allocation_request_id: allocationRequestId,
         commercial_sale_id: commercialSaleId,
         commercial_sale_item_id: commercialSaleItemId,
@@ -240,6 +242,7 @@ export const allocateFiscalStockForSaleItem = async (commercialSaleItem) => {
   try {
     const result = await allocationRepo.runStockAllocationAtomic({
       empresaId,
+      establishmentId,
       produtoCatalogoId,
       allocationRequestId,
       quantidadeSolicitada: requestedQty,

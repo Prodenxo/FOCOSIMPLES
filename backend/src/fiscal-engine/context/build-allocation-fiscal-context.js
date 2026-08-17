@@ -15,6 +15,7 @@ import {
 } from '../types/resolution-status.js';
 import { normalizeCrt, getCrtProfile } from '../types/crt.js';
 import { toDecimal } from '../money/decimal.js';
+import { normalizeEstablishmentIdFromEmitenteCpfCnpj } from '../establishment/fiscal-establishment-id.js';
 
 const onlyDigits = (value, max) => String(value ?? '').replace(/\D/g, '').slice(0, max);
 const normalizeUf = (value) => String(value ?? '').trim().toUpperCase().slice(0, 2);
@@ -452,6 +453,9 @@ export const buildFiscalContextFromAllocation = (input = {}) => {
     emitenteRaw.document ?? emitenteRaw.cnpj ?? emitenteRaw.cpfCnpj,
     14,
   ) || null;
+  const establishmentId = emitenteRaw.establishmentId
+    ?? normalizeEstablishmentIdFromEmitenteCpfCnpj(issuerDocument)
+    ?? null;
 
   const context = {
     ...base,
@@ -493,6 +497,8 @@ export const buildFiscalContextFromAllocation = (input = {}) => {
       crt,
       crtProfile,
       document: issuerDocument,
+      cpfCnpj: issuerDocument,
+      establishmentId,
       uf: issuerUf,
     },
 

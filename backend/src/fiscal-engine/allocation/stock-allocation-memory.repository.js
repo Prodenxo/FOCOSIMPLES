@@ -44,13 +44,15 @@ export const findAllocationRequestByKey = async (empresaId, allocationRequestId)
   };
 };
 
-const lockLotsInMemory = (empresaId, produtoCatalogoId) => {
+const lockLotsInMemory = (empresaId, produtoCatalogoId, establishmentId = null) => {
   if (!externalLotsById) return [];
   return [...externalLotsById.values()]
     .filter((l) => l.empresa_id === empresaId
       && l.produto_catalogo_id === produtoCatalogoId
       && l.status === 'USABLE'
-      && toDecimal(l.quantidade_disponivel).gt(0))
+      && toDecimal(l.quantidade_disponivel).gt(0)
+      && (!establishmentId || String(l.establishment_id ?? l.establishmentId ?? '') === String(establishmentId)
+        || (!l.establishment_id && !l.establishmentId && establishmentId === 'default')))
     .sort((a, b) => {
       const d = String(a.data_entrada).localeCompare(String(b.data_entrada));
       if (d !== 0) return d;
@@ -81,6 +83,7 @@ const loadActiveAllocationsByLotIds = (empresaId, lotIds) => {
 
 export const runStockAllocationAtomic = async ({
   empresaId,
+  establishmentId = null,
   produtoCatalogoId,
   allocationRequestId,
   quantidadeSolicitada,
@@ -110,7 +113,7 @@ export const runStockAllocationAtomic = async ({
     }
   }
 
-  const lockedLots = lockLotsInMemory(empresaId, produtoCatalogoId);
+  const lockedLots = lockLotsInMemory(empresaId, produtoCatalogoId, establishmentId);
   const lotIds = lockedLots.map((l) => l.id);
   const activeAllocationsByLotId = loadActiveAllocationsByLotIds(empresaId, lotIds);
   const planResult = await planExecutor(lockedLots, { activeAllocationsByLotId });

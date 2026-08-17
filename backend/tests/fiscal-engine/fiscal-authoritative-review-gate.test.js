@@ -79,12 +79,27 @@ const V3_CFOP = '5102';
 const V3_CSOSN = '102';
 const V3_ORIGEM = '0';
 
+const EMITENTE_CNPJ = '12345678000199';
+
 const seedAuthoritativeCompanyProfile = () => {
   saveCompanyFiscalProfile({
     id: 'cfp-rg-auth',
     tenantId: EMP,
     companyId: EMP,
     establishmentId: 'default',
+    crt: 1,
+    taxRegime: 'SIMPLES_NACIONAL',
+    issuerUf: 'RJ',
+    status: FISCAL_PROFILE_STATUS.ACTIVE,
+    validFrom: '2020-01-01',
+    configuredBy: 'acc-rg',
+    approvedBy: 'acc-rg',
+  });
+  saveCompanyFiscalProfile({
+    id: 'cfp-rg-auth-est',
+    tenantId: EMP,
+    companyId: EMP,
+    establishmentId: EMITENTE_CNPJ,
     crt: 1,
     taxRegime: 'SIMPLES_NACIONAL',
     issuerUf: 'RJ',
@@ -124,6 +139,34 @@ const registerAuthoritativeAccountantRule = (overrides = {}) => {
     approvedBy: 'acc-rg',
     ...overrides,
   });
+  insertApprovedRuleForFixture({
+    id: 'rg-accountant-102-est',
+    tenantId: EMP,
+    establishmentId: EMITENTE_CNPJ,
+    version: 1,
+    status: ACCOUNTANT_RULE_STATUS.APPROVED,
+    baseSpecificity: 200,
+    conditions: {
+      crt: [1],
+      operationType: ['VENDA'],
+      operationScope: ['INTERNAL'],
+      itemSource: ['THIRD_PARTY'],
+      recipientTaxpayerStatus: ['NON_TAXPAYER'],
+      priorStStatus: ['NO_ST_EVIDENCE'],
+      issuerUf: ['RJ'],
+      destinationUf: ['RJ'],
+    },
+    approvedResult: {
+      cfop: '5102',
+      csosn: '102',
+      currentOperationSt: 'NOT_DUE',
+      pis: { cst: '07' },
+      cofins: { cst: '08' },
+    },
+    validFrom: '2020-01-01',
+    approvedBy: 'acc-rg',
+    ...overrides,
+  });
 };
 
 const registerAuthoritativeStRetainedAccountantRule = () => {
@@ -131,6 +174,34 @@ const registerAuthoritativeStRetainedAccountantRule = () => {
   insertApprovedRuleForFixture({
     id: 'rg-accountant-500-retained',
     tenantId: EMP,
+    version: 1,
+    status: ACCOUNTANT_RULE_STATUS.APPROVED,
+    baseSpecificity: 250,
+    conditions: {
+      crt: [1],
+      operationType: ['VENDA'],
+      operationScope: ['INTERNAL'],
+      itemSource: ['THIRD_PARTY'],
+      recipientTaxpayerStatus: ['NON_TAXPAYER'],
+      priorStStatus: ['RETAINED'],
+      issuerUf: ['RJ'],
+      destinationUf: ['RJ'],
+    },
+    approvedResult: {
+      cfop: '5102',
+      csosn: '500',
+      currentOperationSt: 'NOT_DUE',
+      requiredXmlFields: ['vBCSTRet', 'vICMSSTRet'],
+      pis: { cst: '07' },
+      cofins: { cst: '08' },
+    },
+    validFrom: '2020-01-01',
+    approvedBy: 'acc-rg-st',
+  });
+  insertApprovedRuleForFixture({
+    id: 'rg-accountant-500-retained-est',
+    tenantId: EMP,
+    establishmentId: EMITENTE_CNPJ,
     version: 1,
     status: ACCOUNTANT_RULE_STATUS.APPROVED,
     baseSpecificity: 250,
@@ -241,6 +312,7 @@ const registerAuthoritativeStRetainedTestRules = () => {
 const seedLot = () => {
   const lot = buildUsableStockLot({
     empresaId: EMP,
+    establishmentId: EMITENTE_CNPJ,
     produtoCatalogoId: PROD,
     quantidade: '10.0000000000',
     origem: V3_ORIGEM,
@@ -252,6 +324,7 @@ const seedLot = () => {
 const seedRetainedStLot = () => {
   const lot = buildUsableStockLot({
     empresaId: EMP,
+    establishmentId: EMITENTE_CNPJ,
     produtoCatalogoId: PROD_ST,
     quantidade: '10.0000000000',
     origem: V3_ORIGEM,

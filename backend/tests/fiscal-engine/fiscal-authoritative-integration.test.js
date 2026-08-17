@@ -80,6 +80,7 @@ const PROD = 'prod-auth-int';
 const MEI_NOTA_ID = randomUUID();
 
 const registerAuthoritativeAccountantRule = () => {
+  const emitenteCnpj = '12345678000199';
   saveCompanyFiscalProfile({
     id: 'cfp-auth-int',
     tenantId: EMP,
@@ -93,10 +94,50 @@ const registerAuthoritativeAccountantRule = () => {
     configuredBy: 'acc-test',
     approvedBy: 'acc-test',
   });
+  saveCompanyFiscalProfile({
+    id: 'cfp-auth-int-est',
+    tenantId: EMP,
+    companyId: EMP,
+    establishmentId: emitenteCnpj,
+    crt: 1,
+    taxRegime: 'SIMPLES_NACIONAL',
+    issuerUf: 'RJ',
+    status: FISCAL_PROFILE_STATUS.ACTIVE,
+    validFrom: '2020-01-01',
+    configuredBy: 'acc-test',
+    approvedBy: 'acc-test',
+  });
 
   insertApprovedRuleForFixture({
     id: 'auth-int-accountant-102',
     tenantId: EMP,
+    version: 1,
+    status: ACCOUNTANT_RULE_STATUS.APPROVED,
+    baseSpecificity: 200,
+    conditions: {
+      crt: [1],
+      operationType: ['VENDA'],
+      operationScope: ['INTERNAL'],
+      itemSource: ['THIRD_PARTY'],
+      recipientTaxpayerStatus: ['NON_TAXPAYER'],
+      priorStStatus: ['NO_ST_EVIDENCE'],
+      issuerUf: ['RJ'],
+      destinationUf: ['RJ'],
+    },
+    approvedResult: {
+      cfop: '5102',
+      csosn: '102',
+      currentOperationSt: 'NOT_DUE',
+      pis: { cst: '07' },
+      cofins: { cst: '08' },
+    },
+    validFrom: '2020-01-01',
+    approvedBy: 'acc-test',
+  });
+  insertApprovedRuleForFixture({
+    id: 'auth-int-accountant-102-est',
+    tenantId: EMP,
+    establishmentId: emitenteCnpj,
     version: 1,
     status: ACCOUNTANT_RULE_STATUS.APPROVED,
     baseSpecificity: 200,
@@ -158,6 +199,7 @@ const registerAuthoritativeTestRules = () => {
 const seedLot = (qty = '10.0000000000') => {
   const lot = buildUsableStockLot({
     empresaId: EMP,
+    establishmentId: '12345678000199',
     produtoCatalogoId: PROD,
     quantidade: qty,
     origem: '0',

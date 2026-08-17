@@ -7,6 +7,8 @@ import { STOCK_UNIT_RESOLUTION_STATUS, STOCK_UNIT_SOURCE } from '../../../src/fi
 export const buildUsableStockLot = ({
   id = randomUUID(),
   empresaId,
+  establishmentId = null,
+  establishment_id = null,
   produtoCatalogoId,
   purchaseItemId = randomUUID(),
   purchaseInvoiceId = randomUUID(),
@@ -24,6 +26,7 @@ export const buildUsableStockLot = ({
 } = {}) => ({
   id,
   empresa_id: empresaId,
+  establishment_id: establishment_id ?? establishmentId ?? null,
   produto_catalogo_id: produtoCatalogoId,
   purchase_item_id: purchaseItemId,
   _purchase_invoice_id: purchaseInvoiceId,

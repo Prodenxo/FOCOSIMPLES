@@ -4,6 +4,7 @@
  */
 import { ENGINE_SCHEMA_VERSION } from '../constants.js';
 import { buildFiscalEngineMetadata } from '../types/nfe-technical-profile.js';
+import { normalizeEstablishmentIdFromEmitenteCpfCnpj } from '../establishment/fiscal-establishment-id.js';
 import { normalizeCrt, getCrtProfile } from '../types/crt.js';
 import {
   ITEM_SOURCE,
@@ -83,6 +84,10 @@ export const buildFiscalContextV31 = (input = {}) => {
   const emitenteUf = normalizeUf(
     emitenteRaw.uf ?? emitenteRaw.endereco?.estado ?? emitenteRaw.endereco?.uf,
   );
+  const emitenteCnpj = onlyDigits(emitenteRaw.cpfCnpj ?? emitenteRaw.cnpj ?? emitenteRaw.document, 14) || null;
+  const establishmentId = emitenteRaw.establishmentId
+    ?? normalizeEstablishmentIdFromEmitenteCpfCnpj(emitenteCnpj)
+    ?? null;
   const destUf = normalizeUf(
     destRaw.uf ?? destRaw.endereco?.estado ?? destRaw.endereco?.uf,
   );
@@ -120,6 +125,8 @@ export const buildFiscalContextV31 = (input = {}) => {
       cnae: emitenteRaw.cnae ? String(emitenteRaw.cnae) : null,
       inscricaoEstadual: emitenteRaw.inscricaoEstadual ?? null,
       businessTypeHint: emitenteRaw.businessTypeHint ?? emitenteRaw.businessType ?? null,
+      cpfCnpj: emitenteCnpj,
+      establishmentId,
     },
 
     destinatario: {

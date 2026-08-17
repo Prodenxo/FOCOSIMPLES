@@ -93,7 +93,10 @@ export const runAuthoritativePreflightReadOnly = async (params) => {
     documentType: params.documentType,
     businessType: params.businessType,
     legacyPayloadSnapshot,
-    metadata: params.metadata ?? {},
+    metadata: {
+      ...(params.metadata ?? {}),
+      establishmentId: params.establishmentId ?? params.metadata?.establishmentId ?? null,
+    },
     inMemoryLotsByProduct: params.inMemoryLotsByProduct,
     lotFetcher: params.lotFetcher,
   });

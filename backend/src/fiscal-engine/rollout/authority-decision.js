@@ -21,6 +21,10 @@ import {
   ROLLOUT_MODE,
 } from './rollout-constants.js';
 import { isAuthoritativePersistenceBlockedInRuntime } from '../config/fiscal-repository-mode.js';
+import {
+  requireAuthoritativeEstablishmentId,
+  resolveEstablishmentIdFromPayload,
+} from '../establishment/fiscal-establishment-id.js';
 
 /** @internal — capacidade exclusiva do orquestrador dry-run read-only */
 const DRY_RUN_AUTHORITY_EVALUATION_KEY = Symbol('fiscal.engine.dryRunAuthorityEvaluation');
@@ -40,6 +44,9 @@ const evaluateAuthorityDecisionInternal = async (params) => {
   const dryRunEvaluation = params[DRY_RUN_AUTHORITY_EVALUATION_KEY] === true;
   const empresaId = params.empresaId ?? params.userId ?? null;
   const documentType = String(params.documentType ?? 'NFE').trim().toUpperCase();
+  const establishmentId = params.establishmentId
+    ?? resolveEstablishmentIdFromPayload(params.commercialPayload ?? params.legacyPayload)
+    ?? null;
   const emissionStableId = resolveEmissionStableId({
     meiNotaRecordId: params.meiNotaRecordId,
     emissionAttemptId: params.emissionAttemptId,
@@ -63,11 +70,15 @@ const evaluateAuthorityDecisionInternal = async (params) => {
     });
   }
 
-  const policy = params.rolloutPolicy ?? await getRolloutPolicyForEmpresa(empresaId);
+  const policy = params.rolloutPolicy ?? await getRolloutPolicyForEmpresa(empresaId, establishmentId);
   if (policy.issues?.length) issues.push(...policy.issues);
 
   if (!policy.configured) {
-    reasons.push(AUTHORITY_DECISION_REASON.TENANT_LEGACY_DEFAULT);
+    if (establishmentId) {
+      reasons.push(AUTHORITY_DECISION_REASON.TENANT_ESTABLISHMENT_ROLLOUT_MISSING);
+    } else {
+      reasons.push(AUTHORITY_DECISION_REASON.TENANT_LEGACY_DEFAULT);
+    }
     return buildDecision({
       engine: AUTHORITY_ENGINE.LEGACY,
       reasons,
@@ -75,6 +86,7 @@ const evaluateAuthorityDecisionInternal = async (params) => {
       canarySelected: null,
       readiness: null,
       issues,
+      establishmentId,
     });
   }
 
@@ -97,8 +109,36 @@ const evaluateAuthorityDecisionInternal = async (params) => {
 
   if (!AUTHORITATIVE_ELIGIBLE_DOCUMENT_TYPES.includes(documentType)) {
     reasons.push(AUTHORITY_DECISION_REASON.DOCUMENT_NOT_ELIGIBLE);
-    return buildDecision({ engine: AUTHORITY_ENGINE.LEGACY, reasons, rolloutMode, canarySelected: null, readiness: null, issues });
+    return buildDecision({
+      engine: AUTHORITY_ENGINE.LEGACY,
+      reasons,
+      rolloutMode,
+      canarySelected: null,
+      readiness: null,
+      issues,
+      establishmentId,
+    });
   }
+
+  const establishmentRequired = establishmentId
+    ? requireAuthoritativeEstablishmentId(establishmentId)
+    : { ok: true, establishmentId: 'default' };
+  if (establishmentId && !establishmentRequired.ok) {
+    reasons.push(AUTHORITY_DECISION_REASON.FISCAL_ESTABLISHMENT_REQUIRED);
+    issues.push(establishmentRequired.issue);
+    return buildDecision({
+      engine: AUTHORITY_ENGINE.BLOCKED,
+      reasons: [...reasons, AUTHORITY_DECISION_REASON.AUTHORITATIVE_FISCAL_BLOCKED],
+      rolloutMode,
+      canarySelected: null,
+      readiness: null,
+      v3Candidate: true,
+      authoritativeFiscalBlocked: true,
+      issues,
+      establishmentId: null,
+    });
+  }
+  const scopedEstablishmentId = establishmentRequired.establishmentId;
 
   let canarySelected = null;
   if (rolloutMode === ROLLOUT_MODE.CANARY) {
@@ -128,7 +168,7 @@ const evaluateAuthorityDecisionInternal = async (params) => {
     });
   }
 
-  if (!(await hasAuthoritativeAccountantConfigReadinessAsync(empresaId))) {
+  if (!(await hasAuthoritativeAccountantConfigReadinessAsync(empresaId, scopedEstablishmentId))) {
     reasons.push(AUTHORITY_DECISION_REASON.NOT_READY_NO_ACCOUNTANT_CONFIG);
     issues.push(createFiscalIssue(
       'ACCOUNTANT_CONFIGURATION_INCOMPLETE',
@@ -165,6 +205,7 @@ const evaluateAuthorityDecisionInternal = async (params) => {
     readiness,
     v3Candidate: true,
     issues,
+    establishmentId: scopedEstablishmentId,
   });
 };
 
@@ -260,6 +301,7 @@ const buildDecision = ({
   v3Candidate = false,
   authoritativeFiscalBlocked = false,
   issues = [],
+  establishmentId = null,
 }) => ({
   engine,
   reasons: [...reasons],
@@ -271,4 +313,5 @@ const buildDecision = ({
   v3Candidate,
   authoritativeFiscalBlocked,
   issues,
+  establishmentId,
 });

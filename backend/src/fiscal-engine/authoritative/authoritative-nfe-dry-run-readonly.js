@@ -37,6 +37,10 @@ import {
 import { validateNfeLikePayload } from '../../lib/nfe-like-payload-validate.js';
 import { normalizePlugnotasNfePayload } from '../../services/plugnotas/plugnotas-nfe-payload.js';
 import { applyMeiNfeEmitForcePolicy } from '../../services/plugnotas/plugnotas-mei-nfe-emit-force.js';
+import {
+  resolveEstablishmentIdFromPayload,
+  assertEstablishmentBoundaryInvariant,
+} from '../establishment/fiscal-establishment-id.js';
 
 const ZERO_SIDE_EFFECTS = Object.freeze({
   emissionAttemptsCreated: 0,
@@ -160,11 +164,18 @@ const buildDryRunPersistenceBlock = (persistenceMode, persistenceReady) => ({
 export const runAuthoritativeNfeDryRunReadOnly = async (params) => {
   const empresaId = String(params.empresaId ?? params.userId ?? '').trim();
   const commercialPayload = ensureHomologationConfig(params.commercialPayload ?? params.legacyPayload ?? {});
+  const establishmentId = params.establishmentId
+    ?? resolveEstablishmentIdFromPayload(commercialPayload);
   const documentType = String(params.documentType ?? 'NFE').trim().toUpperCase();
   const runtimeEmissionEnabled = isFiscalEngineV3Enabled();
   const persistenceMode = resolveFiscalRepositoryMode();
   const persistenceReady = isFiscalEnginePostgresEnabled()
     && !isAuthoritativePersistenceBlockedInRuntime();
+
+  const dryRunScope = () => ({
+    tenantId: empresaId,
+    establishmentId: establishmentId ?? null,
+  });
 
   /** @type {string[]} */
   const blockReasons = [];
@@ -174,6 +185,8 @@ export const runAuthoritativeNfeDryRunReadOnly = async (params) => {
       ok: false,
       dryRun: true,
       dryRunFiscalReady: false,
+      tenantId: null,
+      establishmentId: establishmentId ?? null,
       runtimeEmissionEnabled,
       routing: { eligible: false, route: null, reasons: ['MISSING_EMPRESA_ID'] },
       persistence: buildDryRunPersistenceBlock(persistenceMode, persistenceReady),
@@ -187,12 +200,14 @@ export const runAuthoritativeNfeDryRunReadOnly = async (params) => {
     };
   }
 
-  const loadedPolicy = params.rolloutPolicy ?? await getRolloutPolicyForEmpresa(empresaId);
+  const loadedPolicy = params.rolloutPolicy ?? await getRolloutPolicyForEmpresa(empresaId, establishmentId);
 
   const authorityDecision = await evaluateAuthorityDecisionForDryRunReadOnly({
     empresaId,
+    establishmentId,
     userId: params.userId ?? empresaId,
     documentType,
+    commercialPayload,
     idIntegracao: params.idIntegracao ?? commercialPayload.idIntegracao ?? null,
     meiNotaRecordId: params.meiNotaRecordId ?? null,
     emissionAttemptId: params.emissionAttemptId ?? null,
@@ -212,6 +227,7 @@ export const runAuthoritativeNfeDryRunReadOnly = async (params) => {
       ok: false,
       dryRun: true,
       dryRunFiscalReady: false,
+      ...dryRunScope(),
       runtimeEmissionEnabled,
       routing: {
         eligible: authorityDecision.engine === AUTHORITY_ENGINE.V3,
@@ -236,6 +252,7 @@ export const runAuthoritativeNfeDryRunReadOnly = async (params) => {
       ok: false,
       dryRun: true,
       dryRunFiscalReady: false,
+      ...dryRunScope(),
       runtimeEmissionEnabled,
       routing: {
         eligible: false,
@@ -259,6 +276,7 @@ export const runAuthoritativeNfeDryRunReadOnly = async (params) => {
       ok: false,
       dryRun: true,
       dryRunFiscalReady: false,
+      ...dryRunScope(),
       runtimeEmissionEnabled,
       routing: {
         eligible: false,
@@ -279,6 +297,7 @@ export const runAuthoritativeNfeDryRunReadOnly = async (params) => {
 
   const preflight = await runAuthoritativePreflightReadOnly({
     empresaId,
+    establishmentId,
     userId: params.userId ?? empresaId,
     documentType,
     businessType: params.businessType,
@@ -299,6 +318,7 @@ export const runAuthoritativeNfeDryRunReadOnly = async (params) => {
       ok: false,
       dryRun: true,
       dryRunFiscalReady: false,
+      ...dryRunScope(),
       runtimeEmissionEnabled,
       routing: {
         eligible: true,
@@ -323,6 +343,7 @@ export const runAuthoritativeNfeDryRunReadOnly = async (params) => {
       ok: false,
       dryRun: true,
       dryRunFiscalReady: false,
+      ...dryRunScope(),
       runtimeEmissionEnabled,
       routing: { eligible: true, route: AUTHORITY_ENGINE.V3, reasons: authorityDecision.reasons },
       persistence: buildDryRunPersistenceBlock(persistenceMode, persistenceReady && runtimeEmissionEnabled),
@@ -352,6 +373,7 @@ export const runAuthoritativeNfeDryRunReadOnly = async (params) => {
       ok: false,
       dryRun: true,
       dryRunFiscalReady: false,
+      ...dryRunScope(),
       runtimeEmissionEnabled,
       routing: { eligible: true, route: AUTHORITY_ENGINE.V3, reasons: authorityDecision.reasons },
       persistence: buildDryRunPersistenceBlock(persistenceMode, persistenceReady && runtimeEmissionEnabled),
@@ -402,6 +424,15 @@ export const runAuthoritativeNfeDryRunReadOnly = async (params) => {
 
   const dryRunFiscalReady = validationReady && Boolean(normalizedPayload);
 
+  const boundaryInvariant = dryRunFiscalReady
+    ? assertEstablishmentBoundaryInvariant({
+      payloadEmitenteCpfCnpj: commercialPayload?.emitente?.cpfCnpj,
+      fiscalContextEstablishmentId: establishmentId,
+      configurationEstablishmentId: authorityDecision.establishmentId,
+      rolloutEstablishmentId: loadedPolicy.establishmentId ?? establishmentId,
+    })
+    : { ok: true, establishmentId };
+
   const readinessSemantics = buildDryRunReadinessSemantics({
     fiscalResolutionReady: preflight.ok && bridged.ok,
     providerBridgeReady: bridged.ok,
@@ -410,9 +441,11 @@ export const runAuthoritativeNfeDryRunReadOnly = async (params) => {
   });
 
   return {
-    ok: dryRunFiscalReady,
+    ok: dryRunFiscalReady && boundaryInvariant.ok,
     dryRun: true,
-    dryRunFiscalReady,
+    dryRunFiscalReady: dryRunFiscalReady && boundaryInvariant.ok,
+    ...dryRunScope(),
+    establishmentId: establishmentId ?? authorityDecision.establishmentId ?? null,
     runtimeEmissionEnabled,
     routing: {
       eligible: true,
@@ -459,7 +492,10 @@ export const runAuthoritativeNfeDryRunReadOnly = async (params) => {
       ],
     },
     sideEffects: { ...ZERO_SIDE_EFFECTS },
-    blockReasons: dryRunFiscalReady ? [] : blockReasons,
+    blockReasons: dryRunFiscalReady && boundaryInvariant.ok ? [] : [
+      ...blockReasons,
+      ...(boundaryInvariant.ok ? [] : [boundaryInvariant.issue?.code ?? 'FISCAL_ESTABLISHMENT_BOUNDARY_MISMATCH']),
+    ],
     candidateAudit: built.audit,
   };
 };

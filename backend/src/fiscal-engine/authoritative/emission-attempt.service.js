@@ -49,6 +49,9 @@ export const persistAuthorityRoutingAttempt = async (params) => {
   const row = {
     attemptId,
     empresaId: params.empresaId,
+    establishmentId: params.establishmentId
+      ?? params.authorityDecision?.establishmentId
+      ?? null,
     meiNotaRecordId: params.meiNotaRecordId ?? null,
     idIntegracao: params.idIntegracao ?? null,
     emissionStableId: resolveEmissionStableId(params),

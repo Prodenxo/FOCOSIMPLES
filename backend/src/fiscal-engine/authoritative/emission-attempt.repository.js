@@ -17,6 +17,7 @@ export const mapEmissionAttemptPgRow = (row) => {
   return {
     attemptId: row.attempt_id,
     empresaId: row.empresa_id,
+    establishmentId: row.establishment_id ?? null,
     meiNotaRecordId: row.mei_nota_record_id ?? null,
     idIntegracao: row.id_integracao ?? null,
     emissionStableId: row.emission_stable_id,
@@ -44,15 +45,16 @@ export const insertEmissionAttemptPg = async (row) => {
   const pool = getPgPool();
   await pool.query(
     `INSERT INTO fiscal_v3_emission_attempts (
-      attempt_id, empresa_id, mei_nota_record_id, id_integracao, emission_stable_id,
+      attempt_id, empresa_id, establishment_id, mei_nota_record_id, id_integracao, emission_stable_id,
       document_type, authority_engine, rollout_mode, canary_selected, attempt_status,
       preflight_id, allocation_request_ids, candidate_payload_hash,
       authority_decision_json, preflight_result_json, issues_json, engine_version
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
     ON CONFLICT (attempt_id) DO NOTHING`,
     [
       row.attemptId,
       row.empresaId,
+      row.establishmentId ?? null,
       row.meiNotaRecordId ?? null,
       row.idIntegracao ?? null,
       row.emissionStableId,
@@ -108,7 +110,7 @@ export const updateEmissionAttemptPg = async (attemptId, patch) => {
 export const findEmissionAttemptPg = async (attemptId) => {
   const pool = getPgPool();
   const result = await pool.query(
-    `SELECT attempt_id, empresa_id, mei_nota_record_id, id_integracao, emission_stable_id,
+    `SELECT attempt_id, empresa_id, establishment_id, mei_nota_record_id, id_integracao, emission_stable_id,
             document_type, authority_engine, rollout_mode, canary_selected, attempt_status,
             preflight_id, allocation_request_ids, candidate_payload_hash,
             authority_decision_json, preflight_result_json, issues_json, engine_version,
@@ -128,7 +130,7 @@ export const findEmissionAttemptPg = async (attemptId) => {
 export const findEmissionAttemptByIdIntegracaoPg = async (empresaId, idIntegracao) => {
   const pool = getPgPool();
   const result = await pool.query(
-    `SELECT attempt_id, empresa_id, mei_nota_record_id, id_integracao, emission_stable_id,
+    `SELECT attempt_id, empresa_id, establishment_id, mei_nota_record_id, id_integracao, emission_stable_id,
             document_type, authority_engine, rollout_mode, canary_selected, attempt_status,
             preflight_id, allocation_request_ids, candidate_payload_hash,
             authority_decision_json, preflight_result_json, issues_json, engine_version,
@@ -149,7 +151,7 @@ export const findEmissionAttemptByIdIntegracaoPg = async (empresaId, idIntegraca
 export const findEmissionAttemptsByMeiNotaPg = async (empresaId, meiNotaRecordId) => {
   const pool = getPgPool();
   const result = await pool.query(
-    `SELECT attempt_id, empresa_id, mei_nota_record_id, id_integracao, emission_stable_id,
+    `SELECT attempt_id, empresa_id, establishment_id, mei_nota_record_id, id_integracao, emission_stable_id,
             document_type, authority_engine, rollout_mode, canary_selected, attempt_status,
             preflight_id, allocation_request_ids, candidate_payload_hash,
             authority_decision_json, preflight_result_json, issues_json, engine_version,
@@ -170,6 +172,7 @@ export const __ensureEmissionAttemptSchemaForTests = async () => {
       id uuid primary key default gen_random_uuid(),
       attempt_id text not null unique,
       empresa_id uuid not null,
+      establishment_id text,
       mei_nota_record_id uuid,
       id_integracao text,
       emission_stable_id text not null,
@@ -197,6 +200,10 @@ export const __ensureEmissionAttemptSchemaForTests = async () => {
     alter table public.fiscal_v3_emission_attempts
       add constraint fiscal_v3_emission_attempts_engine_check
       check (authority_engine in ('LEGACY', 'V3', 'BLOCKED'))
+  `);
+  await pool.query(`
+    alter table public.fiscal_v3_emission_attempts
+      add column if not exists establishment_id text
   `);
 };
 

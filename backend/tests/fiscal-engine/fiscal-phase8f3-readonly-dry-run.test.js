@@ -79,6 +79,7 @@ const insertRule = (id, approvedOverrides = {}, conditionOverrides = {}) => {
   insertApprovedRuleForFixture({
     id,
     tenantId: TENANT,
+    establishmentId: '12345678000199',
     version: 1,
     status: ACCOUNTANT_RULE_STATUS.APPROVED,
     baseSpecificity: 200,
@@ -131,6 +132,7 @@ const commercialPayloadMinimal = (overrides = {}) => ({
 const seedLot = (qty = '10.0000000000') => {
   const lot = buildUsableStockLot({
     empresaId: TENANT,
+    establishmentId: '12345678000199',
     produtoCatalogoId: PHASE8C_PRODUCT_ID,
     quantidade: qty,
     origem: '0',
@@ -147,6 +149,7 @@ const dryRunParams = (lot, payloadOverrides = {}) => ({
   commercialPayload: commercialPayloadMinimal(payloadOverrides),
   rolloutPolicy: {
     empresaId: TENANT,
+    establishmentId: '12345678000199',
     mode: ROLLOUT_MODE.AUTHORITATIVE,
     enabled: true,
     configured: true,

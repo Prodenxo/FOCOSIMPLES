@@ -37,7 +37,7 @@ export const buildTestFiscalContext = (overrides = {}) => {
   return buildFiscalContextFromAllocation({
     empresaId: overrides.empresaId ?? EMP,
     fiscalItemAllocation: allocation,
-    issuer: { crt: 1, uf: 'RJ', document: '12345678000199', ...(overrides.issuer ?? {}) },
+    issuer: { crt: 1, uf: 'RJ', ...(overrides.issuer ?? {}) },
     recipient: {
       uf: 'RJ',
       cpfCnpj: '12345678901',

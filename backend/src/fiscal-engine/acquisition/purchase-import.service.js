@@ -15,7 +15,7 @@ import {
   SIGNATURE_STATUS,
   CATALOG_MATCH_STATUS,
 } from './constants.js';
-import { validatePurchaseRecipient } from './purchase-recipient-validator.js';
+import { validatePurchaseRecipientForEstablishment } from './purchase-recipient-validator.js';
 import { resolveStockUnit, STOCK_UNIT_SOURCE } from './stock-unit-resolution.js';
 import { extractCatalogUnitConversion } from './purchase-catalog.service.js';
 import * as memoryRepo from './fiscal-purchase-memory.repository.js';
@@ -54,6 +54,7 @@ const repo = () => repoOverride || pgRepo;
  */
 export const importPurchaseNfeXml = async ({
   empresaId,
+  establishmentId = null,
   xmlBuffer,
   empresaFiscalDoc = null,
   userId = null,
@@ -82,15 +83,27 @@ export const importPurchaseNfeXml = async ({
     ));
   }
 
-  let fiscalDoc = empresaFiscalDoc;
-  if (!fiscalDoc) {
+  let targetEstablishmentId = establishmentId;
+  if (!targetEstablishmentId && empresaFiscalDoc) {
+    targetEstablishmentId = empresaFiscalDoc;
+  }
+  if (!targetEstablishmentId) {
     fiscalDoc = await pgRepo.getEmpresaFiscalDoc(empresaId);
+    targetEstablishmentId = fiscalDoc;
   }
 
-  const recipientCheck = validatePurchaseRecipient({
-    destinatarioDoc: header.destinatarioDoc,
-    empresaFiscalDoc: fiscalDoc,
-  });
+  const recipientCheck = targetEstablishmentId
+    ? validatePurchaseRecipientForEstablishment({
+      destinatarioDoc: header.destinatarioDoc,
+      targetEstablishmentId,
+    })
+    : {
+      ok: false,
+      issue: createFiscalIssue(
+        'PURCHASE_RECIPIENT_MISMATCH',
+        'establishmentId alvo obrigatório para importação multi-CNPJ',
+      ),
+    };
   if (!recipientCheck.ok) {
     issues.push(recipientCheck.issue);
   }
@@ -204,8 +217,13 @@ export const importPurchaseNfeXml = async ({
     };
   });
 
+  const scopedEstablishmentId = targetEstablishmentId
+    ? String(targetEstablishmentId).replace(/\D/g, '').slice(0, 14)
+    : null;
+
   const lots = purchaseItems.map((pi) => buildStockLotFromPurchaseItem({
     empresaId,
+    establishmentId: scopedEstablishmentId,
     purchaseItem: pi,
     priorStEvidence: pi.prior_st_evidence_json,
     catalogMatch: {
@@ -222,6 +240,7 @@ export const importPurchaseNfeXml = async ({
 
   const invoice = {
     empresa_id: empresaId,
+    establishment_id: scopedEstablishmentId,
     chave_nfe: header.chaveNfe,
     inf_nfe_id: header.infNfeId,
     modelo: header.modelo,

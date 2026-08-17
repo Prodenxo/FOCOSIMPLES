@@ -373,6 +373,17 @@ export {
   runAuthoritativeNfeDryRunReadOnly as resolveAuthoritativeNfeDryRunReadOnly,
 } from './authoritative/authoritative-nfe-dry-run-readonly.js';
 export {
+  normalizeEstablishmentIdFromEmitenteCpfCnpj,
+  resolveEstablishmentIdFromPayload,
+  requireAuthoritativeEstablishmentId,
+  assertEstablishmentBoundaryInvariant,
+  filterAccountantRulesForEstablishment,
+  FISCAL_ESTABLISHMENT_ISSUE_CODE,
+} from './establishment/fiscal-establishment-id.js';
+export {
+  validatePurchaseRecipientForEstablishment,
+} from './acquisition/purchase-recipient-validator.js';
+export {
   findEmissionAttemptById,
   findEmissionAttemptByIdIntegracao,
   findEmissionAttemptsByMeiNotaRecordId,

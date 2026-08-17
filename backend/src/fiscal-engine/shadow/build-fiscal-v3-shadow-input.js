@@ -16,6 +16,7 @@ import {
   getShadowVirtualPlanningDeductionByLotIds,
   applyShadowVirtualAvailabilityToLots,
 } from './shadow-stock-ledger.service.js';
+import { resolveEstablishmentIdFromPayload } from '../establishment/fiscal-establishment-id.js';
 
 export { deriveIcmsTaxpayerStatusFromLegacyDestinatario } from './build-fiscal-v3-shadow-input.helpers.js';
 
@@ -60,6 +61,19 @@ export const buildFiscalV3ShadowInput = async ({
   const icmsTaxpayerStatus = deriveIcmsTaxpayerStatusFromLegacyDestinatario(destinatario);
   const referenceDate = String(metadata?.referenceDate ?? new Date().toISOString()).slice(0, 10);
   const tenantId = empresaId ?? userId ?? null;
+  const establishmentId = metadata?.establishmentId
+    ?? resolveEstablishmentIdFromPayload(payload)
+    ?? null;
+
+  const buildEmitenteForContext = () => ({
+    cpfCnpj: emitente.cpfCnpj ?? emitente.cnpj ?? null,
+    crt: emitente.crt ?? emitente.CRT ?? metadata?.crt ?? 1,
+    uf: emitente.endereco?.estado ?? emitente.endereco?.uf ?? emitente.uf,
+    cnae: emitente.cnae ?? null,
+    inscricaoEstadual: emitente.inscricaoEstadual ?? null,
+    businessTypeHint: businessType,
+    establishmentId,
+  });
 
   /** @type {ShadowCommercialItemPlan[]} */
   const itemPlans = [];
@@ -112,12 +126,13 @@ export const buildFiscalV3ShadowInput = async ({
       continue;
     }
 
-    const productLotsRaw = inMemoryLotsByProduct?.[produtoCatalogoId]
-      ?? await fetchLotsForShadow(tenantId, produtoCatalogoId, {
-        lotFetcher,
-        inMemoryLots: inMemoryLotsByProduct?.[produtoCatalogoId],
-        preferPostgres: !inMemoryLotsByProduct,
-      });
+    const productLotsRaw = await fetchLotsForShadow(tenantId, produtoCatalogoId, {
+      lotFetcher,
+      inMemoryLots: inMemoryLotsByProduct?.[produtoCatalogoId],
+      preferPostgres: !inMemoryLotsByProduct,
+      establishmentId,
+      allowLegacyUntaggedLots: true,
+    });
 
     const lotBalanceBefore = snapshotLotBalances(productLotsRaw);
 
@@ -153,7 +168,12 @@ export const buildFiscalV3ShadowInput = async ({
     const plan = planFiscalStockAllocationForShadow(
       productLots,
       String(commercialItem.quantidade),
-      { empresaId: tenantId, produtoCatalogoId },
+      {
+        empresaId: tenantId,
+        produtoCatalogoId,
+        establishmentId,
+        allowLegacyUntaggedLots: true,
+      },
     );
 
     const lotBalanceAfter = snapshotLotBalances(productLotsRaw);
@@ -193,13 +213,7 @@ export const buildFiscalV3ShadowInput = async ({
         commercialSaleItemId: commercialItem.commercialSaleItemId,
         fiscalItemAllocation: allocationRow,
         referenceDate,
-        emitente: {
-          crt: emitente.crt ?? emitente.CRT ?? metadata?.crt ?? 1,
-          uf: emitente.endereco?.estado ?? emitente.endereco?.uf ?? emitente.uf,
-          cnae: emitente.cnae ?? null,
-          inscricaoEstadual: emitente.inscricaoEstadual ?? null,
-          businessTypeHint: businessType,
-        },
+        emitente: buildEmitenteForContext(),
         destinatario: {
           cpfCnpj: destinatario.cpfCnpj,
           uf: destinatario.endereco?.estado ?? destinatario.endereco?.uf ?? destinatario.uf,
@@ -260,13 +274,7 @@ export const buildFiscalV3ShadowInput = async ({
       commercialSaleItemId: commercialItem.commercialSaleItemId,
       fiscalItemAllocation: allocationRow,
       referenceDate,
-      emitente: {
-        crt: emitente.crt ?? emitente.CRT ?? metadata?.crt ?? 1,
-        uf: emitente.endereco?.estado ?? emitente.endereco?.uf ?? emitente.uf,
-        cnae: emitente.cnae ?? null,
-        inscricaoEstadual: emitente.inscricaoEstadual ?? null,
-        businessTypeHint: businessType,
-      },
+      emitente: buildEmitenteForContext(),
       destinatario: {
         cpfCnpj: destinatario.cpfCnpj,
         uf: destinatario.endereco?.estado ?? destinatario.endereco?.uf ?? destinatario.uf,
@@ -305,6 +313,7 @@ export const buildFiscalV3ShadowInput = async ({
 
   return {
     empresaId: tenantId,
+    establishmentId,
     userId: userId ?? null,
     correlationId: correlationId ?? payload.idIntegracao ?? null,
     emissionAttemptId: emissionAttemptId ?? payload.idIntegracao ?? null,

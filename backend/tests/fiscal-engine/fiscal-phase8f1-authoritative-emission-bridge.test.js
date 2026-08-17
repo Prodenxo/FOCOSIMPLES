@@ -150,6 +150,7 @@ const commercialPayloadMinimal = (staleTributos = null) => ({
 const seedLotForRouting = () => {
   const lot = buildUsableStockLot({
     empresaId: TENANT,
+    establishmentId: '12345678000199',
     produtoCatalogoId: PHASE8C_PRODUCT_ID,
     quantidade: '10.0000000000',
     origem: '0',

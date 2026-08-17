@@ -19,6 +19,7 @@ import {
 import { buildAuthoritativeNfePayloadFromFiscalResults } from './authoritative-payload-builder.js';
 import { applyAuthoritativePlugnotasTributosBridge } from './plugnotas-fiscal-v3-bridge.js';
 import { allocateFiscalStockForSaleItem, releaseFiscalStockAllocation } from '../allocation/stock-allocation.service.js';
+import { resolveEstablishmentIdFromPayload } from '../establishment/fiscal-establishment-id.js';
 import {
   persistAuthorityRoutingAttempt,
   updateEmissionAttempt,
@@ -50,6 +51,8 @@ export const evaluateAuthoritativeEmissionRouting = async (params) => {
     meiNotaRecordId: params.meiNotaRecordId,
     emissionAttemptId: params.emissionAttemptId,
     correlationId: params.correlationId,
+    commercialPayload: params.commercialPayload ?? params.legacyPayload,
+    legacyPayload: params.legacyPayload ?? params.commercialPayload,
     rolloutPolicy: params.rolloutPolicy,
     readiness: params.readiness,
   });
@@ -139,6 +142,10 @@ export const prepareAuthoritativeEmissionCandidate = async (params) => {
   const allocationRequestIds = [];
   /** @type {object[]} */
   const reservedGroups = [];
+  const establishmentId = params.establishmentId
+    ?? routing.authorityDecision?.establishmentId
+    ?? resolveEstablishmentIdFromPayload(params.legacyPayload ?? params.commercialPayload)
+    ?? null;
 
   for (const itemPlan of routing.preflight.itemPlans ?? []) {
     const commercial = itemPlan.commercialItem;
@@ -149,6 +156,7 @@ export const prepareAuthoritativeEmissionCandidate = async (params) => {
 
     const reserveResult = await allocateFiscalStockForSaleItem({
       empresaId: params.empresaId ?? params.userId,
+      establishmentId,
       produtoCatalogoId: commercial.produtoCatalogoId,
       quantidade: String(commercial.quantidade),
       allocationRequestId,

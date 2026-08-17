@@ -28,8 +28,9 @@ export const __resetRolloutPolicyServiceForTests = () => {
  * Ausência de configuração → LEGACY (nunca authoritative).
  * Modo inválido → LEGACY + issue auditável.
  * @param {string} empresaId
+ * @param {string | null} [establishmentId]
  */
-export const getRolloutPolicyForEmpresa = async (empresaId) => {
+export const getRolloutPolicyForEmpresa = async (empresaId, establishmentId = null) => {
   if (!empresaId) {
     return {
       ...DEFAULT_ROLLOUT_POLICY,
@@ -40,8 +41,8 @@ export const getRolloutPolicyForEmpresa = async (empresaId) => {
   let policy;
   try {
     policy = isFiscalEnginePostgresEnabled()
-      ? await pgRepo.fetchRolloutPolicyFromPg(empresaId)
-      : getInMemoryRolloutPolicy(empresaId);
+      ? await pgRepo.fetchRolloutPolicyFromPg(empresaId, establishmentId)
+      : getInMemoryRolloutPolicy(empresaId, establishmentId);
   } catch (error) {
     return {
       ...DEFAULT_ROLLOUT_POLICY,

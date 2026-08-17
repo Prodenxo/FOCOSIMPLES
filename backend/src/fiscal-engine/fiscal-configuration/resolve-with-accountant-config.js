@@ -15,6 +15,7 @@ import { buildFiscalRulesFromApprovedRule } from './approved-rule-to-fiscal-rule
 import { loadAccountantApprovedRulesForTenant } from './fiscal-configuration-loader.js';
 import { enrichMatchingFactsForContext } from './matching-facts-enrichment.js';
 import { evaluateAccountantRuleEngineCapability } from './fiscal-engine-capability.js';
+import { filterAccountantRulesForEstablishment } from '../establishment/fiscal-establishment-id.js';
 
 /**
  * @param {object} rule
@@ -139,8 +140,13 @@ export const resolveFiscalFromContextWithAccountantConfigPure = (
  */
 export const resolveFiscalFromContextWithAccountantConfig = async (context, options = {}) => {
   const tenantId = context.empresaId;
-  const approvedRules = options.approvedRules
+  const establishmentId = context.emitente?.establishmentId ?? null;
+  const allRules = options.approvedRules
     ?? await loadAccountantApprovedRulesForTenant(tenantId);
+  const scopedEstablishmentId = establishmentId ?? 'default';
+  const approvedRules = scopedEstablishmentId !== 'default'
+    ? filterAccountantRulesForEstablishment(allRules, scopedEstablishmentId, { requireExact: true })
+    : filterAccountantRulesForEstablishment(allRules, 'default', { requireExact: false });
   const matchingFacts = options.matchingFacts
     ?? await enrichMatchingFactsForContext(context, options);
   return resolveFiscalFromContextWithAccountantConfigPure(context, approvedRules, {
@@ -165,8 +171,13 @@ export const previewAccountantRuleMatchPure = (context, approvedRules, options =
  * @param {object} [options]
  */
 export const previewAccountantRuleMatch = async (context, options = {}) => {
-  const approvedRules = options.approvedRules
+  const allRules = options.approvedRules
     ?? await loadAccountantApprovedRulesForTenant(context.empresaId);
+  const establishmentId = context.emitente?.establishmentId ?? null;
+  const scopedEstablishmentId = establishmentId ?? 'default';
+  const approvedRules = scopedEstablishmentId !== 'default'
+    ? filterAccountantRulesForEstablishment(allRules, scopedEstablishmentId, { requireExact: true })
+    : filterAccountantRulesForEstablishment(allRules, 'default', { requireExact: false });
   const matchingFacts = options.matchingFacts
     ?? await enrichMatchingFactsForContext(context, options);
   return previewAccountantRuleMatchPure(context, approvedRules, { ...options, matchingFacts });

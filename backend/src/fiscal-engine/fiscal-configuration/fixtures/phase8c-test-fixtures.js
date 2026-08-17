@@ -16,15 +16,44 @@ import {
   saveTaxCatalogEntry,
   resetFiscalConfigurationRepository,
   insertApprovedRuleForFixture,
+  getCompanyFiscalProfile,
+  listAccountantApprovedRulesForTenant,
 } from '../fiscal-configuration-memory.repository.js';
 
 export const PHASE8C_TENANT_ID = 'tenant-phase8c-t1';
 export const PHASE8C_TENANT_B = 'tenant-phase8c-t2';
 export const PHASE8C_PRODUCT_ID = 'prod-phase8c-001';
+export const PHASE8C_TEST_EMITENTE_CNPJ = '12345678000199';
 export const PHASE8C_CUSTOMER_TAXPAYER = 'cust-taxpayer-001';
 export const PHASE8C_CUSTOMER_NON_TAXPAYER = 'cust-non-taxpayer-001';
 
 const saveApprovedFixtureRule = (rule) => insertApprovedRuleForFixture(rule);
+
+const mirrorDefaultConfigToEstablishment = (
+  tenantId,
+  establishmentId = PHASE8C_TEST_EMITENTE_CNPJ,
+) => {
+  const defaultProfile = getCompanyFiscalProfile(tenantId, 'default');
+  if (defaultProfile) {
+    saveCompanyFiscalProfile({
+      ...defaultProfile,
+      id: `${defaultProfile.id}-${establishmentId}`,
+      establishmentId,
+    });
+  }
+
+  const rules = listAccountantApprovedRulesForTenant(tenantId);
+  for (const rule of rules) {
+    if (rule.establishmentId && String(rule.establishmentId) !== 'default') {
+      continue;
+    }
+    insertApprovedRuleForFixture({
+      ...rule,
+      id: `${rule.id}-est-${establishmentId}`,
+      establishmentId,
+    });
+  }
+};
 
 export const bootstrapPhase8cFixtures = () => {
   resetFiscalConfigurationRepository();
@@ -234,6 +263,8 @@ export const bootstrapPhase8cFixtures = () => {
     approvedResult: { cfop: '5101', csosn: '102' },
     validFrom: '2020-01-01',
   });
+
+  mirrorDefaultConfigToEstablishment(PHASE8C_TENANT_ID, PHASE8C_TEST_EMITENTE_CNPJ);
 };
 
 export {
@@ -244,3 +275,5 @@ export {
   listAccountantApprovedRulesForTenant,
   saveAccountantApprovedRule,
 } from '../fiscal-configuration-memory.repository.js';
+
+export { mirrorDefaultConfigToEstablishment };

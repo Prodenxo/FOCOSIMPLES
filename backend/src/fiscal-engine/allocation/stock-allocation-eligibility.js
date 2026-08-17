@@ -13,15 +13,39 @@ const QTY_SCALE = 10;
  * @param {object} lot
  * @param {object} criteria
  * @param {string} criteria.empresaId
+ * @param {string} [criteria.establishmentId]
  * @param {string} criteria.produtoCatalogoId
  */
-export const evaluateLotEligibility = (lot, { empresaId, produtoCatalogoId }) => {
+export const evaluateLotEligibility = (lot, {
+  empresaId,
+  establishmentId,
+  produtoCatalogoId,
+  allowLegacyUntaggedLots = false,
+}) => {
   if (!lot) {
     return { eligible: false, reason: LOT_REJECTION_REASON.NOT_USABLE, availableQty: '0' };
   }
 
   if (lot.empresa_id !== empresaId) {
     return { eligible: false, reason: LOT_REJECTION_REASON.WRONG_TENANT, availableQty: '0' };
+  }
+
+  if (establishmentId) {
+    const lotEstablishment = lot.establishment_id ?? lot.establishmentId ?? null;
+    if (lotEstablishment && String(lotEstablishment) !== String(establishmentId)) {
+      return {
+        eligible: false,
+        reason: LOT_REJECTION_REASON.WRONG_ESTABLISHMENT,
+        availableQty: formatDecimal(lot.quantidade_disponivel ?? '0', QTY_SCALE),
+      };
+    }
+    if (!lotEstablishment && establishmentId !== 'default' && !allowLegacyUntaggedLots) {
+      return {
+        eligible: false,
+        reason: LOT_REJECTION_REASON.WRONG_ESTABLISHMENT,
+        availableQty: formatDecimal(lot.quantidade_disponivel ?? '0', QTY_SCALE),
+      };
+    }
   }
 
   if (!produtoCatalogoId || lot.produto_catalogo_id !== produtoCatalogoId) {

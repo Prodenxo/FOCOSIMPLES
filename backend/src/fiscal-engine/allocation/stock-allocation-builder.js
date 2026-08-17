@@ -67,6 +67,7 @@ export const buildAllocationRowFromLot = ({
   return {
     id: randomUUID(),
     empresa_id: lot.empresa_id,
+    establishment_id: lot.establishment_id ?? lot.establishmentId ?? commercialSaleItem.establishmentId ?? null,
     stock_lot_id: lot.id,
     allocation_request_uuid: allocationRequestUuid,
     commercial_sale_id: commercialSaleItem.commercialSaleId ?? null,

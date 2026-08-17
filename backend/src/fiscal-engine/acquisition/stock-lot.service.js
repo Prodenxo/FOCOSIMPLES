@@ -60,6 +60,7 @@ export const resolveStockLotStatus = ({
  */
 export const buildStockLotFromPurchaseItem = ({
   empresaId,
+  establishmentId = null,
   purchaseItem,
   priorStEvidence,
   catalogMatch,
@@ -91,6 +92,7 @@ export const buildStockLotFromPurchaseItem = ({
 
   return {
     empresa_id: empresaId,
+    establishment_id: establishmentId,
     produto_catalogo_id: catalogMatch.produtoCatalogoId,
     origem_mercadoria: purchaseItem.origem,
     base_unit: stockUnitResolution.baseUnit,
