@@ -6,6 +6,8 @@ import { randomUUID } from 'node:crypto';
 import { getPgPool } from '../../config/pg.js';
 import { toDecimal, formatDecimal } from '../money/decimal.js';
 import { ensureFiscalPurchaseSchema, canAutoEnsureFiscalPurchaseSchema } from './fiscal-purchase.schema.js';
+import { FISCAL_LOT_SOURCE } from './manual-opening-lot.constants.js';
+import { ORIGEM_FISCAL_SOURCE } from '../types/origem-mercadoria.js';
 
 const QTY_SCALE = 10;
 
@@ -154,22 +156,34 @@ export const savePurchaseImport = async ({ invoice, items, lots }) => {
       const purchaseItemId = savedItems[idx]?.id;
       await client.query(
         `INSERT INTO fiscal_stock_lots (
-          id, empresa_id, produto_catalogo_id, purchase_item_id, origem_mercadoria,
+          id, empresa_id, establishment_id, produto_catalogo_id, purchase_item_id,
+          lot_source, origem_mercadoria, origem_mercadoria_source,
           base_unit, quantidade_inicial, quantidade_disponivel, prior_st_status,
           prior_st_evidence_json, supplier_cest, st_retained_values_json,
           stock_unit_resolution_json, data_entrada, status, version
         ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19
         )`,
         [
-          lotId, lot.empresa_id, lot.produto_catalogo_id, purchaseItemId,
-          lot.origem_mercadoria, lot.base_unit, lot.quantidade_inicial,
-          lot.quantidade_disponivel, lot.prior_st_status,
+          lotId,
+          lot.empresa_id,
+          lot.establishment_id ?? null,
+          lot.produto_catalogo_id,
+          purchaseItemId,
+          FISCAL_LOT_SOURCE.PURCHASE_XML,
+          lot.origem_mercadoria,
+          ORIGEM_FISCAL_SOURCE.PURCHASE_XML_CONFIRMED,
+          lot.base_unit,
+          lot.quantidade_inicial,
+          lot.quantidade_disponivel,
+          lot.prior_st_status,
           jsonValue(lot.prior_st_evidence_json ?? {}),
           lot.supplier_cest,
           jsonValue(lot.st_retained_values_json ?? {}),
           jsonValue(lot.stock_unit_resolution_json ?? {}),
-          lot.data_entrada, lot.status, lot.version ?? 0,
+          lot.data_entrada,
+          lot.status,
+          lot.version ?? 0,
         ],
       );
       savedLots.push({
