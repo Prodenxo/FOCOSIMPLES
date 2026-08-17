@@ -50,7 +50,12 @@ export const gerarDasPgdasd = async ({
     userId,
   })
 
-  const pdfBase64 = extractPdfBase64FromPgdasdResponse(response)
+  const parsedEarly = parseDados(response)
+  const firstEarly = Array.isArray(parsedEarly) ? parsedEarly[0] : parsedEarly
+  const pdfBase64 =
+    firstEarly?.pdf
+    || firstEarly?.PDF
+    || extractPdfBase64FromPgdasdResponse(response)
   if (!pdfBase64) {
     const msgs = response?.raw?.mensagens || response?.dados?.mensagens || response?.mensagens
     const hint = Array.isArray(msgs)
@@ -64,8 +69,8 @@ export const gerarDasPgdasd = async ({
     )
   }
 
-  const parsed = parseDados(response)
-  const first = Array.isArray(parsed) ? parsed[0] : parsed
+  const parsed = parsedEarly
+  const first = firstEarly
   const detalhe = first?.detalhamento || first?.DetalhamentoDas || first || null
 
   return {

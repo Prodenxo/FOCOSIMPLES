@@ -19,7 +19,6 @@ import {
 } from './pgdasd/consultar-declaracoes.js'
 import { gerarDasPgdasd } from './pgdasd/gerar-das.js'
 import {
-  consultarDeclaracaoReciboPgdasd,
   consultarExtratoDasPgdasd,
 } from './pgdasd/consultar-extrato-das.js'
 import { tryExtractDasTotalFromPdfBase64 } from '../utils/das-pdf-valor.js'
@@ -46,6 +45,14 @@ const normalizePeriodo = (value) => {
   if (month < 1 || month > 12) return null
   return digits
 }
+
+/** Recibo de entrega da declaração (CONSDECREC15) não é o DAS de arrecadação. */
+const isReciboOnlyCache = (row) => {
+  const fonte = row?.detalhamento_json?.fonte
+  return fonte === 'CONSDECREC15'
+}
+
+const isUsableDasPdfCache = (row) => Boolean(row?.pdf_base64) && !isReciboOnlyCache(row)
 
 /**
  * CNPJ da operação = certificado da empresa autenticada.
@@ -151,7 +158,7 @@ export const listSimplesDasPeriods = async (userId, { cnpj, ano, refresh = false
 
   let local = []
   try {
-    local = await listDasSimplesPeriods({ userId, limit: 24 })
+    local = await listDasSimplesPeriods({ userId, cnpj: contribuinteCnpj, limit: 24 })
   } catch {
     local = []
   }
@@ -179,7 +186,7 @@ export const listSimplesDasPeriods = async (userId, { cnpj, ano, refresh = false
         errorMessage: row.error_message || null,
         valorTotal: row.valor_total ?? null,
         numeroDocumento: row.numero_documento || null,
-        hasLocalPdf: Boolean(row.pdf_base64),
+        hasLocalPdf: isUsableDasPdfCache(row),
       })
       continue
     }
@@ -190,7 +197,7 @@ export const listSimplesDasPeriods = async (userId, { cnpj, ano, refresh = false
       guideId: `pgdasd-${periodo}`,
       valorTotal: row.valor_total ?? prev.valorTotal ?? null,
       numeroDocumento: row.numero_documento || prev.numeroDocumento || null,
-      hasLocalPdf: Boolean(row.pdf_base64),
+      hasLocalPdf: isUsableDasPdfCache(row),
     })
   }
 
@@ -220,9 +227,10 @@ export const listSimplesDasPeriods = async (userId, { cnpj, ano, refresh = false
 
 /**
  * Quando GERARDAS não gera PDF (mês pago / sem novo débito),
- * busca extrato do DAS (CONSEXTRATO) ou recibo da declaração (CONSDECREC).
+ * busca o PDF do DAS já emitido via CONSEXTRATO16 (extrato do DAS).
+ * Nunca devolve recibo de declaração (CONSDECREC15).
  */
-const baixarPdfExistenteDoPeriodo = async ({
+const baixarExtratoDasDoPeriodo = async ({
   userId,
   contribuinteCnpj,
   periodo,
@@ -233,68 +241,40 @@ const baixarPdfExistenteDoPeriodo = async ({
     userId,
   })
 
-  if (ids.numeroDas) {
-    const extrato = await consultarExtratoDasPgdasd({
-      contribuinteCnpj,
-      numeroDas: ids.numeroDas,
-      userId,
-    })
-    const valorTotal = tryExtractDasTotalFromPdfBase64(extrato.pdfBase64)
-    const saved = await upsertDasSimples({
-      userId,
-      cnpj: contribuinteCnpj,
-      periodoApuracao: periodo,
-      status: 'gerado',
-      pdfBase64: extrato.pdfBase64,
-      numeroDocumento: ids.numeroDas,
-      valorTotal,
-      detalhamento: { fonte: 'CONSEXTRATO16', numeroDas: ids.numeroDas, valorTotal },
-    })
-    return {
-      id: saved?.id || `pgdasd-${periodo}`,
-      status: 'gerado',
-      competencia: `${periodo.slice(0, 4)}-${periodo.slice(4, 6)}`,
-      periodoApuracao: periodo,
-      numeroDocumento: ids.numeroDas,
-      valorTotal,
-      pdfBase64: extrato.pdfBase64,
-      filename: extrato.filename || `DAS-SN-extrato-${periodo}.pdf`,
-      fonte: 'extrato',
-    }
+  if (!ids.numeroDas) {
+    throw badRequest(
+      'Período declarado sem valor devido. A Receita não emite DAS quando não há imposto a pagar.',
+      { code: 'PGDASD_SEM_DEBITO' },
+    )
   }
 
-  if (ids.numeroDeclaracao) {
-    const recibo = await consultarDeclaracaoReciboPgdasd({
-      contribuinteCnpj,
-      numeroDeclaracao: ids.numeroDeclaracao,
-      userId,
-    })
-    const saved = await upsertDasSimples({
-      userId,
-      cnpj: contribuinteCnpj,
-      periodoApuracao: periodo,
-      status: 'gerado',
-      pdfBase64: recibo.pdfBase64,
-      numeroDocumento: ids.numeroDeclaracao,
-      detalhamento: { fonte: 'CONSDECREC15', numeroDeclaracao: ids.numeroDeclaracao },
-    })
-    return {
-      id: saved?.id || `pgdasd-${periodo}`,
-      status: 'gerado',
-      competencia: `${periodo.slice(0, 4)}-${periodo.slice(4, 6)}`,
-      periodoApuracao: periodo,
-      numeroDocumento: ids.numeroDeclaracao,
-      valorTotal: null,
-      pdfBase64: recibo.pdfBase64,
-      filename: recibo.filename || `PGDASD-recibo-${periodo}.pdf`,
-      fonte: 'recibo',
-    }
+  const extrato = await consultarExtratoDasPgdasd({
+    contribuinteCnpj,
+    numeroDas: ids.numeroDas,
+    userId,
+  })
+  const valorTotal = tryExtractDasTotalFromPdfBase64(extrato.pdfBase64)
+  const saved = await upsertDasSimples({
+    userId,
+    cnpj: contribuinteCnpj,
+    periodoApuracao: periodo,
+    status: 'gerado',
+    pdfBase64: extrato.pdfBase64,
+    numeroDocumento: ids.numeroDas,
+    valorTotal,
+    detalhamento: { fonte: 'CONSEXTRATO16', numeroDas: ids.numeroDas, valorTotal },
+  })
+  return {
+    id: saved?.id || `pgdasd-${periodo}`,
+    status: 'gerado',
+    competencia: `${periodo.slice(0, 4)}-${periodo.slice(4, 6)}`,
+    periodoApuracao: periodo,
+    numeroDocumento: ids.numeroDas,
+    valorTotal,
+    pdfBase64: extrato.pdfBase64,
+    filename: extrato.filename || `DAS-SN-${periodo}.pdf`,
+    fonte: 'extrato',
   }
-
-  throw badRequest(
-    'Não há DAS nem declaração com PDF disponível neste período na Receita.',
-    { code: 'PGDASD_SEM_DEBITO' },
-  )
 }
 
 /**
@@ -310,10 +290,10 @@ export const gerarSimplesDas = async (userId, payload = {}) => {
     throw badRequest('Informe periodoApuracao (AAAAMM).')
   }
 
-  // Mês já pago: vai direto ao extrato/recibo (evita MSG_E0139 do GERARDAS).
+  // Mês já pago: tenta extrato do DAS emitido (CONSEXTRATO) antes de GERARDAS.
   if (payload.preferExistingPdf) {
     try {
-      return await baixarPdfExistenteDoPeriodo({
+      return await baixarExtratoDasDoPeriodo({
         userId,
         contribuinteCnpj,
         periodo,
@@ -338,17 +318,15 @@ export const gerarSimplesDas = async (userId, payload = {}) => {
       || /MSG_E0139|n[aã]o\s+haver\s+valor\s+devido|sem\s+valor\s+devido|n[aã]o\s+foi\s+gerado\s+das/i.test(msg)
     if (isSemDebito) {
       try {
-        return await baixarPdfExistenteDoPeriodo({
+        return await baixarExtratoDasDoPeriodo({
           userId,
           contribuinteCnpj,
           periodo,
         })
       } catch (fallbackErr) {
-        const fbCode = fallbackErr?.errors?.code || fallbackErr?.code
-        if (fbCode === 'PGDASD_SEM_DEBITO') throw fallbackErr
         throw badRequest(
           fallbackErr?.message
-            || 'Período sem novo DAS a gerar e não foi possível obter o extrato/recibo.',
+            || 'Período declarado sem valor devido. Não há DAS a emitir ou baixar nesta competência.',
           { code: 'PGDASD_SEM_DEBITO' },
         )
       }
@@ -389,6 +367,7 @@ export const downloadSimplesDas = async (
   idOrPeriodo,
   { regenerate = false, preferExistingPdf = false } = {},
 ) => {
+  const contribuinteCnpj = await resolveContribuinteCnpj(userId)
   const raw = String(idOrPeriodo || '').trim()
   let periodo = null
 
@@ -402,16 +381,19 @@ export const downloadSimplesDas = async (
   if (!periodo && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(raw)) {
     try {
       const byId = await getDasSimplesById({ userId, id: raw })
-      periodo = normalizePeriodo(byId?.periodo_apuracao)
-      if (!regenerate && byId?.pdf_base64 && periodo) {
-        return {
-          id: byId.id,
-          status: byId.status || 'gerado',
-          periodoApuracao: periodo,
-          competencia: byId.competencia,
-          pdfBase64: byId.pdf_base64,
-          filename: `DAS-SN-${periodo}.pdf`,
-          contentType: 'application/pdf',
+      const rowCnpj = String(byId?.cnpj || '').replace(/\D/g, '')
+      if (byId && rowCnpj === contribuinteCnpj) {
+        periodo = normalizePeriodo(byId?.periodo_apuracao)
+        if (!regenerate && isUsableDasPdfCache(byId) && periodo) {
+          return {
+            id: byId.id,
+            status: byId.status || 'gerado',
+            periodoApuracao: periodo,
+            competencia: byId.competencia,
+            pdfBase64: byId.pdf_base64,
+            filename: `DAS-SN-${periodo}.pdf`,
+            contentType: 'application/pdf',
+          }
         }
       }
     } catch {
@@ -429,8 +411,12 @@ export const downloadSimplesDas = async (
 
   if (!regenerate) {
     try {
-      const local = await getDasSimplesByPeriodo({ userId, periodoApuracao: periodo })
-      if (local?.pdf_base64) {
+      const local = await getDasSimplesByPeriodo({
+        userId,
+        periodoApuracao: periodo,
+        cnpj: contribuinteCnpj,
+      })
+      if (isUsableDasPdfCache(local)) {
         return {
           id: local.id,
           status: local.status || 'gerado',

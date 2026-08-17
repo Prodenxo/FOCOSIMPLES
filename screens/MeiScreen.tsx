@@ -1106,6 +1106,7 @@ function MeiScreenContent() {
   };
 
   const handleDownloadGuide = async (period?: MeiPeriod) => {
+    const forceGenerateDas = period?.status === 'sem_debito';
     if (normalizedCnpj.length !== 14) {
       Alert.alert('Erro', 'Informe um CNPJ válido do contribuinte');
       return;
@@ -1147,9 +1148,9 @@ function MeiScreenContent() {
       if (isFocoSimplesUi) {
         // Sempre período AAAAMM — guideId UUID do cache local quebrava o download.
         const downloadKey = `pgdasd-${periodoApuracao}`;
-        const preferExistingPdf = period?.status === 'pago';
+        const preferExistingPdf = !forceGenerateDas && period?.status === 'pago' && period?.hasDas !== false;
         let guide = await downloadSimplesDas(downloadKey, {
-          regenerate: Boolean(vencida && period?.status === 'a_pagar'),
+          regenerate: Boolean(forceGenerateDas || (vencida && period?.status === 'a_pagar')),
           preferExistingPdf,
         });
         if (!guide?.pdfBase64) {
@@ -1248,20 +1249,23 @@ function MeiScreenContent() {
       } else if (code === 'MEI_DAS_PERIODO_INDISPONIVEL') {
         alertDialog('DAS indisponível', error?.message || 'Competência indisponível na Receita.');
         showToast(friendly, 'info');
-      } else if (isSemDebito) {
+      } else if (code === 'PGDASD_DAS_NOT_FOUND' || code === 'PGDASD_SEM_DEBITO' || isSemDebito) {
         if (period?.competencia) {
           setMeiPeriods((prev) => prev.map((row) => (
             row.competencia === period.competencia
-              ? { ...row, status: 'pago' as const, errorMessage: friendly }
+              ? { ...row, status: 'sem_debito' as const, errorMessage: friendly }
               : row
           )));
         }
         void loadMeiPeriods({ silent: true, refresh: true });
         alertDialog(
-          'PDF não disponível neste período',
-          'A Receita não devolveu guia nem extrato/recibo para esta competência. Confira no PGDAS-D se há DAS gerado ou declaração transmitida.',
+          'Sem DAS neste período',
+          friendly
+            || 'A Receita informou que não há imposto a pagar nesta competência (MSG_E0139). '
+            + 'Se houve faturamento, a declaração pode estar com receita zerada — peça retificação no PGDAS-D ou use Criar Guia após corrigir.',
+          [{ text: `Abrir ${DAS_PORTAL_LABEL}`, onPress: () => void handleOpenPgmei() }, { text: 'OK' }],
         );
-        showToast('Sem PDF na Receita para este período.', 'info');
+        showToast('Sem DAS — período declarado sem valor devido.', 'info');
       } else if (code === 'PGDASD_DAS_NO_PDF') {
         alertDialog(
           'PDF não disponível',
@@ -1442,13 +1446,27 @@ function MeiScreenContent() {
     meiPeriodsInFlightRef.current = true;
     try {
       if (isFocoSimplesUi) {
-        const data = await withMeiFetchTimeout(
-          fetchSimplesDasPeriods({
-            cnpj: normalizedCnpj,
-            refresh,
-          }),
+        const currentYear = new Date().getFullYear();
+        const years = [currentYear, currentYear - 1];
+        const payloads = await withMeiFetchTimeout(
+          Promise.all(
+            years.map((ano) => fetchSimplesDasPeriods({
+              cnpj: normalizedCnpj,
+              ano,
+              refresh,
+            })),
+          ),
         );
-        const rows = Array.isArray(data?.periods) ? data.periods : [];
+        const byCompetencia = new Map<string, MeiPeriod>();
+        for (const data of payloads) {
+          for (const row of Array.isArray(data?.periods) ? data.periods : []) {
+            byCompetencia.set(row.competencia, row);
+          }
+        }
+        const rows = Array.from(byCompetencia.values()).sort(
+          (a, b) => b.competencia.localeCompare(a.competencia),
+        );
+        const data = payloads[0];
         setMeiPeriods(rows);
         writeMeiOverviewPeriods(normalizedCnpj, rows);
         if (!data?.integration?.configured) {
@@ -1919,9 +1937,22 @@ function MeiScreenContent() {
       loadMeiPeriods({ refresh: true });
     } catch (e: any) {
       const msg = String(e?.message || 'Não foi possível criar a guia');
-      const isIndisponivel = String(e?.code || '') === 'MEI_DAS_PERIODO_INDISPONIVEL'
+      const code = String(e?.code || e?.errors?.code || '');
+      const isSemDebito = code === 'PGDASD_SEM_DEBITO'
+        || /msg_e0139|sem valor devido|n[aã]o foi gerado das/i.test(msg);
+      const isIndisponivel = code === 'MEI_DAS_PERIODO_INDISPONIVEL'
         || /indispon[ií]vel|n[aã]o era optante/i.test(msg);
-      if (isIndisponivel) {
+      if (isSemDebito) {
+        Alert.alert(
+          'Sem DAS — Receita sem imposto devido',
+          'A declaração deste mês está na Receita, mas não há guia DAS porque o cálculo deu zero. '
+          + 'Se a loja teve faturamento, retifique a declaração no PGDAS-D (com o contador) e tente de novo.',
+          [
+            { text: `Abrir ${DAS_PORTAL_LABEL}`, onPress: () => void handleOpenPgmei() },
+            { text: 'OK' },
+          ],
+        );
+      } else if (isIndisponivel) {
         Alert.alert('Período indisponível', msg);
       } else if (
         String(e?.code || '') === 'MEI_DAS_PAID_NO_PDF' || /j[aá]\s*pago|n[aã]o devolveu/i.test(msg)
@@ -3571,6 +3602,7 @@ function MeiScreenContent() {
                         <View style={[
                           styles.dasStatusBadge,
                           p.status === 'pago' ? styles.dasStatusPago :
+                          p.status === 'sem_debito' ? styles.dasStatusIndisponivel :
                           p.status === 'erro' ? styles.dasStatusErro :
                           p.status === 'indisponivel' ? styles.dasStatusIndisponivel :
                           vencida ? styles.dasStatusVencida :
@@ -3578,12 +3610,14 @@ function MeiScreenContent() {
                         ]}>
                           <Text style={[styles.dasStatusBadgeText, {
                             color: p.status === 'pago' ? theme.success :
+                              p.status === 'sem_debito' ? theme.textSecondary :
                               p.status === 'erro' ? theme.error :
                               p.status === 'indisponivel' ? theme.textSecondary :
                               vencida ? theme.error :
                               theme.warning,
                           }]}>
                             {p.status === 'pago' ? 'Pago' :
+                              p.status === 'sem_debito' ? 'Sem DAS' :
                               p.status === 'erro' ? 'Erro' :
                               p.status === 'indisponivel' ? 'Indisponível' :
                               vencida ? 'Vencida' :
@@ -3593,6 +3627,10 @@ function MeiScreenContent() {
                         {vencida && p.status === 'a_pagar' ? (
                           <Text style={styles.dasPeriodReason} numberOfLines={2}>
                             Venceu {p.vencimento || 'dia 20'} — baixar atualiza o valor
+                          </Text>
+                        ) : p.status === 'sem_debito' ? (
+                          <Text style={styles.dasPeriodReason} numberOfLines={2}>
+                            Declaração ok — use Gerar DAS ou retifique no PGDAS-D se houve faturamento
                           </Text>
                         ) : (p.status === 'erro' || p.status === 'indisponivel') ? (
                           <Text style={styles.dasPeriodReason} numberOfLines={2}>
@@ -3605,7 +3643,23 @@ function MeiScreenContent() {
                           ? formatCurrencyBR(p.valorTotal)
                           : '—'}
                       </Text>
-                      <View style={{ width: 70, alignItems: 'center' }}>
+                      <View style={{ width: 92, alignItems: 'center' }}>
+                        {p.status === 'sem_debito' ? (
+                          <TouchableOpacity
+                            style={styles.dasTableAction}
+                            onPress={() => void handleDownloadGuide(p)}
+                            disabled={downloadLoading}
+                            accessibilityLabel={`Gerar DAS de ${p.competencia}`}
+                          >
+                            {downloadLoading ? (
+                              <ActivityIndicator size="small" color={theme.primary} />
+                            ) : (
+                              <Text style={[styles.dasTableCell, { color: theme.primary, fontSize: 11, fontWeight: '600' }]}>
+                                Gerar DAS
+                              </Text>
+                            )}
+                          </TouchableOpacity>
+                        ) : (
                         <TouchableOpacity
                           style={styles.dasTableAction}
                           onPress={() => void handleDownloadGuide(p)}
@@ -3626,6 +3680,7 @@ function MeiScreenContent() {
                             }
                           />
                         </TouchableOpacity>
+                        )}
                       </View>
                     </View>
                     );

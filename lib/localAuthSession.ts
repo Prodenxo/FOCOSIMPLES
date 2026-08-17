@@ -3,6 +3,7 @@ import type { User } from '@supabase/supabase-js';
 import type { UserRole } from './auth-roles';
 
 export const LOCAL_AUTH_STORAGE_KEY = 'focosimples-local-auth';
+export const LOCAL_ADMIN_BACKUP_KEY = 'focosimples-local-admin-backup';
 
 export interface LocalAuthSnapshot {
   accessToken: string;
@@ -39,6 +40,33 @@ export async function clearLocalAuthSnapshot(): Promise<void> {
 export async function getLocalAccessToken(): Promise<string | null> {
   const snap = await readLocalAuthSnapshot();
   return snap?.accessToken || null;
+}
+
+export async function backupLocalAdminSnapshot(
+  snapshot: LocalAuthSnapshot,
+): Promise<void> {
+  await AsyncStorage.setItem(LOCAL_ADMIN_BACKUP_KEY, JSON.stringify(snapshot));
+}
+
+export async function readLocalAdminBackup(): Promise<LocalAuthSnapshot | null> {
+  try {
+    const raw = await AsyncStorage.getItem(LOCAL_ADMIN_BACKUP_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as LocalAuthSnapshot;
+    if (!parsed?.accessToken || !parsed?.user?.id) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export async function clearLocalAdminBackup(): Promise<void> {
+  await AsyncStorage.removeItem(LOCAL_ADMIN_BACKUP_KEY);
+}
+
+export async function hasLocalAdminBackup(): Promise<boolean> {
+  const raw = await AsyncStorage.getItem(LOCAL_ADMIN_BACKUP_KEY);
+  return Boolean(raw);
 }
 
 /** Monta um User compatível com o store (shape Supabase). */

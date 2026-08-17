@@ -80,7 +80,7 @@ export async function presentDownloadedFile(
   result: PersistDownloadResult,
   options: PresentDownloadOptions
 ): Promise<void> {
-  if (result.deliveredViaBrowser) {
+  if (result.deliveredViaBrowser || isWebDownloadPlatform()) {
     return;
   }
 

@@ -39,7 +39,12 @@ export const consultarExtratoDasPgdasd = async ({
     userId,
   })
 
-  const pdfBase64 = extractPdfBase64FromPgdasdResponse(response)
+  const parsed = parseDados(response)
+  const first = Array.isArray(parsed) ? parsed[0] : parsed
+  const pdfBase64 =
+    first?.extrato?.pdf
+    || first?.Extrato?.pdf
+    || extractPdfBase64FromPgdasdResponse(response)
   if (!pdfBase64) {
     const msgs = response?.raw?.mensagens || response?.dados?.mensagens || response?.mensagens
     const hint = Array.isArray(msgs)
@@ -51,13 +56,10 @@ export const consultarExtratoDasPgdasd = async ({
     )
   }
 
-  const parsed = parseDados(response)
-  const first = Array.isArray(parsed) ? parsed[0] : parsed
-
   return {
     numeroDas: numero,
     pdfBase64,
-    filename: first?.extrato?.nomeArquivo || `extrato-das-${numero}.pdf`,
+    filename: first?.extrato?.nomeArquivo || first?.Extrato?.nomeArquivo || `DAS-SN-extrato-${numero}.pdf`,
     response,
   }
 }

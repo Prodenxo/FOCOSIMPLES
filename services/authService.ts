@@ -3,8 +3,18 @@ import type { UserRole } from '../lib/auth-roles';
 
 export interface ImpersonateResult {
   email: string;
-  token_hash: string;
+  token_hash?: string;
   redirect_to?: string;
+  /** AUTH local — sessão JWT emitida pelo backend (sem Supabase verifyOtp). */
+  mode?: 'local';
+  session?: LocalAuthResult['session'];
+  user?: LocalAuthResult['user'];
+  userId?: string | null;
+  phone?: string | null;
+  displayName?: string | null;
+  role?: UserRole | null;
+  empresaId?: string | null;
+  mei?: boolean | null;
 }
 
 export interface LocalAuthResult {

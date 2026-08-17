@@ -447,3 +447,96 @@ export const localGetSession = async (accessToken) => {
 export const localSignOut = async () => {
   // JWT stateless — cliente descarta o token
 };
+
+const normalizeRoleName = (role) => {
+  const normalized = String(role || '').trim().toLowerCase();
+  if (normalized === 'user') return 'usuario';
+  return normalized || ROLE_DEFAULT;
+};
+
+const resolveTargetEmpresaId = async (targetUserId) => {
+  const { rows } = await query(
+    `SELECT empresas_id
+     FROM public.role_x_user_x_empresa
+     WHERE user_id = $1 AND status = true
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [targetUserId],
+  );
+  return rows[0]?.empresas_id || null;
+};
+
+/**
+ * Impersonate no AUTH_MODE=local — emite JWT do usuário alvo (sem Supabase Auth).
+ * @param {string} accessToken
+ * @param {string} targetUserId
+ */
+export const localImpersonate = async (accessToken, targetUserId) => {
+  if (!accessToken || !targetUserId) {
+    throw badRequest('Token e usuário alvo são obrigatórios');
+  }
+
+  const requester = verifyLocalAccessToken(accessToken);
+  if (!requester?.id) throw unauthorized('Sessão expirada ou inválida');
+
+  const { userId: requesterId, role, empresaId } = await resolveLocalRequesterContext(requester);
+
+  if (role !== 'superadmin' && role !== 'admin') {
+    throw forbidden('Apenas administradores podem acessar outras contas');
+  }
+
+  const { rows: targetRows } = await query(
+    `SELECT id, email, phone, raw_user_meta_data, banned_until, deleted_at
+     FROM public.users
+     WHERE id = $1
+     LIMIT 1`,
+    [targetUserId],
+  );
+  const targetRow = targetRows[0];
+  if (!targetRow || targetRow.deleted_at) {
+    throw badRequest('Usuário alvo não encontrado');
+  }
+  if (targetRow.banned_until && new Date(targetRow.banned_until) > new Date()) {
+    throw forbidden('Usuário alvo está bloqueado');
+  }
+
+  const { role: targetRole, empresaId: targetEmpresaId } = await getRoleAndCompany(targetUserId);
+
+  if (role === 'admin') {
+    const finalTargetEmpresaId = targetEmpresaId || await resolveTargetEmpresaId(targetUserId);
+    if (!empresaId || empresaId !== finalTargetEmpresaId) {
+      throw forbidden('Você só pode acessar usuários da sua própria empresa.');
+    }
+    if (targetRole === 'superadmin') {
+      throw forbidden('Administradores não podem acessar contas de Superadmin');
+    }
+  }
+
+  await ensureUserNotBlocked(targetUserId);
+
+  const meta = targetRow.raw_user_meta_data || {};
+  const token = signLocalAccessToken({
+    sub: targetRow.id,
+    email: targetRow.email,
+    role: 'authenticated',
+    user_metadata: meta,
+    app_metadata: { provider: 'email' },
+  });
+
+  const { role: resolvedRole, empresaId: resolvedEmpresaId, mei } = await getRoleAndCompany(targetUserId);
+  const session = buildSession(targetRow, token);
+
+  return {
+    mode: 'local',
+    email: targetRow.email,
+    user: session.user,
+    userId: targetRow.id,
+    phone: targetRow.phone || meta.phone || null,
+    displayName: meta.display_name || null,
+    role: normalizeRoleName(resolvedRole),
+    empresaId: resolvedEmpresaId,
+    mei,
+    session,
+    impersonatedBy: requesterId,
+  };
+};

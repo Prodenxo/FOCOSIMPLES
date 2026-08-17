@@ -76,7 +76,7 @@ export const upsertDasSimples = async (row) => {
   return data
 }
 
-export const getDasSimplesByPeriodo = async ({ userId, periodoApuracao }) => {
+export const getDasSimplesByPeriodo = async ({ userId, periodoApuracao, cnpj = null }) => {
   const periodo = normalizePeriodo(periodoApuracao)
   if (!userId || !periodo) return null
   const db = getDb()
@@ -88,6 +88,12 @@ export const getDasSimplesByPeriodo = async ({ userId, periodoApuracao }) => {
     .maybeSingle()
   if (error) {
     throw badRequest(error.message || 'Falha ao consultar DAS Simples.')
+  }
+  if (!data) return null
+  const expectedCnpj = String(cnpj || '').replace(/\D/g, '')
+  if (expectedCnpj.length === 14) {
+    const rowCnpj = String(data.cnpj || '').replace(/\D/g, '')
+    if (rowCnpj !== expectedCnpj) return null
   }
   return data
 }
@@ -108,17 +114,43 @@ export const getDasSimplesById = async ({ userId, id }) => {
   return data
 }
 
-export const listDasSimplesPeriods = async ({ userId, limit = 24 } = {}) => {
+export const listDasSimplesPeriods = async ({ userId, cnpj = null, limit = 24 } = {}) => {
   if (!userId) return []
   const db = getDb()
-  const { data, error } = await db
+  let query = db
     .from(TABLE)
-    .select('id, competencia, periodo_apuracao, status, numero_documento, valor_total, error_message, updated_at')
+    .select('id, cnpj, competencia, periodo_apuracao, status, numero_documento, valor_total, error_message, updated_at')
     .eq('user_id', userId)
+  const expectedCnpj = String(cnpj || '').replace(/\D/g, '')
+  if (expectedCnpj.length === 14) {
+    query = query.eq('cnpj', expectedCnpj)
+  }
+  const { data, error } = await query
     .order('periodo_apuracao', { ascending: false })
     .limit(Math.min(Math.max(Number(limit) || 24, 1), 48))
   if (error) {
     throw badRequest(error.message || 'Falha ao listar DAS Simples.')
   }
   return data || []
+}
+
+/**
+ * Remove PDFs DAS de CNPJs antigos quando o certificado A1 muda de establishment.
+ * @param {string} userId
+ * @param {string} activeCnpj
+ */
+export const purgeDasSimplesForOtherCnpjs = async (userId, activeCnpj) => {
+  const cnpj = String(activeCnpj || '').replace(/\D/g, '')
+  if (!userId || cnpj.length !== 14) return { deleted: 0 }
+  const db = getDb()
+  const { data, error } = await db
+    .from(TABLE)
+    .delete()
+    .eq('user_id', userId)
+    .neq('cnpj', cnpj)
+    .select('id')
+  if (error) {
+    throw badRequest(error.message || 'Falha ao limpar cache DAS de CNPJ anterior.')
+  }
+  return { deleted: data?.length ?? 0 }
 }

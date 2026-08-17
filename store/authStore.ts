@@ -32,8 +32,12 @@ import {
 } from '../lib/authBootGuard';
 import { isLocalApiAuthMode } from '../lib/authMode';
 import {
+  backupLocalAdminSnapshot,
   buildLocalUser,
+  clearLocalAdminBackup,
   clearLocalAuthSnapshot,
+  hasLocalAdminBackup,
+  readLocalAdminBackup,
   readLocalAuthSnapshot,
   writeLocalAuthSnapshot,
 } from '../lib/localAuthSession';
@@ -109,6 +113,7 @@ const CLEARED_AUTH_STATE = {
 
 async function clearLocalAuthSession(set: (partial: Partial<AuthState>) => void): Promise<void> {
   await clearBackedUpAdminSession();
+  await clearLocalAdminBackup();
   await clearSupabaseAuthStorage();
   await clearLocalAuthSnapshot();
   set(CLEARED_AUTH_STATE);
@@ -117,6 +122,7 @@ async function clearLocalAuthSession(set: (partial: Partial<AuthState>) => void)
 async function applyLocalApiResultToStore(
   result: Awaited<ReturnType<typeof signInWithApi>>,
   set: (partial: Partial<AuthState>) => void,
+  isImpersonating = false,
 ): Promise<void> {
   const accessToken = result.session?.access_token;
   if (!accessToken) {
@@ -154,7 +160,7 @@ async function applyLocalApiResultToStore(
     role,
     mei: result.mei,
     empresaId: result.empresaId,
-    isImpersonating: false,
+    isImpersonating,
   });
 }
 
@@ -445,6 +451,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
   signOut: async () => {
     await clearBackedUpAdminSession();
+    await clearLocalAdminBackup();
     if (isLocalApiAuthMode()) {
       await clearLocalAuthSnapshot();
       resetSessionActivationSkip();
@@ -471,6 +478,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set(CLEARED_AUTH_STATE);
   },
   impersonate: async (targetUserId) => {
+    if (isLocalApiAuthMode()) {
+      const snap = await readLocalAuthSnapshot();
+      if (!snap?.accessToken) {
+        throw new Error('Sessão não encontrada. Faça login novamente.');
+      }
+
+      await backupLocalAdminSnapshot(snap);
+
+      try {
+        const result = await impersonateUser(targetUserId);
+        if (!result.session?.access_token) {
+          throw new Error('Falha ao obter sessão do usuário alvo');
+        }
+        await applyLocalApiResultToStore(result as Awaited<ReturnType<typeof signInWithApi>>, set, true);
+      } catch (error) {
+        await clearLocalAdminBackup();
+        throw error instanceof Error ? error : new Error(getErrorMessage(error));
+      }
+      return;
+    }
+
     const { data: currentSession } = await supabase.auth.getSession();
     if (!currentSession?.session) {
       throw new Error('Sessão não encontrada. Faça login novamente.');
@@ -483,6 +511,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     try {
       const { token_hash } = await impersonateUser(targetUserId);
+      if (!token_hash) {
+        throw new Error('Falha ao obter token de impersonação');
+      }
       const { data, error } = await supabase.auth.verifyOtp({
         token_hash,
         type: 'magiclink',
@@ -498,6 +529,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
   stopImpersonating: async () => {
+    if (isLocalApiAuthMode()) {
+      const backup = await readLocalAdminBackup();
+      if (!backup) {
+        await get().signOut();
+        return;
+      }
+
+      await writeLocalAuthSnapshot(backup);
+      set({
+        user: backup.user,
+        phone: backup.phone,
+        displayName: backup.displayName,
+        userId: backup.user.id,
+        role: backup.role,
+        mei: backup.mei,
+        empresaId: backup.empresaId,
+        isImpersonating: false,
+      });
+      await clearLocalAdminBackup();
+      return;
+    }
+
     const backup = await readBackedUpAdminSession();
     if (!backup) {
       await get().signOut();
@@ -526,6 +579,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (isLocalApiAuthMode()) {
       const snap = await readLocalAuthSnapshot();
       if (snap) {
+        const isImpersonating = await hasLocalAdminBackup();
         set({
           user: snap.user,
           phone: snap.phone,
@@ -534,7 +588,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           role: snap.role,
           mei: snap.mei,
           empresaId: snap.empresaId,
-          isImpersonating: false,
+          isImpersonating,
           sessionRestored: true,
         });
         // Revalida mei/role no servidor (snapshot pode estar defasado após liberar Notas)

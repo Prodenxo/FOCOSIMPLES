@@ -1,5 +1,5 @@
 import { apiClient, downloadToFile } from '../lib/apiClient';
-import { mimeFromFilename, persistBinaryDownload } from '../lib/platformDownload';
+import { mimeFromFilename, persistBinaryDownload, type PersistDownloadResult } from '../lib/platformDownload';
 
 export interface CreateMeiGuideInput {
   cnpj: string;
@@ -20,7 +20,7 @@ export interface MeiGuideResponse {
 
 export interface MeiPeriod {
   competencia: string;
-  status: 'pago' | 'a_pagar' | 'erro' | 'indisponivel';
+  status: 'pago' | 'a_pagar' | 'sem_debito' | 'erro' | 'indisponivel';
   guideId?: string | null;
   errorMessage?: string | null;
   /** Após dia 20 do mês seguinte à competência e ainda a_pagar. */
@@ -32,6 +32,8 @@ export interface MeiPeriod {
   periodoApuracao?: string | null;
   numeroDocumento?: string | null;
   hasLocalPdf?: boolean;
+  /** Indica se a Receita registrou emissão de DAS neste período. */
+  hasDas?: boolean;
 }
 
 /** Competências indisponíveis (antes da abertura MEI, futuro, etc.) não entram na lista da UI. */
@@ -134,11 +136,10 @@ export function base64PdfToUint8Array(pdfBase64: string): Uint8Array {
 export async function saveMeiGuidePdfFromBase64(
   pdfBase64: string,
   filename: string
-): Promise<{ localUri: string; filename: string | null }> {
+): Promise<PersistDownloadResult> {
   const bytes = base64PdfToUint8Array(pdfBase64);
   const safeName = filename || 'guia-mei.pdf';
-  const saved = await persistBinaryDownload(bytes, safeName, mimeFromFilename(safeName));
-  return { localUri: saved.localUri, filename: saved.filename };
+  return persistBinaryDownload(bytes, safeName, mimeFromFilename(safeName));
 }
 
 export async function regenerateMeiGuide(

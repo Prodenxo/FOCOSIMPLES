@@ -97,8 +97,22 @@ export const resolveDasIdsDoPeriodo = async ({
     periodoApuracao,
     userId,
   })
-  const mapped = mapDeclaracoesToPeriods(dados)
-  const row = mapped.find((p) => p.periodoApuracao === periodo) || mapped[0] || null
+  let mapped = mapDeclaracoesToPeriods(dados)
+  let row = mapped.find((p) => p.periodoApuracao === periodo) || null
+
+  if (!row?.numeroDas) {
+    const ano = Number(periodo.slice(0, 4))
+    if (Number.isInteger(ano)) {
+      const { dados: dadosAno } = await consultarDeclaracoesPorAno({
+        contribuinteCnpj,
+        anoCalendario: ano,
+        userId,
+      })
+      mapped = mapDeclaracoesToPeriods(dadosAno)
+      row = mapped.find((p) => p.periodoApuracao === periodo) || row
+    }
+  }
+
   return {
     numeroDas: row?.numeroDas || null,
     numeroDeclaracao: row?.numeroDeclaracao || null,
@@ -121,18 +135,41 @@ const isDeclaracaoTipo = (tipo) =>
  * @param {object[]} operacoes
  * @returns {string|null}
  */
+const normalizeNumeroDas = (raw) => {
+  if (raw == null || String(raw).trim() === '') return null
+  const digits = String(raw).replace(/\D/g, '')
+  if (digits.length >= 10) return digits.slice(0, 17)
+  return String(raw).trim()
+}
+
 export const pickNumeroDasFromOperacoes = (operacoes = []) => {
   let bestPaid = null
   let bestAny = null
   for (const op of Array.isArray(operacoes) ? operacoes : []) {
     if (!op || typeof op !== 'object') continue
     const indiceDas = op.indiceDas || op.IndiceDas || null
-    if (!indiceDas || typeof indiceDas !== 'object') continue
-    const raw = indiceDas.numeroDas ?? indiceDas.NumeroDas ?? null
-    if (raw == null || String(raw).trim() === '') continue
-    const numeroDas = String(raw).replace(/\D/g, '') || String(raw).trim()
-    const dataHora = Number(indiceDas.dataHoraEmissaoDas || indiceDas.DataHoraEmissaoDas || 0) || 0
-    const pago = indiceDas.dasPago === true || indiceDas.DasPago === true
+    const rawCandidates = [
+      indiceDas?.numeroDas,
+      indiceDas?.NumeroDas,
+      indiceDas?.numeroDocumento,
+      indiceDas?.NumeroDocumento,
+      op.numeroDas,
+      op.NumeroDas,
+      op.numeroDocumento,
+      op.NumeroDocumento,
+    ]
+    const numeroDas = rawCandidates.map(normalizeNumeroDas).find(Boolean)
+    if (!numeroDas) continue
+    const dataHora = Number(
+      indiceDas?.dataHoraEmissaoDas
+      || indiceDas?.DataHoraEmissaoDas
+      || op.dataHoraEmissaoDas
+      || op.DataHoraEmissaoDas
+      || 0,
+    ) || 0
+    const pago = indiceDas?.dasPago === true
+      || indiceDas?.DasPago === true
+      || op.pago === true
     const entry = { numeroDas, dataHora }
     if (pago) {
       if (!bestPaid || entry.dataHora >= bestPaid.dataHora) bestPaid = entry
@@ -188,8 +225,8 @@ export const resolvePeriodStatusFromOperacoes = (operacoes = []) => {
     return { status: 'a_pagar', tipoOperacao: tipoPrincipal }
   }
   if (hasDeclaracao || ops.length > 0) {
-    // Declaração transmitida sem geração de DAS = sem valor devido
-    return { status: 'pago', tipoOperacao: tipoPrincipal || 'Sem geração de DAS' }
+    // Declaração transmitida sem geração de DAS = sem valor devido (não há PDF de arrecadação).
+    return { status: 'sem_debito', tipoOperacao: tipoPrincipal || 'Sem geração de DAS' }
   }
   return { status: 'a_pagar', tipoOperacao: tipoPrincipal }
 }
@@ -253,13 +290,15 @@ export const mapDeclaracoesToPeriods = (dados) => {
   const out = []
   for (const [periodo, bag] of byPeriodo.entries()) {
     const resolved = resolvePeriodStatusFromOperacoes(bag.ops)
+    const numeroDas = pickNumeroDasFromOperacoes(bag.ops)
     out.push({
       competencia: periodoToCompetencia(periodo),
       periodoApuracao: periodo,
       status: resolved.status,
       tipoOperacao: resolved.tipoOperacao,
       numeroDeclaracao: bag.numeroDeclaracao,
-      numeroDas: pickNumeroDasFromOperacoes(bag.ops),
+      numeroDas,
+      hasDas: Boolean(numeroDas),
       guideId: `pgdasd-${periodo}`,
     })
   }

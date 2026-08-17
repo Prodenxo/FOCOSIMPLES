@@ -21,6 +21,7 @@ import { buildSignupOriginMetadata, resolveAppOriginFromRequest } from '../utils
 import {
   isLocalAuthMode,
   localGetSession,
+  localImpersonate,
   localSignIn,
   localSignOut,
   localSignUp,
@@ -731,6 +732,10 @@ export const resolveRequesterContext = async (accessToken) => {
  */
 export const impersonate = async (accessToken, targetUserId) => {
   if (!accessToken || !targetUserId) throw badRequest('Token e usuário alvo são obrigatórios');
+
+  if (isLocalAuthMode()) {
+    return localImpersonate(accessToken, targetUserId);
+  }
 
   // 1. Resolve o contexto de quem está pedindo
   const { userId, role, empresaId } = await resolveRequesterContext(accessToken);

@@ -107,7 +107,7 @@ describe('pgdasd consultar map', () => {
     assert.equal(periods[0].status, 'a_pagar')
   })
 
-  it('marca pago quando só há declaração (sem geração de DAS / sem valor devido)', () => {
+  it('marca sem_debito quando só há declaração (sem geração de DAS / sem valor devido)', () => {
     const periods = mapDeclaracoesToPeriods({
       periodos: [
         {
@@ -116,7 +116,26 @@ describe('pgdasd consultar map', () => {
         },
       ],
     })
-    assert.equal(periods[0].status, 'pago')
+    assert.equal(periods[0].status, 'sem_debito')
+    assert.equal(periods[0].hasDas, false)
+  })
+
+  it('extrai numeroDas de numeroDocumento no indiceDas', () => {
+    const periods = mapDeclaracoesToPeriods({
+      periodos: [
+        {
+          periodoApuracao: '202606',
+          operacoes: [
+            {
+              tipoOperacao: 'Geração de DAS',
+              indiceDas: { numeroDocumento: '07202620299718700', dasPago: false },
+            },
+          ],
+        },
+      ],
+    })
+    assert.equal(periods[0].numeroDas, '07202620299718700')
+    assert.equal(periods[0].status, 'a_pagar')
   })
 })
 

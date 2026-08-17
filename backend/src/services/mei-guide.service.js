@@ -1460,6 +1460,27 @@ export const uploadCertificate = async (userId, payload) => {
         error: syncErr instanceof Error ? syncErr.message : String(syncErr)
       });
     }
+
+    const prevDigits = previousCertDocument ? normalizeDoc(previousCertDocument) : '';
+    if (prevDigits.length === 14 && prevDigits !== certDocument) {
+      try {
+        const { purgeDasSimplesForOtherCnpjs } = await import('./pgdasd/das-simples-store.js');
+        const { deleted } = await purgeDasSimplesForOtherCnpjs(userId, certDocument);
+        if (deleted > 0) {
+          console.info('[mei-guide.uploadCertificate] cache DAS de CNPJ anterior removido', {
+            userId,
+            previousCnpj: prevDigits,
+            activeCnpj: certDocument,
+            deleted,
+          });
+        }
+      } catch (purgeErr) {
+        console.warn('[mei-guide.uploadCertificate] purge DAS CNPJ anterior (não-fatal)', {
+          userId,
+          error: purgeErr instanceof Error ? purgeErr.message : String(purgeErr),
+        });
+      }
+    }
   }
 
   setUserCert(userId, {

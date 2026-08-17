@@ -50,6 +50,7 @@ type Props = {
 
 function statusLabel (status: MeiPeriod['status'], vencida = false): string {
   if (status === 'pago') return 'Pago'
+  if (status === 'sem_debito') return 'Sem DAS'
   if (status === 'a_pagar' && vencida) return 'Vencida'
   if (status === 'a_pagar') return 'A pagar'
   if (status === 'erro') return 'Erro'
@@ -133,6 +134,7 @@ export function MeiMobileDasPanel ({
   )
   const aPagarCount = displayPeriods.filter((p) => p.status === 'a_pagar').length
   const pagoCount = displayPeriods.filter((p) => p.status === 'pago').length
+  const semDebitoCount = displayPeriods.filter((p) => p.status === 'sem_debito').length
   const periodsErrorText = meiPeriodsError ? toMeiUserErrorMessage(meiPeriodsError) : null
   const tudoEmDia = !meiPeriodsLoading && displayPeriods.length > 0 && aPagarCount === 0
 
@@ -144,7 +146,7 @@ export function MeiMobileDasPanel ({
       return sorted.filter((p) => p.status === 'a_pagar')
     }
     if (statusFilter === 'pago') {
-      return sorted.filter((p) => p.status === 'pago')
+      return sorted.filter((p) => p.status === 'pago' || p.status === 'sem_debito')
     }
     return sorted
   }, [displayPeriods, statusFilter])
@@ -208,6 +210,9 @@ export function MeiMobileDasPanel ({
             {!meiPeriodsLoading && displayPeriods.length > 0 ? (
               <Text style={styles.ledgerSummary}>
                 {pagoCount} pago{pagoCount === 1 ? '' : 's'}
+                {semDebitoCount > 0
+                  ? ` · ${semDebitoCount} sem DAS`
+                  : ''}
                 {' · '}
                 {aPagarCount} a pagar
               </Text>
@@ -288,11 +293,13 @@ export function MeiMobileDasPanel ({
               const vencida = isMeiPeriodVencida(p)
               // Pago também pode baixar (reimpressão / PDF já quitado na Receita).
               const canDownload =
-                (p.status === 'a_pagar' || p.status === 'pago')
+                (p.status === 'a_pagar' || p.status === 'pago' || p.status === 'sem_debito')
                 && Boolean(onDownloadPeriod)
               const statusColor =
                 p.status === 'pago'
                   ? theme.success
+                  : p.status === 'sem_debito'
+                    ? theme.textSecondary
                   : p.status === 'erro'
                     ? theme.error
                     : p.status === 'indisponivel'
@@ -351,7 +358,9 @@ export function MeiMobileDasPanel ({
                       disabled={downloadLoading && selected}
                       accessibilityRole="button"
                       accessibilityLabel={
-                        vencida && p.status === 'a_pagar'
+                        p.status === 'sem_debito'
+                          ? `Gerar DAS de ${formatCompetenciaLabel(p.competencia)}`
+                          : vencida && p.status === 'a_pagar'
                           ? `Atualizar valor e baixar PDF de ${formatCompetenciaLabel(p.competencia)}`
                           : `Baixar PDF de ${formatCompetenciaLabel(p.competencia)}`
                       }
@@ -361,12 +370,22 @@ export function MeiMobileDasPanel ({
                       ) : (
                         <>
                           <Ionicons
-                            name={vencida && p.status === 'a_pagar' ? 'refresh-outline' : 'download-outline'}
+                            name={
+                              p.status === 'sem_debito'
+                                ? 'create-outline'
+                                : vencida && p.status === 'a_pagar'
+                                  ? 'refresh-outline'
+                                  : 'download-outline'
+                            }
                             size={16}
                             color={isDarkMode ? '#030508' : '#fff'}
                           />
                           <Text style={styles.ledgerDownloadText}>
-                            {vencida && p.status === 'a_pagar' ? 'Atualizar' : 'Baixar'}
+                            {p.status === 'sem_debito'
+                              ? 'Gerar DAS'
+                              : vencida && p.status === 'a_pagar'
+                                ? 'Atualizar'
+                                : 'Baixar'}
                           </Text>
                         </>
                       )}

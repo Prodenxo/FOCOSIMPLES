@@ -30,8 +30,8 @@ function rewriteKnownFiscalErrors (raw: string): string | null {
     )
   }
 
-  if (/msg_e0139|sem valor devido|não foi gerado das|pgdasd_sem_debito/i.test(raw)) {
-    return 'Não há valor devido neste período (Receita).'
+  if (/msg_e0139|sem valor devido|não foi gerado das|pgdasd_sem_debito|sem das neste período|declarado sem valor devido/i.test(raw)) {
+    return 'Não há valor devido neste período. A Receita não emite DAS quando não há imposto a pagar.'
   }
 
   if (/pgdasd_not_configured|não configurada no servidor/i.test(raw)) {
