@@ -113,6 +113,7 @@ const loadActiveAllocationsByLotIds = async (client, empresaId, lotIds) => {
  */
 export const runStockAllocationAtomic = async ({
   empresaId,
+  establishmentId = null,
   produtoCatalogoId,
   allocationRequestId,
   quantidadeSolicitada,
@@ -158,17 +159,33 @@ export const runStockAllocationAtomic = async ({
       };
     }
 
+    const lotParams = [empresaId, produtoCatalogoId];
+    let establishmentFilterSql = '';
+    if (establishmentId) {
+      lotParams.push(String(establishmentId).replace(/\D/g, '').slice(0, 14));
+      establishmentFilterSql = 'AND establishment_id = $3';
+    }
+
     const lockedLotsRes = await client.query(
       `SELECT l.*, i.purchase_invoice_id
-       FROM fiscal_stock_lots l
-       INNER JOIN fiscal_purchase_items i ON i.id = l.purchase_item_id
-       WHERE l.empresa_id = $1
-         AND l.produto_catalogo_id = $2
-         AND l.status = 'USABLE'
-         AND l.quantidade_disponivel > 0
-       ORDER BY l.data_entrada ASC, l.id ASC
-       FOR UPDATE`,
-      [empresaId, produtoCatalogoId],
+       FROM (
+         SELECT *
+         FROM fiscal_stock_lots
+         WHERE empresa_id = $1
+           AND produto_catalogo_id = $2
+           ${establishmentFilterSql}
+           AND status = 'USABLE'
+           AND quantidade_disponivel > 0
+           AND (
+             (lot_source = 'PURCHASE_XML' AND purchase_item_id IS NOT NULL)
+             OR (lot_source = 'MANUAL_FISCAL_CONFIRMATION' AND purchase_item_id IS NULL)
+           )
+         ORDER BY data_entrada ASC, id ASC
+         FOR UPDATE
+       ) l
+       LEFT JOIN fiscal_purchase_items i ON i.id = l.purchase_item_id
+       ORDER BY l.data_entrada ASC, l.id ASC`,
+      lotParams,
     );
 
     // Ordem transacional: lock FIFO dos lotes → lock ST ativo (FOR UPDATE) → cálculo → persistência → saldo

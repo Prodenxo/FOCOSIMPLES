@@ -19,6 +19,8 @@ const readMigration = (filename) => {
 export const FISCAL_PURCHASE_PHASE2_SQL = readMigration('20260811200000_fiscal_purchase_stock_phase2.sql');
 export const FISCAL_PURCHASE_HARDENING_SQL = readMigration('20260811210000_fiscal_purchase_hardening.sql');
 export const FISCAL_STOCK_ALLOCATION_PHASE3_SQL = readMigration('20260812100000_fiscal_stock_allocation_phase3.sql');
+export const FISCAL_ESTABLISHMENT_BOUNDARY_PHASE8F4_SQL = readMigration('20260817100000_fiscal_establishment_boundary_phase8f4.sql');
+export const FISCAL_MANUAL_OPENING_STOCK_PHASE8F5_SQL = readMigration('20260817120000_fiscal_manual_opening_stock_phase8f5.sql');
 
 /** @type {Promise<{ ok: boolean }> | null} */
 let schemaEnsureInFlight = null;
@@ -70,6 +72,8 @@ export const ensureFiscalPurchaseSchema = async (options = {}) => {
       await client.query(FISCAL_PURCHASE_PHASE2_SQL);
       await client.query(FISCAL_PURCHASE_HARDENING_SQL);
       await client.query(FISCAL_STOCK_ALLOCATION_PHASE3_SQL);
+      await client.query(FISCAL_ESTABLISHMENT_BOUNDARY_PHASE8F4_SQL);
+      await client.query(FISCAL_MANUAL_OPENING_STOCK_PHASE8F5_SQL);
       schemaEnsured = true;
       return { ok: true };
     } finally {

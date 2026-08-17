@@ -87,6 +87,7 @@ export const buildAllocationRowFromLot = ({
     reference_id: commercialSaleItem.commercialSaleItemId ?? null,
     status: ALLOCATION_STATUS.RESERVED,
     origem_mercadoria: lot.origem_mercadoria,
+    origem_mercadoria_source: lot.origem_mercadoria_source ?? lot.prior_st_evidence_json?.origemSource ?? null,
     prior_st_status: lot.prior_st_status,
     prior_st_evidence_json: lot.prior_st_evidence_json ?? {},
     supplier_cest: lot.supplier_cest ?? null,

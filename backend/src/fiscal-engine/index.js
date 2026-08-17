@@ -117,7 +117,24 @@ export {
   EMISSION_OVERRIDE_PERMISSION,
 } from './audit/emission-override-policy.js';
 
-export { importPurchaseNfeXml, __resetPurchaseRepoForTests } from './acquisition/purchase-import.service.js';
+export { importPurchaseNfeXml, __resetPurchaseRepoForTests, __setPurchaseRepoForTests } from './acquisition/purchase-import.service.js';
+export {
+  createManualFiscalOpeningLot,
+} from './acquisition/manual-opening-lot.service.js';
+export {
+  validateManualOpeningLotInput,
+  resolveManualOpeningLotStatus,
+  isManualOpeningLotRow,
+} from './acquisition/manual-opening-lot.policy.js';
+export { FISCAL_LOT_SOURCE, MANUAL_OPENING_REASON } from './acquisition/manual-opening-lot.constants.js';
+export {
+  __setManualOpeningLotRepoForTests,
+  __resetManualOpeningLotRepoForTests,
+} from './acquisition/manual-opening-lot.repository.js';
+export {
+  __setFiscalDecisionLogRepoForTests,
+  __resetFiscalDecisionLogRepoForTests,
+} from './audit/fiscal-decision-log.repository.js';
 export { parsePurchaseNfeXml } from './acquisition/purchase-xml-parser.js';
 export {
   classifyPriorStFromIcmsGroups,
