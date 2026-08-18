@@ -331,11 +331,6 @@ export const resolveCatalogUserIdsForActor = async (userId) => {
   return [...userIds];
 };
 
-/**
- * Usuário canônico para criar produtos comerciais do cliente (preferência: usuario > admin).
- * @param {string} empresaId
- * @returns {Promise<string>}
- */
 export const resolveEmpresaCatalogOwnerUserId = async (empresaId) => {
   const normalized = String(empresaId || '').trim();
   if (!normalized) throw badRequest('empresaId obrigatório');
@@ -357,5 +352,32 @@ export const resolveEmpresaCatalogOwnerUserId = async (empresaId) => {
     throw badRequest('Cliente sem usuário vinculado para catálogo de produtos');
   }
   return ownerId;
+};
+
+/**
+ * Usuário MEI cujo catálogo comercial corresponde ao emissor selecionado (BPO).
+ * @param {string} empresaId
+ * @param {string} emitterUserId
+ * @returns {Promise<string>}
+ */
+export const resolveEmitterCatalogUserId = async (empresaId, emitterUserId) => {
+  const tenantId = String(empresaId || '').trim();
+  const userId = String(emitterUserId || '').trim();
+  if (!tenantId) throw badRequest('empresaId obrigatório');
+  if (!userId) throw badRequest('emitterUserId obrigatório');
+
+  const result = await query(
+    `SELECT 1
+     FROM public.role_x_user_x_empresa rx
+     WHERE rx.empresas_id = $1
+       AND rx.user_id = $2
+       AND rx.mei = true
+     LIMIT 1`,
+    [tenantId, userId],
+  );
+  if (!result.rows[0]) {
+    throw badRequest('Emissor não vinculado ao cliente ou sem perfil MEI');
+  }
+  return userId;
 };
 

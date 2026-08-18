@@ -7,7 +7,7 @@ import {
   atualizarCatalogoProduto,
   listarCatalogoProdutos,
 } from '../mei-notas.service.js';
-import { assertUserCanAccessEmpresa } from './accountant-access.service.js';
+import { assertUserCanAccessEmpresa, resolveEmitterCatalogUserId } from './accountant-access.service.js';
 import {
   assertProductBelongsToEmpresa,
   listCanonicalEstablishmentsForTenant,
@@ -24,12 +24,17 @@ const stripEmpresaFromBody = (body = {}) => {
 /**
  * @param {string} actorUserId
  * @param {string} empresaId
- * @param {{ q?: string, limit?: number, documentType?: string }} [query]
+ * @param {{ q?: string, limit?: number, documentType?: string, emitterUserId?: string }} [query]
  */
 export const listClientProducts = async (actorUserId, empresaId, query = {}) => {
   await assertUserCanAccessEmpresa(actorUserId, empresaId);
+  if (!query.emitterUserId) {
+    throw badRequest('emitterUserId obrigatório — selecione o emissor (CNPJ)');
+  }
+  const catalogUserId = await resolveEmitterCatalogUserId(empresaId, query.emitterUserId);
   return listarCatalogoProdutos(null, {
     empresaId,
+    catalogUserId,
     q: query.q ?? '',
     limit: query.limit ?? 200,
     documentType: query.documentType ?? 'NFE',
@@ -41,12 +46,18 @@ export const listClientProducts = async (actorUserId, empresaId, query = {}) => 
  * @param {string} actorUserId
  * @param {string} empresaId
  * @param {object} body
+ * @param {{ emitterUserId?: string }} [options]
  */
-export const createClientProduct = async (actorUserId, empresaId, body = {}) => {
+export const createClientProduct = async (actorUserId, empresaId, body = {}, options = {}) => {
   await assertUserCanAccessEmpresa(actorUserId, empresaId);
+  if (!options.emitterUserId) {
+    throw badRequest('emitterUserId obrigatório — selecione o emissor (CNPJ)');
+  }
   const safeBody = stripEmpresaFromBody(body);
+  const catalogUserId = await resolveEmitterCatalogUserId(empresaId, options.emitterUserId);
   return criarCatalogoProduto(actorUserId, safeBody, {
     empresaId,
+    catalogUserId,
     requireEmpresaId: true,
   });
 };

@@ -47,6 +47,7 @@ export const listProducts = async (req, res, next) => {
       q: req.query.q,
       limit: req.query.limit,
       documentType: req.query.documentType ?? 'NFE',
+      emitterUserId: req.query.emitterUserId,
     });
     return res.json({ products });
   } catch (err) {
@@ -57,7 +58,12 @@ export const listProducts = async (req, res, next) => {
 export const createProduct = async (req, res, next) => {
   try {
     const context = await assertAccountantRole(req);
-    const product = await createClientProduct(context.userId, req.params.empresaId, req.body);
+    const product = await createClientProduct(
+      context.userId,
+      req.params.empresaId,
+      req.body,
+      { emitterUserId: req.query.emitterUserId },
+    );
     return res.status(201).json({ product });
   } catch (err) {
     return next(err);

@@ -2620,7 +2620,7 @@ export const findCatalogoProdutoByCodigoCnae = async (
 
 export const listarCatalogoProdutos = async (
   userId,
-  { q = '', limit = 20, documentType, empresaId = null, includeLegacyUnscoped = false } = {}
+  { q = '', limit = 20, documentType, empresaId = null, catalogUserId = null, includeLegacyUnscoped = false } = {}
 ) => {
   const safeLimit = toCatalogLimit(limit);
   const dbClient = getDb();
@@ -2632,9 +2632,13 @@ export const listarCatalogoProdutos = async (
     .limit(safeLimit);
 
   if (empresaId) {
-    const catalogUserIds = await resolveEmpresaCatalogUserIds(empresaId);
-    if (catalogUserIds.length === 0) return [];
-    query = query.in('user_id', catalogUserIds);
+    if (catalogUserId) {
+      query = query.eq('user_id', String(catalogUserId).trim());
+    } else {
+      const catalogUserIds = await resolveEmpresaCatalogUserIds(empresaId);
+      if (catalogUserIds.length === 0) return [];
+      query = query.in('user_id', catalogUserIds);
+    }
   } else {
     if (!userId) throw badRequest('userId ou empresaId obrigatório para listar catálogo');
     const catalogUserIds = await resolveCatalogUserIdsForActor(userId);
@@ -3324,14 +3328,18 @@ export const criarCatalogoProduto = async (userId, body = {}, options = {}) => {
       throw badRequest('empresaId no body não é permitido — ownership vem do escopo autorizado');
     }
   }
-  const catalogUserId = empresaId
-    ? await resolveEmpresaCatalogOwnerUserId(empresaId)
-    : userId;
+  const catalogUserId = options.catalogUserId
+    ? String(options.catalogUserId).trim()
+    : empresaId
+      ? await resolveEmpresaCatalogOwnerUserId(empresaId)
+      : userId;
   if (!catalogUserId) throw badRequest('Usuário do catálogo não identificado');
   const codigo = String(body.codigo ?? '').trim();
   const cnae = String(body.cnae ?? '').trim();
   const existing = empresaId
-    ? await findCatalogoProdutoByCodigoCnaeForEmpresa(empresaId, codigo, cnae, documentType)
+    ? await findCatalogoProdutoByCodigoCnaeForEmpresa(empresaId, codigo, cnae, documentType, {
+      catalogUserId: options.catalogUserId ?? null,
+    })
     : await findCatalogoProdutoByCodigoCnae(catalogUserId, codigo, cnae, documentType);
   if (existing) {
     throw badRequest(
@@ -3393,6 +3401,7 @@ const findCatalogoProdutoByCodigoCnaeForEmpresa = async (
   codigo,
   cnae,
   documentType = DOCUMENT_TYPE_NFSE,
+  options = {},
 ) => {
   const codigoNorm = normalizeNfseServicoCodigoForLength(String(codigo || '').trim());
   const cnaeNorm = normalizeCatalogProdutoCnae(cnae);
@@ -3400,6 +3409,7 @@ const findCatalogoProdutoByCodigoCnaeForEmpresa = async (
 
   const rows = await listarCatalogoProdutos(null, {
     empresaId,
+    catalogUserId: options.catalogUserId ?? null,
     limit: 100,
     documentType: normalizeDocumentType(documentType),
   });
