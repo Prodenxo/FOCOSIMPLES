@@ -468,7 +468,7 @@ export const fetchAccountantRulesForTenantPg = async (tenantId) => {
   const pool = getPgPool();
   const result = await pool.query(
     `SELECT * FROM accountant_approved_fiscal_rules
-     WHERE tenant_id = $1
+     WHERE tenant_id = $1 AND status = 'APPROVED'
      ORDER BY id, version`,
     [tenantId],
   );

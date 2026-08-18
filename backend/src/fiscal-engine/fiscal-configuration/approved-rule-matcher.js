@@ -89,12 +89,25 @@ export const approvedRuleMatchesFacts = (rule, facts) => {
       return { matches: false, missingFacts: [], reasons: ['fiscalProductGroupId_absent'] };
     }
 
-    if (actual == null || actual === 'UNKNOWN' || actual === '') {
+    if (actual == null || actual === '') {
       const ruleRequires = Array.isArray(expected) ? expected.length > 0 : expected != null;
       if (ruleRequires) {
         missingFacts.push(key);
       }
       continue;
+    }
+
+    if (actual === 'UNKNOWN') {
+      const acceptsUnknown = Array.isArray(expected)
+        ? expected.includes('UNKNOWN')
+        : expected === 'UNKNOWN';
+      if (!acceptsUnknown) {
+        const ruleRequires = Array.isArray(expected) ? expected.length > 0 : expected != null;
+        if (ruleRequires) {
+          missingFacts.push(key);
+        }
+        continue;
+      }
     }
 
     if (Array.isArray(expected)) {

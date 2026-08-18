@@ -61,7 +61,13 @@ import { applyIbptTransparenciaToNfePayload, logIbptTransparenciaEmit } from '..
 import {
   validateNfeCatalogProdutoMetadata,
 } from '../lib/nfe-cest.js';
-import { recalculateNfeLikePayloadTaxForEmit } from '../lib/nfe-like-payload-tax-apply.js';
+import {
+  recalculateNfeLikePayloadTaxForEmit,
+  applyAccountantTaxOverridesToCalculatedTaxes,
+} from '../lib/nfe-like-payload-tax-apply.js';
+import { resolveFiscalTenantId, isEmpresaUuid } from '../lib/resolve-fiscal-tenant-id.js';
+import { calculateItemsTax } from './tax.service.js';
+import { resolveUserEmpresaContext } from './certificate-repository.js';
 import { validateNfeLikePayload } from '../lib/nfe-like-payload-validate.js';
 import { triggerNfeEmissionShadowComparisonAfterSuccess } from '../fiscal-engine/shadow/nfe-emission-shadow-hook.js';
 import { isEmissionEligibleForShadowObservation } from '../fiscal-engine/shadow/shadow-emission-confirmation-policy.js';
@@ -2140,9 +2146,40 @@ export const emitirNota = async (userId, input) => {
         businessType,
         metadata,
         idIntegracao: emitPayload?.idIntegracao ?? payload?.idIntegracao,
-        applyLegacyFiscalTransform: async (commercial) => (
-          recalculateNfeLikePayloadTaxForEmit(commercial, { businessType })
-        ),
+        applyLegacyFiscalTransform: async (commercial) => {
+          const tenantId = await resolveFiscalTenantId(userId, metadata?.empresaId);
+          const { cnpj } = await resolveUserEmpresaContext(userId);
+          const emitenteRaw = commercial?.emitente && typeof commercial.emitente === 'object'
+            ? commercial.emitente
+            : {};
+          const emitenteCnpj = String(
+            emitenteRaw.cpfCnpj ?? emitenteRaw.cnpj ?? cnpj ?? '',
+          ).replace(/\D/g, '');
+          const commercialHydrated = {
+            ...commercial,
+            emitente: {
+              ...emitenteRaw,
+              ...(emitenteCnpj.length === 14 ? { cpfCnpj: emitenteCnpj } : {}),
+              crt: emitenteRaw.crt ?? emitenteRaw.CRT ?? 1,
+            },
+          };
+          const catalogUserIds = isEmpresaUuid(tenantId)
+            ? await resolveEmpresaCatalogUserIds(tenantId)
+            : await resolveCatalogUserIdsForActor(userId);
+          return recalculateNfeLikePayloadTaxForEmit(commercialHydrated, {
+            businessType,
+            tenantId,
+            resolveCatalogProductId: async (codigo, ncm) => {
+              const row = await findCatalogoProdutoForNfeEmit(
+                catalogUserIds,
+                codigo,
+                ncm,
+                documentType,
+              );
+              return row?.id ?? null;
+            },
+          });
+        },
         applyTechnicalTransforms,
       });
 
@@ -3952,4 +3989,78 @@ export const processarWebhook = async (payload) => {
   }
 
   return data;
+};
+
+/** Calcula CSOSN/CFOP por item com ponte para regras APPROVED do contador. */
+export const calcularTributacaoItensNfeForUser = async (userId, body = {}) => {
+  const originUf = String(body?.originUf || body?.origin_uf || '').trim();
+  const destinationUf = String(body?.destinationUf || body?.destination_uf || '').trim();
+  const businessType = String(body?.businessType || body?.business_type || '').trim();
+  const items = Array.isArray(body?.items) ? body.items : [];
+  const destinatarioDoc = String(
+    body?.destinatarioDoc
+    || body?.destinatarioCpfCnpj
+    || body?.destinatario_cpf_cnpj
+    || '',
+  ).trim();
+  const indIEDest = String(body?.indIEDest || body?.ind_ie_dest || '').trim();
+  const inscricaoEstadual = String(
+    body?.inscricaoEstadual
+    || body?.destinatarioInscricaoEstadual
+    || '',
+  ).trim();
+  const nonTaxpayer = body?.nonTaxpayer ?? body?.non_taxpayer;
+
+  const taxes = await calculateItemsTax({
+    originUf,
+    destinationUf,
+    items,
+    businessType,
+    destinatarioDoc,
+    indIEDest,
+    inscricaoEstadual,
+    nonTaxpayer,
+  });
+
+  const tenantId = await resolveFiscalTenantId(userId, body?.empresaId);
+  const { cnpj } = await resolveUserEmpresaContext(userId);
+  const emitenteCnpjRaw = String(
+    body?.emitenteCpfCnpj
+    || body?.emitente_cpf_cnpj
+    || cnpj
+    || '',
+  ).replace(/\D/g, '');
+  const emitente = {
+    cpfCnpj: emitenteCnpjRaw.length === 14 ? emitenteCnpjRaw : null,
+    crt: 1,
+  };
+  const destinatario = {
+    cpfCnpj: destinatarioDoc.replace(/\D/g, '') || destinatarioDoc,
+    indIEDest,
+    inscricaoEstadual,
+  };
+
+  const catalogUserIds = isEmpresaUuid(tenantId)
+    ? await resolveEmpresaCatalogUserIds(tenantId)
+    : await resolveCatalogUserIdsForActor(userId);
+
+  return applyAccountantTaxOverridesToCalculatedTaxes({
+    itens: items,
+    taxes,
+    tenantId,
+    emitente,
+    destinatario,
+    originUf,
+    destinationUf,
+    businessType,
+    resolveCatalogProductId: async (codigo, ncm) => {
+      const row = await findCatalogoProdutoForNfeEmit(
+        catalogUserIds,
+        codigo,
+        ncm,
+        DOCUMENT_TYPE_NFE,
+      );
+      return row?.id ?? null;
+    },
+  });
 };

@@ -89,4 +89,143 @@ describe('nfe-like-payload-tax-apply', () => {
 
     __resetGetDbForTests();
   });
+
+  it('usa CFOP/CSOSN da regra APPROVED do contador quando há match', async () => {
+    __resetTaxRulesSchemaCacheForTests();
+    __resetGetDbForTests();
+    __setGetDbForTests(() => ({
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            eq: () => ({
+              in: async () => ({ data: [], error: null }),
+            }),
+          }),
+        }),
+      }),
+    }));
+
+    const approvedRule = {
+      id: 'rule-cfop-5123',
+      tenantId: 'tenant-1',
+      version: 1,
+      status: 'APPROVED',
+      establishmentId: '11222333000181',
+      conditions: {
+        crt: [1],
+        productId: ['prod-camisa'],
+        operationType: ['VENDA'],
+        operationScope: ['INTERSTATE'],
+        itemSource: ['THIRD_PARTY'],
+        priorStStatus: ['UNKNOWN'],
+        origem: ['0'],
+      },
+      approvedResult: {
+        cfop: '5123',
+        csosn: '102',
+        icmsGroup: 'ICMSSN102',
+        currentOperationSt: 'NOT_DUE',
+      },
+    };
+
+    const payload = {
+      emitente: {
+        cpfCnpj: '11222333000181',
+        endereco: { estado: 'RJ' },
+        crt: 1,
+      },
+      destinatario: {
+        cpfCnpj: '12345678901',
+        indIEDest: '9',
+        endereco: { estado: 'SP' },
+      },
+      itens: [{
+        codigo: 'asdasdasd',
+        ncm: '61091000',
+        descricao: 'Camisa',
+        tributos: { icms: { csosn: '102' } },
+      }],
+    };
+
+    const out = await recalculateNfeLikePayloadTaxForEmit(payload, {
+      tenantId: 'tenant-1',
+      approvedRulesCache: [approvedRule],
+      resolveCatalogProductId: async () => 'prod-camisa',
+    });
+
+    assert.equal(out.itens[0].cfop, '5123');
+    assert.equal(out.itens[0].tributos.icms.csosn, '102');
+
+    __resetGetDbForTests();
+  });
+
+  it('não marca ST/CEST quando regra tem CSOSN 500 mas NCM sem ST na matriz', async () => {
+    __resetTaxRulesSchemaCacheForTests();
+    __resetGetDbForTests();
+    __setGetDbForTests(() => ({
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            eq: () => ({
+              in: async () => ({ data: [], error: null }),
+            }),
+          }),
+        }),
+      }),
+    }));
+
+    const approvedRule = {
+      id: 'rule-csosn-500-sem-st',
+      tenantId: 'tenant-1',
+      version: 1,
+      status: 'APPROVED',
+      establishmentId: '11222333000181',
+      conditions: {
+        crt: [1],
+        productId: ['prod-camisa'],
+        operationType: ['VENDA'],
+        operationScope: ['INTERNAL'],
+        itemSource: ['THIRD_PARTY'],
+        priorStStatus: ['UNKNOWN'],
+        origem: ['0'],
+      },
+      approvedResult: {
+        cfop: '5253',
+        csosn: '500',
+        icmsGroup: 'ICMSSN500',
+        currentOperationSt: 'NOT_DUE',
+      },
+    };
+
+    const payload = {
+      emitente: {
+        cpfCnpj: '11222333000181',
+        endereco: { estado: 'RJ' },
+        crt: 1,
+      },
+      destinatario: {
+        cpfCnpj: '12345678901',
+        indIEDest: '9',
+        endereco: { estado: 'RJ' },
+      },
+      itens: [{
+        codigo: 'asdasdasd',
+        ncm: '61091000',
+        descricao: 'Camisa',
+        tributos: { icms: { csosn: '500' } },
+      }],
+    };
+
+    const out = await recalculateNfeLikePayloadTaxForEmit(payload, {
+      tenantId: 'tenant-1',
+      approvedRulesCache: [approvedRule],
+      resolveCatalogProductId: async () => 'prod-camisa',
+    });
+
+    assert.equal(out.itens[0].cfop, '5253');
+    assert.equal(out.itens[0].tributos.icms.csosn, CSOSN_TRIBUTADO_SN);
+    assert.equal(out.itens[0].cest, undefined);
+
+    __resetGetDbForTests();
+  });
 });

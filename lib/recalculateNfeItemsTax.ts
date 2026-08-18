@@ -20,6 +20,7 @@ export type RecalculateNfeItemsTaxOptions = {
 
 const taxItemsPayload = (items: NfeItemForm[]) =>
   items.map((it) => ({
+    codigo: it.codigo,
     ncm: it.ncm,
     cest: it.cest,
   }))

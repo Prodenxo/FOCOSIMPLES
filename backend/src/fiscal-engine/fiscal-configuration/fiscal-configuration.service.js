@@ -27,6 +27,9 @@ import { stripActorFieldsFromPayload } from './fiscal-configuration-payload.js';
 import { previewAccountantRuleMatch } from './resolve-with-accountant-config.js';
 
 import { evaluateFiscalConfigurationReadinessForTenant } from './configuration-readiness.js';
+import {
+  findSupersededApprovedRulesForScope,
+} from './dedupe-approved-rules-for-emit.js';
 
 import {
 
@@ -276,7 +279,7 @@ export const approveAccountantFiscalRule = async (tenantId, ruleId, actor, actor
 
 
 
-  return repo.approveAccountantRuleAtomic({
+  const approved = await repo.approveAccountantRuleAtomic({
 
     tenantId,
 
@@ -291,6 +294,20 @@ export const approveAccountantFiscalRule = async (tenantId, ruleId, actor, actor
     justification,
 
   });
+
+  const allRules = await repo.listAccountantApprovedRulesForTenant(tenantId);
+  const superseded = findSupersededApprovedRulesForScope(allRules, approved);
+  for (const prior of superseded) {
+    await repo.suspendAccountantRule({
+      tenantId,
+      ruleId: prior.id,
+      version: prior.version,
+      suspendedBy: actor?.userId ?? null,
+      suspendedAt: new Date().toISOString(),
+    });
+  }
+
+  return approved;
 
 };
 

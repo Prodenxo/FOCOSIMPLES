@@ -4,7 +4,6 @@ import {
   buscarNcmsCatalogo,
   sugerirNcmsPorTexto,
 } from '../services/ncm-catalog.service.js';
-import { calculateItemsTax } from '../services/tax.service.js';
 import {
   extractBusinessTypeFromPayload,
   stripBusinessTypeFromPayload,
@@ -482,33 +481,7 @@ export const sugerirCatalogoNcms = async (req, res, next) => {
 
 export const calcularTributacaoItensNfe = async (req, res, next) => {
   try {
-    const originUf = String(req.body?.originUf || req.body?.origin_uf || '').trim();
-    const destinationUf = String(req.body?.destinationUf || req.body?.destination_uf || '').trim();
-    const businessType = String(req.body?.businessType || req.body?.business_type || '').trim();
-    const items = Array.isArray(req.body?.items) ? req.body.items : [];
-    const destinatarioDoc = String(
-      req.body?.destinatarioDoc
-      || req.body?.destinatarioCpfCnpj
-      || req.body?.destinatario_cpf_cnpj
-      || '',
-    ).trim();
-    const indIEDest = String(req.body?.indIEDest || req.body?.ind_ie_dest || '').trim();
-    const inscricaoEstadual = String(
-      req.body?.inscricaoEstadual
-      || req.body?.destinatarioInscricaoEstadual
-      || '',
-    ).trim();
-    const nonTaxpayer = req.body?.nonTaxpayer ?? req.body?.non_taxpayer;
-    const taxes = await calculateItemsTax({
-      originUf,
-      destinationUf,
-      items,
-      businessType,
-      destinatarioDoc,
-      indIEDest,
-      inscricaoEstadual,
-      nonTaxpayer,
-    });
+    const taxes = await meiNotasService.calcularTributacaoItensNfeForUser(req.user.id, req.body);
     return sendSuccess(res, { items: taxes }, 'Tributação calculada');
   } catch (error) {
     return next(error);

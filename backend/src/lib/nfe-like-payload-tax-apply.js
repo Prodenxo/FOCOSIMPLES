@@ -10,6 +10,8 @@ import {
   normalizeUf,
 } from './nfe-item-tax-engine.js';
 import { sanitizeNfeLikePayloadForEmit } from './nfe-like-payload-sanitize.js';
+import { tryResolveAccountantTaxForNfeItem, mergeAccountantTaxWithMatrixTax } from './nfe-like-payload-accountant-tax.js';
+import { loadAccountantApprovedRulesForTenant } from '../fiscal-engine/fiscal-configuration/fiscal-configuration-loader.js';
 
 const toObject = (value) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
@@ -22,8 +24,78 @@ const extractEntityUf = (entity) => {
 };
 
 /**
+ * @param {{
+ *   itens: object[],
+ *   taxes: object[],
+ *   tenantId?: string | null,
+ *   emitente?: object,
+ *   destinatario?: object,
+ *   originUf: string,
+ *   destinationUf: string,
+ *   businessType?: string,
+ *   approvedRulesCache?: object[] | null,
+ *   resolveCatalogProductId?: (codigo: string, ncm: string) => Promise<string | null>,
+ * }} input
+ * @returns {Promise<object[]>}
+ */
+export const applyAccountantTaxOverridesToCalculatedTaxes = async (input) => {
+  const itens = Array.isArray(input.itens) ? input.itens : [];
+  const taxes = Array.isArray(input.taxes) ? input.taxes : [];
+  const tenantId = String(input.tenantId ?? '').trim() || null;
+  const resolveCatalogProductId = input.resolveCatalogProductId ?? null;
+  const emitente = toObject(input.emitente);
+  const destinatario = toObject(input.destinatario);
+
+  if (!tenantId || typeof resolveCatalogProductId !== 'function') {
+    return taxes;
+  }
+
+  let approvedRulesCache = input.approvedRulesCache ?? null;
+  if (!approvedRulesCache) {
+    approvedRulesCache = await loadAccountantApprovedRulesForTenant(tenantId);
+  }
+
+  return Promise.all(itens.map(async (item, index) => {
+    const tax = taxes[index];
+    if (!tax) return tax;
+
+    const codigo = String(item?.codigo || item?.sku || '').trim();
+    const ncm = String(item?.ncm || '').replace(/\D/g, '').slice(0, 8);
+    if (!codigo) return tax;
+
+    const catalogProductId = await resolveCatalogProductId(codigo, ncm);
+    if (!catalogProductId) return tax;
+
+    const accountantTax = await tryResolveAccountantTaxForNfeItem({
+      tenantId,
+      emitente,
+      destinatario,
+      item,
+      originUf: input.originUf,
+      destinationUf: input.destinationUf,
+      businessType: input.businessType,
+      catalogProductId,
+      approvedRulesCache,
+      legacyCfopCsosnOnly: true,
+    });
+
+    if (!accountantTax) return tax;
+
+    const merged = mergeAccountantTaxWithMatrixTax(accountantTax, tax);
+    return {
+      ...tax,
+      cfop: merged.cfop,
+      csosn: merged.csosn,
+      has_st: merged.has_st,
+      cest: merged.cest,
+      reason: 'accountant_approved_rule',
+    };
+  }));
+};
+
+/**
  * @param {object} payload
- * @param {{ businessType?: string, originUf?: string, destinationUf?: string }} [options]
+ * @param {{ businessType?: string, originUf?: string, destinationUf?: string, tenantId?: string, userId?: string, approvedRulesCache?: object[], resolveCatalogProductId?: (codigo: string, ncm: string) => Promise<string | null> }} [options]
  */
 export const recalculateNfeLikePayloadTaxForEmit = async (payload, options = {}) => {
   if (!payload || typeof payload !== 'object') return payload;
@@ -53,18 +125,31 @@ export const recalculateNfeLikePayloadTaxForEmit = async (payload, options = {})
     inscricaoEstadual: destinatario.inscricaoEstadual,
   });
 
-  const nextItens = itens.map((item, index) => {
-    const tax = taxes[index];
-    if (!tax) return item;
+  const tenantId = String(options.tenantId ?? '').trim() || null;
+  const effectiveTaxes = await applyAccountantTaxOverridesToCalculatedTaxes({
+    itens,
+    taxes,
+    tenantId,
+    emitente,
+    destinatario,
+    originUf,
+    destinationUf,
+    businessType: options.businessType,
+    approvedRulesCache: options.approvedRulesCache ?? null,
+    resolveCatalogProductId: options.resolveCatalogProductId ?? null,
+  });
 
+  const nextItens = await Promise.all(itens.map(async (item, index) => {
+    const effectiveTax = effectiveTaxes[index];
+    if (!effectiveTax) return item;
     const tributos = toObject(item.tributos);
     const icms = toObject(tributos.icms);
-    const isSt = tax.has_st === true && String(tax.csosn) === CSOSN_ST;
-    const csosn = isSt ? CSOSN_ST : CSOSN_TRIBUTADO_SN;
+    const isSt = effectiveTax.has_st === true && String(effectiveTax.csosn) === CSOSN_ST;
+    const csosn = isSt ? CSOSN_ST : String(effectiveTax.csosn ?? CSOSN_TRIBUTADO_SN);
 
     const base = {
       ...item,
-      cfop: tax.cfop ?? item.cfop,
+      cfop: effectiveTax.cfop ?? item.cfop,
       tributos: {
         ...tributos,
         icms: {
@@ -75,13 +160,13 @@ export const recalculateNfeLikePayloadTaxForEmit = async (payload, options = {})
       },
     };
 
-    if (isSt && tax.cest) {
-      return { ...base, cest: tax.cest };
+    if (isSt && (effectiveTax.cest || item.cest)) {
+      return { ...base, cest: effectiveTax.cest ?? item.cest };
     }
 
     const { cest: _omit, ...withoutCest } = base;
     return withoutCest;
-  });
+  }));
 
   return sanitizeNfeLikePayloadForEmit({
     ...payload,

@@ -798,7 +798,7 @@ export async function calcularTributacaoItensNfe(input: {
   originUf: string
   destinationUf: string
   businessType?: EmpresaBusinessType | string
-  items: Array<{ ncm?: string; cest?: string }>
+  items: Array<{ codigo?: string; ncm?: string; cest?: string }>
   destinatarioDoc?: string
   destinatarioCpfCnpj?: string
   indIEDest?: string
