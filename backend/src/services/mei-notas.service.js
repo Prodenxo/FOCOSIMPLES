@@ -1,6 +1,11 @@
 import { createSupabaseClient } from '../config/supabase.js';
 import { badRequest, forbidden, notFound } from '../utils/errors.js';
 import {
+  resolveEmpresaCatalogOwnerUserId,
+  resolveEmpresaCatalogUserIds,
+  resolveCatalogUserIdsForActor,
+} from './accountant/accountant-access.service.js';
+import {
   cancelarNfse,
   consultarNfse,
   consultarNfsePorIdOuProtocolo,
@@ -1736,6 +1741,102 @@ const upsertClienteCatalogo = async (userId, payload, { documentType = DOCUMENT_
   return entry;
 };
 
+const readCatalogProdutoNcmDigits = (row) => {
+  const meta = row?.metadata_json;
+  if (meta && typeof meta === 'object' && !Array.isArray(meta)) {
+    const fromMeta = String(meta.ncm ?? '').replace(/\D/g, '').slice(0, 8);
+    if (fromMeta.length === 8) return fromMeta;
+  }
+  const fromCnae = String(row?.cnae ?? '').replace(/\D/g, '').slice(0, 8);
+  if (fromCnae.length === 8) return fromCnae;
+  return '';
+};
+
+/**
+ * Localiza produto NF-e/NFC-e existente por código (+ NCM quando disponível).
+ * @param {string[]} catalogUserIds
+ */
+const findCatalogoProdutoForNfeEmit = async (
+  catalogUserIds,
+  codigo,
+  ncm,
+  documentType = DOCUMENT_TYPE_NFE,
+) => {
+  const codigoNorm = normalizeNfseServicoCodigoForLength(String(codigo || '').trim());
+  if (!codigoNorm || !catalogUserIds.length) return null;
+
+  const ncmNorm = String(ncm || '').replace(/\D/g, '').slice(0, 8);
+  const dbClient = getDb();
+  const { data, error } = await dbClient
+    .from(PRODUCTS_TABLE)
+    .select('id, user_id, codigo, cnae, metadata_json, discriminacao, document_type')
+    .in('user_id', catalogUserIds)
+    .eq('document_type', normalizeDocumentType(documentType))
+    .limit(200);
+
+  if (error) throw badRequest(error.message);
+
+  const matches = (data || []).filter((row) => (
+    normalizeNfseServicoCodigoForLength(String(row?.codigo || '').trim()) === codigoNorm
+  ));
+  if (!matches.length) return null;
+  if (matches.length === 1) return matches[0];
+
+  const rank = (row) => {
+    const rowNcm = readCatalogProdutoNcmDigits(row);
+    if (ncmNorm && rowNcm === ncmNorm) return 4;
+    if (ncmNorm && rowNcm.slice(0, 7) === ncmNorm.slice(0, 7)) return 3;
+    if (rowNcm.length === 8) return 2;
+    return 0;
+  };
+
+  return matches.sort((a, b) => rank(b) - rank(a))[0];
+};
+
+/** Pós-emissão NF-e: só toca last_used_at — não insere duplicata sem metadata_json. */
+const touchProdutosCatalogoNfeOnEmit = async (userId, payload, { documentType = DOCUMENT_TYPE_NFE } = {}) => {
+  const normalizedType = normalizeDocumentType(documentType);
+  const itens = Array.isArray(payload?.itens) ? payload.itens : [];
+  if (!itens.length) return 0;
+
+  const catalogUserIds = await resolveCatalogUserIdsForActor(userId);
+  if (!catalogUserIds.length) return 0;
+
+  const now = new Date().toISOString();
+  const dbClient = getDb();
+  let touched = 0;
+
+  for (const item of itens) {
+    const codigo = String(item?.codigo || item?.sku || '').trim();
+    const ncm = String(item?.ncm || '').replace(/\D/g, '').slice(0, 8);
+    if (!codigo) continue;
+
+    const existing = await findCatalogoProdutoForNfeEmit(
+      catalogUserIds,
+      codigo,
+      ncm,
+      normalizedType,
+    );
+    if (!existing?.id) continue;
+
+    const updates = { last_used_at: now, updated_at: now };
+    const existingMeta = sanitizeMetadata(existing.metadata_json);
+    const existingNcm = String(existingMeta.ncm ?? '').replace(/\D/g, '').slice(0, 8);
+    if (ncm.length === 8 && existingNcm.length !== 8) {
+      updates.metadata_json = { ...existingMeta, ncm };
+    }
+
+    const { error } = await dbClient
+      .from(PRODUCTS_TABLE)
+      .update(updates)
+      .eq('id', existing.id);
+    if (error) throw badRequest(error.message);
+    touched += 1;
+  }
+
+  return touched;
+};
+
 const upsertProdutosCatalogo = async (userId, payload, { documentType = DOCUMENT_TYPE_NFSE } = {}) => {
   const normalizedType = normalizeDocumentType(documentType);
   const entries = buildProdutoCatalogEntries(payload, { documentType: normalizedType });
@@ -1786,7 +1887,7 @@ const upsertProdutosCatalogo = async (userId, payload, { documentType = DOCUMENT
 const touchProdutosCatalogoOnEmit = async (userId, payload, { documentType = DOCUMENT_TYPE_NFSE } = {}) => {
   const normalizedType = normalizeDocumentType(documentType);
   if (normalizedType !== DOCUMENT_TYPE_NFSE) {
-    return upsertProdutosCatalogo(userId, payload, { documentType: normalizedType });
+    return touchProdutosCatalogoNfeOnEmit(userId, payload, { documentType: normalizedType });
   }
 
   const entries = buildProdutoCatalogEntries(payload, { documentType: normalizedType });
@@ -2519,16 +2620,30 @@ export const findCatalogoProdutoByCodigoCnae = async (
 
 export const listarCatalogoProdutos = async (
   userId,
-  { q = '', limit = 20, documentType } = {}
+  { q = '', limit = 20, documentType, empresaId = null, includeLegacyUnscoped = false } = {}
 ) => {
   const safeLimit = toCatalogLimit(limit);
   const dbClient = getDb();
+  const productColumns = 'id, user_id, document_type, codigo, cnae, discriminacao, aliquota, valor_sugerido, metadata_json, last_used_at, created_at, updated_at';
   let query = dbClient
     .from(PRODUCTS_TABLE)
-    .select('id, document_type, codigo, cnae, discriminacao, aliquota, valor_sugerido, metadata_json, last_used_at, created_at, updated_at')
-    .eq('user_id', userId)
+    .select(productColumns)
     .order('last_used_at', { ascending: false })
     .limit(safeLimit);
+
+  if (empresaId) {
+    const catalogUserIds = await resolveEmpresaCatalogUserIds(empresaId);
+    if (catalogUserIds.length === 0) return [];
+    query = query.in('user_id', catalogUserIds);
+  } else {
+    if (!userId) throw badRequest('userId ou empresaId obrigatório para listar catálogo');
+    const catalogUserIds = await resolveCatalogUserIdsForActor(userId);
+    if (catalogUserIds.length === 1) {
+      query = query.eq('user_id', catalogUserIds[0]);
+    } else {
+      query = query.in('user_id', catalogUserIds);
+    }
+  }
 
   if (documentType) {
     query = query.eq('document_type', normalizeDocumentType(documentType));
@@ -2710,6 +2825,21 @@ const findCatalogProduto = async (userId, id) => {
     .maybeSingle();
   if (error) throw badRequest(error.message);
   if (!data) throw notFound('Item do catálogo não encontrado');
+  return data;
+};
+
+export const findCatalogProdutoPorEmpresa = async (empresaId, id) => {
+  const catalogUserIds = await resolveEmpresaCatalogUserIds(empresaId);
+  if (catalogUserIds.length === 0) throw notFound('Produto não encontrado para este cliente');
+  const dbClient = getDb();
+  const { data, error } = await dbClient
+    .from(PRODUCTS_TABLE)
+    .select('id, user_id, document_type, codigo, cnae, discriminacao, aliquota, valor_sugerido, metadata_json, dedupe_key, last_used_at, created_at, updated_at')
+    .eq('id', id)
+    .in('user_id', catalogUserIds)
+    .maybeSingle();
+  if (error) throw badRequest(error.message);
+  if (!data) throw notFound('Produto não encontrado para este cliente');
   return data;
 };
 
@@ -3177,7 +3307,7 @@ export const criarCatalogoProdutosFromSpreadsheet = async (userId, body = {}) =>
 /**
  * POST catálogo produto/serviço — dedupe_key gerado como manual:{uuid}.
  */
-export const criarCatalogoProduto = async (userId, body = {}) => {
+export const criarCatalogoProduto = async (userId, body = {}, options = {}) => {
   const documentType = normalizeDocumentType(
     body.documentType || body.document_type || DOCUMENT_TYPE_NFSE
   );
@@ -3185,9 +3315,24 @@ export const criarCatalogoProduto = async (userId, body = {}) => {
   if (!discriminacao) {
     throw badRequest('discriminacao é obrigatória');
   }
+  const empresaId = options.empresaId ?? null;
+  if (options.requireEmpresaId && !empresaId) {
+    throw badRequest('empresaId obrigatório para cadastrar produto do cliente');
+  }
+  if (body.empresaId !== undefined || body.empresa_id !== undefined) {
+    if (options.empresaId || options.requireEmpresaId) {
+      throw badRequest('empresaId no body não é permitido — ownership vem do escopo autorizado');
+    }
+  }
+  const catalogUserId = empresaId
+    ? await resolveEmpresaCatalogOwnerUserId(empresaId)
+    : userId;
+  if (!catalogUserId) throw badRequest('Usuário do catálogo não identificado');
   const codigo = String(body.codigo ?? '').trim();
   const cnae = String(body.cnae ?? '').trim();
-  const existing = await findCatalogoProdutoByCodigoCnae(userId, codigo, cnae, documentType);
+  const existing = empresaId
+    ? await findCatalogoProdutoByCodigoCnaeForEmpresa(empresaId, codigo, cnae, documentType)
+    : await findCatalogoProdutoByCodigoCnae(catalogUserId, codigo, cnae, documentType);
   if (existing) {
     throw badRequest(
       `Já existe serviço com código ${existing.codigo} e CNAE ${existing.cnae}. Edite o cadastro existente ou use-o na emissão.`,
@@ -3204,7 +3349,7 @@ export const criarCatalogoProduto = async (userId, body = {}) => {
   const now = new Date().toISOString();
 
   const row = {
-    user_id: userId,
+    user_id: catalogUserId,
     document_type: documentType,
     dedupe_key,
     codigo,
@@ -3243,16 +3388,45 @@ export const criarCatalogoProduto = async (userId, body = {}) => {
   return data;
 };
 
+const findCatalogoProdutoByCodigoCnaeForEmpresa = async (
+  empresaId,
+  codigo,
+  cnae,
+  documentType = DOCUMENT_TYPE_NFSE,
+) => {
+  const codigoNorm = normalizeNfseServicoCodigoForLength(String(codigo || '').trim());
+  const cnaeNorm = normalizeCatalogProdutoCnae(cnae);
+  if (!codigoNorm || cnaeNorm.length !== 7) return null;
+
+  const rows = await listarCatalogoProdutos(null, {
+    empresaId,
+    limit: 100,
+    documentType: normalizeDocumentType(documentType),
+  });
+
+  return rows.find((row) => (
+    normalizeNfseServicoCodigoForLength(String(row?.codigo || '').trim()) === codigoNorm
+    && normalizeCatalogProdutoCnae(row?.cnae) === cnaeNorm
+  )) || null;
+};
+
 /**
  * PATCH catálogo produto — não altera dedupe_key nem document_type.
  */
-export const atualizarCatalogoProduto = async (userId, id, body = {}) => {
+export const atualizarCatalogoProduto = async (userId, id, body = {}, options = {}) => {
   const recordId = ensureCatalogRecordId(id);
   if (body.dedupe_key !== undefined || body.document_type !== undefined || body.documentType !== undefined) {
     throw badRequest('Não é permitido alterar dedupe_key ou document_type');
   }
+  if (body.empresaId !== undefined || body.empresa_id !== undefined) {
+    throw badRequest('Não é permitido alterar empresa_id do produto');
+  }
 
-  const existing = await findCatalogProduto(userId, recordId);
+  const empresaId = options.empresaId ?? null;
+  const existing = empresaId
+    ? await findCatalogProdutoPorEmpresa(empresaId, recordId)
+    : await findCatalogProduto(userId, recordId);
+  const catalogUserId = existing.user_id;
 
   const updates = {};
   if (body.codigo !== undefined) {
@@ -3304,7 +3478,7 @@ export const atualizarCatalogoProduto = async (userId, id, body = {}) => {
     .from(PRODUCTS_TABLE)
     .update(updates)
     .eq('id', recordId)
-    .eq('user_id', userId)
+    .eq('user_id', catalogUserId)
     .select(
       'id, document_type, codigo, cnae, discriminacao, aliquota, valor_sugerido, metadata_json, dedupe_key, last_used_at, created_at, updated_at'
     )

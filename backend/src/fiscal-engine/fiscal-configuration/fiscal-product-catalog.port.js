@@ -4,7 +4,8 @@
  * Boundary fiscal: fiscal_product_group_memberships (tenant_id, product_id).
  */
 import { validateCatalogProductForEmpresa } from '../acquisition/purchase-catalog.service.js';
-import { listarCatalogoProdutos } from '../../services/mei-notas.service.js';
+import { listarCatalogoProdutos, findCatalogProdutoPorEmpresa } from '../../services/mei-notas.service.js';
+import { forbidden } from '../../utils/errors.js';
 
 /** @type {Map<string, Set<string>>} userId → productIds (test-only, catálogo global do user) */
 const testCatalogRegistry = new Map();
@@ -135,6 +136,28 @@ export const validateProductsBelongToTenant = async ({
       continue;
     }
 
+    if (tenantId) {
+      let catalogProduct;
+      try {
+        catalogProduct = await findCatalogProdutoPorEmpresa(tenantId, productId);
+      } catch (err) {
+        if (err?.status === 404 || err?.statusCode === 404) {
+          throw forbidden('Produto de catálogo não pertence ao cliente informado', {
+            code: 'CATALOG_PRODUCT_TENANT_FORBIDDEN',
+          });
+        }
+        throw err;
+      }
+
+      const metadataOverride = testCatalogMetadataOverrides.get(productId);
+      const productForScope = metadataOverride
+        ? { ...catalogProduct, metadata_json: metadataOverride }
+        : catalogProduct;
+
+      assertCatalogProductMetadataAllowsTenant(productForScope, tenantId);
+      continue;
+    }
+
     const catalogProduct = await validateCatalogProductForEmpresa({
       userId,
       empresaId: tenantId,
@@ -171,5 +194,38 @@ export const listCatalogProductIdsForUser = async (userId) => {
     return [...ids];
   }
   const products = await listarCatalogoProdutos(userId, { documentType: 'NFE', limit: 5000 });
+  return products.map((p) => String(p.id));
+};
+
+/**
+ * Lista produtos do catálogo comercial scoped por tenant/cliente (BPO contador).
+ * @param {string} tenantId
+ */
+export const listCatalogProductIdsForTenant = async (tenantId) => {
+  const normalizedTenant = String(tenantId || '').trim();
+  if (!normalizedTenant) return [];
+
+  const scopedIds = new Set();
+  for (const byTenant of testCatalogRegistryByTenant.values()) {
+    const tenantSet = byTenant.get(normalizedTenant);
+    if (tenantSet) {
+      for (const id of tenantSet) scopedIds.add(id);
+    }
+  }
+  if (scopedIds.size > 0) return [...scopedIds];
+
+  if (testCatalogRegistry.size > 0) {
+    const ids = new Set();
+    for (const set of testCatalogRegistry.values()) {
+      for (const id of set) ids.add(id);
+    }
+    return [...ids];
+  }
+
+  const products = await listarCatalogoProdutos(null, {
+    documentType: 'NFE',
+    limit: 5000,
+    empresaId: normalizedTenant,
+  });
   return products.map((p) => String(p.id));
 };

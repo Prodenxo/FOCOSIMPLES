@@ -3,6 +3,8 @@
  * Adaptado do site Meu-financeiro (GuidesMei.tsx).
  */
 
+import { resolveCatalogProdutoNcm } from './nfeCatalogProdutoMetadata'
+
 export function getNfseStatusKey(status?: string | null): string {
   const text = String(status || '').toLowerCase();
   if (!text) return 'aguardando';
@@ -270,7 +272,22 @@ export function buildClienteCatalogLabel(item: { nome?: string | null; documento
   return parts.length ? parts.join(' • ') : 'Cliente sem identificação';
 }
 
-export function buildProdutoCatalogLabel(item: { codigo?: string | null; cnae?: string | null; discriminacao?: string | null }): string {
-  const parts = [item.codigo || null, item.cnae ? `CNAE ${item.cnae}` : null, item.discriminacao || null].filter(Boolean);
-  return parts.length ? parts.join(' • ') : 'Serviço sem identificação';
+export function buildProdutoCatalogLabel(item: {
+  codigo?: string | null
+  cnae?: string | null
+  discriminacao?: string | null
+  document_type?: string | null
+  metadata_json?: unknown
+}): string {
+  const docType = String(item.document_type || '').toUpperCase()
+  const isNfeLike = docType === 'NFE' || docType === 'NFCE'
+  let taxLabel: string | null = null
+  if (isNfeLike) {
+    const ncm = resolveCatalogProdutoNcm(item)
+    taxLabel = ncm ? `NCM ${ncm}` : null
+  } else if (item.cnae) {
+    taxLabel = `CNAE ${item.cnae}`
+  }
+  const parts = [item.codigo || null, taxLabel, item.discriminacao || null].filter(Boolean)
+  return parts.length ? parts.join(' • ') : 'Serviço sem identificação'
 }

@@ -107,19 +107,28 @@ export function validateNfeCatalogProdutoFormFields(
 }
 
 export function isCatalogProdutoUsableForNfeLike(
-  produto: { document_type?: string | null; metadata_json?: unknown },
+  produto: { document_type?: string | null; metadata_json?: unknown; cnae?: string | null },
   documentType: DocumentType,
 ): boolean {
   const dt = String(produto.document_type || '').toUpperCase()
   if (dt !== documentType && dt !== 'NFE' && dt !== 'NFCE') return false
+  return resolveCatalogProdutoNcm(produto).length === 8
+}
+
+export function resolveCatalogProdutoNcm(
+  produto: { metadata_json?: unknown; cnae?: string | null },
+): string {
   const fields = nfeCatalogProdutoFormFieldsFromMetadata(produto.metadata_json)
-  return validateNfeCatalogProdutoFormFields(fields) === null
+  const fromMeta = onlyDigits(fields.ncm, 8)
+  if (fromMeta.length === 8) return fromMeta
+  const fromLegacyColumn = onlyDigits(String(produto.cnae ?? ''), 8)
+  if (fromLegacyColumn.length === 8) return fromLegacyColumn
+  return ''
 }
 
 /** Rascunho de CNAE / produto ainda sem NCM (ou tributos) para emitir NF-e. */
 export function catalogProdutoNeedsNfeCompletion(
-  produto: { metadata_json?: unknown },
+  produto: { metadata_json?: unknown; cnae?: string | null },
 ): boolean {
-  const fields = nfeCatalogProdutoFormFieldsFromMetadata(produto.metadata_json)
-  return validateNfeCatalogProdutoFormFields(fields) !== null
+  return resolveCatalogProdutoNcm(produto).length !== 8
 }

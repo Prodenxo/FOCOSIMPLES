@@ -183,7 +183,7 @@ import {
   normalizeEmpresaBusinessType,
 } from '../lib/empresaBusinessType';
 import { mapCatalogProdutoToNfeItem } from '../lib/mapCatalogProdutoToNfeItem';
-import { isCatalogProdutoUsableForNfeLike, catalogProdutoNeedsNfeCompletion } from '../lib/nfeCatalogProdutoMetadata';
+import { isCatalogProdutoUsableForNfeLike, catalogProdutoNeedsNfeCompletion, resolveCatalogProdutoNcm } from '../lib/nfeCatalogProdutoMetadata';
 import NfeEmitItemLeigoCard from '../components/mei/NfeEmitItemLeigoCard';
 import { getDefaultNfeDestinatarioEndereco } from '../lib/meiNfeDestinatarioEndereco';
 import { fetchNfsePrestadorPrefill } from '../services/meiPrestadorPrefillService';
@@ -632,6 +632,7 @@ function MeiScreenContent() {
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogClienteVisible, setCatalogClienteVisible] = useState(false);
   const [catalogProdutoVisible, setCatalogProdutoVisible] = useState(false);
+  const [catalogProdutoSearch, setCatalogProdutoSearch] = useState('');
   const [catalogClientesManageVisible, setCatalogClientesManageVisible] = useState(false);
   const [catalogProdutosManageVisible, setCatalogProdutosManageVisible] = useState(false);
   const [tomadorCnpjLookupLoading, setTomadorCnpjLookupLoading] = useState(false);
@@ -2454,12 +2455,17 @@ function MeiScreenContent() {
     }
   }, [emitirNotaType]);
 
-  const loadCatalogProdutos = useCallback(async () => {
+  const loadCatalogProdutos = useCallback(async (searchQuery = '') => {
     setCatalogLoading(true);
     try {
       const docType =
         emitirNotaType === 'NFE' || emitirNotaType === 'NFCE' ? emitirNotaType : 'NFSE';
-      const list = await listarCatalogoNfseProdutos({ limit: 50, documentType: docType });
+      const q = String(searchQuery).trim();
+      const list = await listarCatalogoNfseProdutos({
+        limit: 50,
+        documentType: docType,
+        ...(q ? { q } : {}),
+      });
       setCatalogProdutos(Array.isArray(list) ? list : []);
     } catch {
       setCatalogProdutos([]);
@@ -2467,6 +2473,14 @@ function MeiScreenContent() {
       setCatalogLoading(false);
     }
   }, [emitirNotaType]);
+
+  useEffect(() => {
+    if (!catalogProdutoVisible) return undefined;
+    const timer = setTimeout(() => {
+      void loadCatalogProdutos(catalogProdutoSearch);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [catalogProdutoSearch, catalogProdutoVisible, loadCatalogProdutos]);
 
   const lookupTomadorByCnpj = useCallback(async (cnpjMasked: string) => {
     const digits = normalizeDoc(cnpjMasked);
@@ -4790,8 +4804,8 @@ function MeiScreenContent() {
                   <MeiLinkButton
                     label="Selecionar serviço do catálogo"
                     onPress={() => {
+                      setCatalogProdutoSearch('');
                       setCatalogProdutoVisible(true);
-                      void loadCatalogProdutos();
                     }}
                   />
                   <MeiFormField
@@ -5129,8 +5143,8 @@ function MeiScreenContent() {
                   <MeiLinkButton
                     label="Selecionar produto do catálogo"
                     onPress={() => {
+                      setCatalogProdutoSearch('');
                       setCatalogProdutoVisible(true);
-                      void loadCatalogProdutos();
                     }}
                   />
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: mfSpacing.sm, alignItems: 'center' }}>
@@ -5282,11 +5296,36 @@ function MeiScreenContent() {
 
       <MeiFlowModalShell
         visible={catalogProdutoVisible}
-        onClose={() => setCatalogProdutoVisible(false)}
+        onClose={() => {
+          setCatalogProdutoVisible(false);
+          setCatalogProdutoSearch('');
+        }}
         title={emitirNotaType === 'NFSE' ? 'Selecionar serviço' : 'Selecionar produto'}
         closeIcon="close"
         flatListBody
       >
+        <View style={{ paddingHorizontal: mfSpacing.md, paddingBottom: mfSpacing.sm }}>
+          <TextInput
+            value={catalogProdutoSearch}
+            onChangeText={setCatalogProdutoSearch}
+            placeholder={
+              emitirNotaType === 'NFSE'
+                ? 'Buscar serviço, código ou CNAE…'
+                : 'Buscar produto, código ou NCM…'
+            }
+            placeholderTextColor={theme.textSecondary}
+            style={{
+              borderWidth: 1,
+              borderColor: theme.border,
+              borderRadius: mfRadius.md,
+              paddingHorizontal: mfSpacing.md,
+              paddingVertical: mfSpacing.sm,
+              color: theme.text,
+              backgroundColor: theme.surface,
+            }}
+            accessibilityLabel="Buscar no catálogo"
+          />
+        </View>
         {catalogLoading && catalogProdutos.length === 0 ? (
           <View style={{ padding: 24, alignItems: 'center' }}>
             <ActivityIndicator size="small" color={theme.primary} />
@@ -5320,12 +5359,13 @@ function MeiScreenContent() {
                 )
               }
               const needsNfe = catalogProdutoNeedsNfeCompletion(item)
+              const ncm = resolveCatalogProdutoNcm(item)
               return (
                 <MeiCatalogListCard
                   title={buildProdutoCatalogLabel(item)}
                   meta={[
                     item.document_type,
-                    item.cnae ? `CNAE ${item.cnae}` : null,
+                    ncm ? `NCM ${ncm}` : null,
                     needsNfe ? 'Completar NCM' : null,
                   ].filter(Boolean).join(' · ') || undefined}
                   onPress={() => handleSelectCatalogProduto(item)}

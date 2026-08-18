@@ -478,13 +478,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set(CLEARED_AUTH_STATE);
   },
   impersonate: async (targetUserId) => {
-    if (isLocalApiAuthMode()) {
-      const snap = await readLocalAuthSnapshot();
-      if (!snap?.accessToken) {
+    const localSnap = await readLocalAuthSnapshot();
+    if (isLocalApiAuthMode() || localSnap?.accessToken) {
+      if (!localSnap?.accessToken) {
         throw new Error('Sessão não encontrada. Faça login novamente.');
       }
 
-      await backupLocalAdminSnapshot(snap);
+      await backupLocalAdminSnapshot(localSnap);
 
       try {
         const result = await impersonateUser(targetUserId);
@@ -529,7 +529,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
   stopImpersonating: async () => {
-    if (isLocalApiAuthMode()) {
+    if (isLocalApiAuthMode() || (await hasLocalAdminBackup())) {
       const backup = await readLocalAdminBackup();
       if (!backup) {
         await get().signOut();

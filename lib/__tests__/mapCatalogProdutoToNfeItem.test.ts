@@ -1,7 +1,9 @@
 import {
   buildNfeCatalogProdutoMetadata,
+  catalogProdutoNeedsNfeCompletion,
   emptyNfeCatalogProdutoFormFields,
   nfeCatalogProdutoFormFieldsFromMetadata,
+  resolveCatalogProdutoNcm,
   validateNfeCatalogProdutoFormFields,
 } from '../nfeCatalogProdutoMetadata'
 import { mapCatalogProdutoToNfeItem } from '../mapCatalogProdutoToNfeItem'
@@ -49,6 +51,17 @@ describe('mapCatalogProdutoToNfeItem', () => {
     expect(row.cest).toBe('')
     expect(row.cfop).toBe('5102')
   })
+
+  it('usa NCM legado da coluna cnae quando metadata_json está vazio', () => {
+    const row = mapCatalogProdutoToNfeItem({
+      id: 'p-legacy',
+      codigo: 'CAM-ALG-001',
+      discriminacao: 'Camiseta',
+      cnae: '61091000',
+      metadata_json: null,
+    })
+    expect(row.ncm).toBe('61091000')
+  })
 })
 
 describe('nfeCatalogProdutoMetadata', () => {
@@ -74,5 +87,12 @@ describe('nfeCatalogProdutoMetadata', () => {
     const meta = buildNfeCatalogProdutoMetadata(null, fields)
     expect(meta).toMatchObject({ ncm: '22011000', unidade: 'CX' })
     expect(nfeCatalogProdutoFormFieldsFromMetadata(meta).ncm).toBe('22011000')
+  })
+
+  it('resolveCatalogProdutoNcm lê metadata e fallback cnae', () => {
+    expect(resolveCatalogProdutoNcm({ metadata_json: { ncm: '61091000' } })).toBe('61091000')
+    expect(resolveCatalogProdutoNcm({ metadata_json: null, cnae: '61091000' })).toBe('61091000')
+    expect(catalogProdutoNeedsNfeCompletion({ metadata_json: null, cnae: '61091000' })).toBe(false)
+    expect(catalogProdutoNeedsNfeCompletion({ metadata_json: null, cnae: '' })).toBe(true)
   })
 })

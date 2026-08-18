@@ -6,7 +6,7 @@ import {
   MEI_DEFAULT_NFE_CSOSN,
   type NfeItemForm,
 } from './meiNfseForms'
-import { nfeCatalogProdutoFormFieldsFromMetadata } from './nfeCatalogProdutoMetadata'
+import { nfeCatalogProdutoFormFieldsFromMetadata, resolveCatalogProdutoNcm } from './nfeCatalogProdutoMetadata'
 
 function formatValorUnitario(valor: number | null | undefined): string {
   if (valor == null || Number.isNaN(valor) || valor <= 0) return ''
@@ -37,6 +37,7 @@ export function mapCatalogProdutoToNfeItem(
   void normalizeEmpresaBusinessType(_options.businessType)
   const base = getDefaultNfeItem()
   const fields = nfeCatalogProdutoFormFieldsFromMetadata(produto.metadata_json)
+  const ncm = resolveCatalogProdutoNcm(produto) || fields.ncm
   const codigo = String(produto.codigo ?? '').trim()
   const descricao = String(produto.discriminacao ?? '').trim()
   const vu = formatValorUnitario(produto.valor_sugerido ?? null)
@@ -45,7 +46,7 @@ export function mapCatalogProdutoToNfeItem(
     ...base,
     codigo: codigo || 'CAT',
     descricao: descricao || codigo || 'Produto do catálogo',
-    ncm: fields.ncm,
+    ncm,
     cfop: fields.cfop,
     unidade: fields.unidade.trim() || 'UN',
     quantidade: '1',

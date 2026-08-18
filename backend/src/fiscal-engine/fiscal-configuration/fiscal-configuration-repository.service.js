@@ -6,6 +6,7 @@
 
  */
 
+import { randomUUID } from 'node:crypto';
 import * as memoryRepo from './fiscal-configuration-memory.repository.js';
 
 import * as pgRepo from './fiscal-configuration.repository.js';
@@ -213,6 +214,10 @@ export const saveAccountantApprovedRuleDraft = async (rule) => {
   }
 
   const draft = { ...rule, status: ACCOUNTANT_RULE_STATUS.DRAFT };
+
+  if (isFiscalEnginePostgresEnabled() && !pgRepo.isValidPgUuid(draft.id)) {
+    draft.id = randomUUID();
+  }
 
   if (isFiscalEnginePostgresEnabled()) return pgRepo.upsertAccountantRuleDraftPg(draft);
 

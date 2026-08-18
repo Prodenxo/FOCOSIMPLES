@@ -10,7 +10,7 @@ import {
 import { assertActorPermission } from './fiscal-configuration.service.js';
 import {
   validateProductsBelongToTenant,
-  listCatalogProductIdsForUser,
+  listCatalogProductIdsForTenant,
 } from './fiscal-product-catalog.port.js';
 import { randomUUID } from 'node:crypto';
 
@@ -136,7 +136,7 @@ export const assignProductsToFiscalGroup = async ({
 export const listUnassignedFiscalProducts = async ({ tenantId, actor, actorContext }) => {
   assertActorPermission(actorContext, FISCAL_CONFIG_PERMISSIONS.VIEW);
   assertTenant(tenantId, actor);
-  const catalogIds = await listCatalogProductIdsForUser(actor.userId);
+  const catalogIds = await listCatalogProductIdsForTenant(tenantId);
   const memberships = await repo.listFiscalProductGroupMemberships(tenantId);
   const assigned = new Set(memberships.map((m) => String(m.productId)));
   return catalogIds.filter((id) => !assigned.has(String(id)));

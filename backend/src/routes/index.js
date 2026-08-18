@@ -21,6 +21,7 @@ import contasFinanceirasRoutes from './contas-financeiras.routes.js';
 import fiscalPurchaseRoutes from './fiscal-purchase.routes.js';
 import fiscalConfigurationRoutes from './fiscal-configuration.routes.js';
 import fiscalStockRoutes from './fiscal-stock.routes.js';
+import accountantRoutes from './accountant.routes.js';
 const router = Router();
 
 router.use('/auth', authRoutes);
@@ -50,4 +51,5 @@ router.use('/moedas-globais', moedasGlobaisRoutes);
 router.use('/fiscal/purchases', fiscalPurchaseRoutes);
 router.use('/fiscal/stock', fiscalStockRoutes);
 router.use('/fiscal/configuration', fiscalConfigurationRoutes);
+router.use('/accountant', accountantRoutes);
 export default router;

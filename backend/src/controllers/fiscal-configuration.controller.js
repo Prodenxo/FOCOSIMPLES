@@ -1,4 +1,4 @@
-import { badRequest } from '../utils/errors.js';
+import { badRequest, notFound } from '../utils/errors.js';
 import {
   fetchCompanyFiscalProfile,
   upsertCompanyFiscalProfile,
@@ -28,6 +28,13 @@ import {
   createFiscalScenarioDraft,
 } from '../fiscal-engine/fiscal-configuration/fiscal-product-group.service.js';
 import { buildFiscalContextFromAllocation } from '../fiscal-engine/context/build-allocation-fiscal-context.js';
+import {
+  assertEstablishmentBelongsToTenant,
+  assertProductBelongsToEmpresa,
+  isAccountantScopedRequest,
+  requireEstablishmentIdFromRequest,
+  resolveEstablishmentIdFromRequest,
+} from '../services/accountant/accountant-fiscal-boundary.service.js';
 
 const tenantFromReq = (req) => {
   const { empresaId } = req.requesterContext || {};
@@ -35,10 +42,46 @@ const tenantFromReq = (req) => {
   return empresaId;
 };
 
+const ensureAccountantScopedBoundaries = async (req, {
+  requireEstablishment = false,
+  productId = null,
+} = {}) => {
+  if (!isAccountantScopedRequest(req)) return null;
+  const tenantId = tenantFromReq(req);
+  const establishmentId = requireEstablishment
+    ? requireEstablishmentIdFromRequest(req)
+    : resolveEstablishmentIdFromRequest(req);
+
+  if (establishmentId) {
+    await assertEstablishmentBelongsToTenant(tenantId, establishmentId);
+  } else if (requireEstablishment) {
+    throw badRequest('establishmentId obrigatório');
+  }
+
+  if (productId) {
+    await assertProductBelongsToEmpresa(tenantId, productId);
+  }
+
+  return establishmentId;
+};
+
 export const getCompanyProfile = async (req, res, next) => {
   try {
     const tenantId = tenantFromReq(req);
-    const profile = await fetchCompanyFiscalProfile({ tenantId });
+    const accountantScoped = isAccountantScopedRequest(req);
+    const establishmentId = await ensureAccountantScopedBoundaries(req, {
+      requireEstablishment: accountantScoped,
+    });
+
+    const profile = await fetchCompanyFiscalProfile({
+      tenantId,
+      establishmentId: establishmentId ?? 'default',
+    });
+
+    if (accountantScoped && !profile) {
+      return next(notFound('Perfil fiscal do estabelecimento não encontrado'));
+    }
+
     return res.json({ profile });
   } catch (err) {
     return next(err);
@@ -48,8 +91,21 @@ export const getCompanyProfile = async (req, res, next) => {
 export const putCompanyProfile = async (req, res, next) => {
   try {
     const tenantId = tenantFromReq(req);
+    const accountantScoped = isAccountantScopedRequest(req);
+    const establishmentId = await ensureAccountantScopedBoundaries(req, {
+      requireEstablishment: accountantScoped,
+    });
+
+    const effectiveEstablishmentId = establishmentId
+      ?? req.body?.establishmentId
+      ?? 'default';
+
+    if (accountantScoped) {
+      await assertEstablishmentBelongsToTenant(tenantId, effectiveEstablishmentId);
+    }
+
     const profile = await upsertCompanyFiscalProfile(
-      { ...req.body, tenantId },
+      { ...req.body, tenantId, establishmentId: effectiveEstablishmentId },
       req.actor,
       req.actorContext,
     );
@@ -62,6 +118,10 @@ export const putCompanyProfile = async (req, res, next) => {
 export const getProductProfile = async (req, res, next) => {
   try {
     const tenantId = tenantFromReq(req);
+    await ensureAccountantScopedBoundaries(req, {
+      productId: req.params.productId,
+      requireEstablishment: false,
+    });
     const profile = await fetchProductFiscalProfile({ tenantId, productId: req.params.productId });
     return res.json({ profile });
   } catch (err) {
@@ -72,6 +132,10 @@ export const getProductProfile = async (req, res, next) => {
 export const putProductProfile = async (req, res, next) => {
   try {
     const tenantId = tenantFromReq(req);
+    await ensureAccountantScopedBoundaries(req, {
+      productId: req.params.productId,
+      requireEstablishment: false,
+    });
     const profile = await upsertProductFiscalProfile(
       { ...req.body, tenantId, productId: req.params.productId },
       req.actor,
