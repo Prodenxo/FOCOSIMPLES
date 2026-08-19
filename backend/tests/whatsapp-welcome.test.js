@@ -13,5 +13,5 @@ test('isGreetingOnlyMessage reconhece tudo bom e oi', () => {
 test('getWhatsappWelcomeMessage tem texto padrão', () => {
   const msg = getWhatsappWelcomeMessage();
   assert.match(msg, /Midas/i);
-  assert.match(msg, /Meu Financeiro/i);
+  assert.match(msg, /Foco Simples/i);
 });

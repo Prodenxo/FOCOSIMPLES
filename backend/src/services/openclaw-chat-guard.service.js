@@ -3,11 +3,11 @@ import { normalizeInboundCommandText } from './zapi-inbound-text.service.js';
 /** Respostas fixas — não revelam stack, modelo nem detalhes internos. */
 export const CHAT_GUARD_REPLY = {
   internal_probe:
-    'Sou o Midas, assistente do Meu Financeiro. Ajudo com finanças, MEI, DAS, NFSe, categorias, lançamentos e a app. Não falo sobre como o sistema foi construído por dentro.',
+    'Sou o Midas, assistente do Foco Simples. Ajudo com finanças, MEI, DAS, NFSe, NF-e, categorias, lançamentos e a app. Não falo sobre como o sistema foi construído por dentro.',
   off_topic:
-    'Atendo somente assuntos financeiros: organização, transações, MEI, DAS, NFSe e a app Meu Financeiro. Para outros temas, use outro canal.',
+    'Atendo somente assuntos financeiros: organização, transações, MEI, DAS, NFSe, NF-e e a app Foco Simples. Para outros temas, use outro canal.',
   investment_advice:
-    'Atendo o Meu Financeiro e o MEI Infinito: lançamentos, categorias, MEI, DAS, NFSe e uso da app. Não dou dicas nem recomendações de investimento (ações, fundos, cripto, renda fixa, etc.).',
+    'Atendo o Foco Simples: lançamentos, categorias, MEI, DAS, NFSe, NF-e e uso da app. Não dou dicas nem recomendações de investimento (ações, fundos, cripto, renda fixa, etc.).',
 };
 
 /**
@@ -23,9 +23,9 @@ const FINANCE_HINTS = [
   /\b(financeir|financas|dinheiro|saldo|transac|lancament|despesa|receita|gasto|orcament|orcamento)\b/,
   /\b(fluxo de caixa|contas a pagar|contas a receber)\b/,
   /\b(mei\b|das\b|nfse|nfs-e|nota fiscal|nota\b|imposto|tribut|faturament|divida|juros|credito|debito)\b/,
-  /\b(mei infinito|infinito mei)\b/,
+  /\b(foco simples|focosimples)\b/,
   /\b(conta\b|extrato|banco|pix\b|pagamento|receb|agenda|calendario|compromiss|reuniao|reunião|evento)\b/,
-  /\b(mf\b|meu financeiro|midas|mei infinito|infinito mei)\b/,
+  /\b(mf\b|midas|foco simples|focosimples)\b/,
   /\b(aprovar|recusar|pendente|cadastro|acesso|convite|categoria|categorias|classificacao)\b/,
   /\b(reais|real\b|rs\b|r\$|salario|salário|prolabore|aluguel|mercado|holerite|folha)\b/,
   /\b(entrada|saida|saída|lucro|prejuizo|prejuízo|economia|economizar|gastei|recebi|paguei)\b/,
@@ -90,7 +90,7 @@ const RECOMMENDATION_HINT =
 const ENTERTAINMENT_OFF_TOPIC =
   /\b(filme|serie|série|novela|jogo|games|porn|adult|xxx|musica|música|piada|futebol|campeonato)\b/;
 
-/** Dicas/recomendações de investimento — fora do escopo (só Meu Financeiro + MEI Infinito). */
+/** Dicas/recomendações de investimento — fora do escopo (só Foco Simples). */
 const INVESTMENT_ADVICE_PATTERNS = [
   /\b(dicas?|conselhos?|orientac|recomendac).{0,48}\b(invest|aplicar|aplicacao|aplicação)\b/,
   /\b(onde|em que|o que|como)\s+.{0,24}\b(investir|aplicar|aplico)\b/,
@@ -106,7 +106,7 @@ const INVESTMENT_ADVICE_PATTERNS = [
  * @param {string} normalized
  */
 export const isInvestmentAdviceRequest = (normalized) => {
-  if (/\b(mei infinito|infinito mei|meu financeiro)\b/.test(normalized)) {
+  if (/\b(foco simples|focosimples)\b/.test(normalized)) {
     const productOnly =
       !/\b(investir|investimento|acoes|ações|fundo|fundos|cripto|bitcoin|bolsa|fii|fiis|tesouro|cdb)\b/.test(
         normalized,

@@ -107,7 +107,7 @@ const rethrowDasFetchErrorForBot = (err, display) => {
       code,
       mes: display,
       botHint:
-        'Oriente cadastro do certificado A1 na app Meu Financeiro. Proibido pedir certificado ou CNPJ pelo WhatsApp.',
+        'Oriente cadastro do certificado A1 na app Foco Simples. Proibido pedir certificado ou CNPJ pelo WhatsApp.',
     });
   }
   const msg = String(err?.message || '');
@@ -804,7 +804,7 @@ export const runOpenclawAction = async (input) => {
   const { userId, phoneDigits, matchedUserNumber, lookupCandidates } = resolved;
   if (!userId) {
     throw notFound(
-      'Este WhatsApp ainda não está ligado ao Meu Financeiro. '
+      'Este WhatsApp ainda não está ligado ao Foco Simples. '
       + 'Abra a app → Perfil → guarde este número (com DDD 55) e tente de novo.',
       {
         code: 'PHONE_NOT_LINKED',
@@ -1499,7 +1499,7 @@ export const runOpenclawAction = async (input) => {
             ...linkDebug,
             agentInstructions:
               'Repita só esta message ao utilizador. Não digas "dificuldades técnicas". '
-              + 'Se notLinked, explique conectar Google Calendar na app Meu Financeiro.',
+              + 'Se notLinked, explique conectar Google Calendar na app Foco Simples.',
           },
         };
       }

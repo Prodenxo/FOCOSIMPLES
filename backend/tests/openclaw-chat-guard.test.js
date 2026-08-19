@@ -61,9 +61,9 @@ test('evaluateChatGuard bloqueia dicas de investimento', () => {
   assert.equal(r.reason, 'investment_advice');
 });
 
-test('evaluateChatGuard permite MEI Infinito e app', () => {
-  assert.equal(evaluateChatGuard('como funciona o mei infinito').block, false);
-  assert.equal(evaluateChatGuard('quais minhas categorias no meu financeiro').block, false);
+test('evaluateChatGuard permite Foco Simples e app', () => {
+  assert.equal(evaluateChatGuard('como funciona o foco simples').block, false);
+  assert.equal(evaluateChatGuard('quais minhas categorias no foco simples').block, false);
 });
 
 test('evaluateChatGuard ainda permite organizar financas sem investir', () => {

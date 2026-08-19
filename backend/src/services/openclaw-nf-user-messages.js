@@ -101,13 +101,13 @@ export const formatNfseEmitErrorForUser = (rawMessage = '') => {
     return (
       'Não consegui concluir a emissão agora — a PlugNotas demorou a responder '
       + '(sincronização da numeração). Aguarde cerca de 1 minuto e diga *tentar de novo*, '
-      + 'ou emita pelo app Meu Financeiro → MEI → Notas.'
+      + 'ou emita pelo app Foco Simples → MEI → Notas.'
     );
   }
   if (/certificado|plugnotas/i.test(msg)) {
     return (
       'Não foi possível emitir a nota. Verifique certificado A1 e dados fiscais '
-      + 'no app Meu Financeiro → MEI → Notas.'
+      + 'no app Foco Simples → MEI → Notas.'
     );
   }
   return msg || 'Não foi possível emitir a nota fiscal agora. Tente de novo em instantes.';

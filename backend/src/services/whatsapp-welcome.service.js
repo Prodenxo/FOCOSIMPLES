@@ -6,8 +6,8 @@ import {
 } from './whatsapp-outbound.service.js';
 
 const DEFAULT_WELCOME =
-  'Olá! Sou o *Midas*, assistente do *Meu Financeiro*. '
-  + 'Ajudo com lançamentos, categorias, MEI, DAS, NFSe e agenda. '
+  'Olá! Sou o *Midas*, assistente do *Foco Simples*. '
+  + 'Ajudo com lançamentos, categorias, MEI, DAS, NFSe, NF-e e agenda. '
   + 'O que você gostaria de fazer?';
 
 const DEDUP_MS = 6 * 60 * 60 * 1000;

@@ -148,7 +148,7 @@ const emitenteToPrestadorInput = (emitente) => {
   if (!emitente?.certDocument || normalizeDoc(emitente.certDocument).length !== 14) {
     throw badRequest('CNPJ do prestador não configurado. Complete o cadastro MEI na app.', {
       code: 'NFSE_PRESTADOR_CNPJ_MISSING',
-      botHint: 'Oriente a abrir Meu Financeiro → MEI → Certificado / dados fiscais.',
+      botHint: 'Oriente a abrir Foco Simples → MEI → Certificado / dados fiscais.',
     });
   }
   const logradouro = buildPrestadorLogradouro(emitente);
@@ -1120,7 +1120,7 @@ export const buildOpenclawNfseEmitInput = async (userId, payload = {}) => {
   const emitenteRaw = await getEmitenteNfseSnapshot(userId);
   const { emitente } = await resolveEmitenteForNfseSetup(userId, emitenteRaw, certOk);
   if (!emitente || emitenteMissingAddressFields(emitente)) {
-    throw badRequest('Dados fiscais do prestador incompletos. Configure na app Meu Financeiro → MEI.', {
+    throw badRequest('Dados fiscais do prestador incompletos. Configure na app Foco Simples → MEI.', {
       code: 'NFSE_EMITENTE_MISSING',
       botHint: 'Certificado A1 + endereço fiscal na app.',
     });
