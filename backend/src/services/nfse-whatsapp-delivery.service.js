@@ -1,5 +1,5 @@
 import { env } from '../config/env.js';
-import { createSupabaseClient } from '../config/supabase.js';
+import { createSupabaseClient, getServiceDbConfigError } from '../config/supabase.js';
 import { badRequest } from '../utils/errors.js';
 import {
   fetchOpenclawNfsePdfBase64,
@@ -50,8 +50,9 @@ export const isOpenclawNfseAutoWhatsappEnabled = () => {
 };
 
 const getAdmin = () => {
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error('SUPABASE_SERVICE_ROLE_KEY não configurada');
+  const dbConfigError = getServiceDbConfigError();
+  if (dbConfigError) {
+    throw new Error(dbConfigError);
   }
   return createSupabaseClient({ useServiceRole: true });
 };

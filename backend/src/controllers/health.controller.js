@@ -1,12 +1,19 @@
-import { createSupabaseClient } from '../config/supabase.js';
+import { createSupabaseClient, getServiceDbConfigError } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import { sendSuccess } from '../utils/response.js';
 import { serviceUnavailable } from '../utils/errors.js';
+import { query } from '../config/pg.js';
 
 export const supabaseHealth = async (_req, res, next) => {
   try {
-    if (!env.SUPABASE_SERVICE_ROLE_KEY) {
-      throw serviceUnavailable('SUPABASE_SERVICE_ROLE_KEY não configurada');
+    const configError = getServiceDbConfigError();
+    if (configError) {
+      throw serviceUnavailable(configError);
+    }
+
+    if (String(env.AUTH_MODE || '').trim().toLowerCase() === 'local') {
+      await query('SELECT 1 AS ok');
+      return sendSuccess(res, { ok: true, mode: 'local', db: 'postgres' }, 'Postgres OK');
     }
 
     const supabase = createSupabaseClient({ useServiceRole: true });

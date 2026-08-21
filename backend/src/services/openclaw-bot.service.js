@@ -1,5 +1,5 @@
 import { BACKEND_BUILD_ID } from '../build-id.js';
-import { createSupabaseClient } from '../config/supabase.js';
+import { createSupabaseClient, getServiceDbConfigError } from '../config/supabase.js';
 import { env } from '../config/env.js';
 import { badRequest, forbidden, notFound } from '../utils/errors.js';
 import {
@@ -304,8 +304,9 @@ export const resolveUserIdByPhoneDetailed = async (rawPhone) => {
   if (!phoneDigits) {
     throw badRequest('Telefone ausente ou inválido');
   }
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    throw badRequest('SUPABASE_SERVICE_ROLE_KEY não configurada');
+  const dbConfigError = getServiceDbConfigError();
+  if (dbConfigError) {
+    throw badRequest(dbConfigError);
   }
   const admin = createSupabaseClient({ useServiceRole: true });
   const lookupCandidates = buildPhoneLookupCandidates(phoneDigits);

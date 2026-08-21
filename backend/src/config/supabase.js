@@ -53,6 +53,25 @@ export const createSupabaseClient = ({
   });
 };
 
+/** Mensagem de config ausente para service-role / Postgres (OpenClaw, cron, etc.). */
+export const getServiceDbConfigError = () => {
+  if (isLocalAuthMode()) {
+    if (!env.DATABASE_URL && !env.SUPABASE_DB_URL) {
+      return 'DATABASE_URL não configurada (AUTH_MODE=local)';
+    }
+    return null;
+  }
+  if (!env.SUPABASE_URL) {
+    return 'SUPABASE_URL não configurada';
+  }
+  if (!env.SUPABASE_SERVICE_ROLE_KEY) {
+    return 'SUPABASE_SERVICE_ROLE_KEY não configurada';
+  }
+  return null;
+};
+
+export const isServiceDbConfigured = () => !getServiceDbConfigError();
+
 let _serviceRoleClient = null;
 
 export const getServiceRoleClient = () => {

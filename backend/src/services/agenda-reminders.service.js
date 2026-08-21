@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { env } from '../config/env.js';
-import { createSupabaseClient } from '../config/supabase.js';
+import { createSupabaseClient, getServiceDbConfigError } from '../config/supabase.js';
 import { resolveOpenclawWhatsappPhone } from './openclaw-bot.service.js';
 import {
   calendarDateAddDaysInSaoPaulo,
@@ -90,8 +90,9 @@ export const isAgendaWhatsappRemindersEnabled = () =>
   String(env.AGENDA_WHATSAPP_REMINDERS_ENABLED || '').toLowerCase() === 'true';
 
 export const listUsersWithWhatsappLink = async () => {
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error('SUPABASE_SERVICE_ROLE_KEY não configurada');
+  const dbConfigError = getServiceDbConfigError();
+  if (dbConfigError) {
+    throw new Error(dbConfigError);
   }
   const admin = createSupabaseClient({ useServiceRole: true });
   const { data, error } = await admin

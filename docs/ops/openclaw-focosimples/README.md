@@ -12,15 +12,41 @@ Fonte: `FOCOMEI/docs/ops/openclaw-focomei/SOUL.md` (paridade funcional).
 
 ## Deploy no OpenClaw (Easypanel Console)
 
-1. Copie `SOUL.md`, `USER.md`, `IDENTITY.md`, `MF-API.md` para `/home/node/.openclaw/workspace/`
-2. Ou defina `OPENCLAW_SOUL_RAW_URL` (URL Raw do Git) e:
+O container OpenClaw **não** tem o repo em `/app`. Use **curl do GitHub** (não caminho local).
 
-```bash
-curl -fsSL "$OPENCLAW_SOUL_RAW_URL" -o /home/node/.openclaw/workspace/SOUL.md
-wc -c /home/node/.openclaw/workspace/SOUL.md
+### 1. SOUL + docs (copiar e colar no Console)
+
+```sh
+WS=/home/node/.openclaw/workspace
+mkdir -p "$WS"
+BASE=https://raw.githubusercontent.com/Prodenxo/FOCOSIMPLES/main/docs/ops/openclaw-focosimples
+curl -fsSL "$BASE/SOUL.md" -o "$WS/SOUL.md"
+curl -fsSL "$BASE/IDENTITY.md" -o "$WS/IDENTITY.md"
+curl -fsSL "$BASE/USER.md" -o "$WS/USER.md"
+curl -fsSL "$BASE/MF-API.md" -o "$WS/MF-API.md"
+wc -c "$WS/SOUL.md"
 ```
 
-Deve dar **~50 KB**, não ~1 KB.
+`wc -c` deve dar **~61676**, não ~1747 (stub).
+
+### 2. Workspace completo (mf-curl, DAS, NFSe)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Prodenxo/FOCOSIMPLES/main/docs/ops/openclaw-focosimples/install-easypanel-console.sh | sh
+```
+
+Requer env `MF_API_URL` + `OPENCLAW_WEBHOOK_SECRET`. Opcional: `OPENCLAW_SOUL_RAW_URL` com a mesma URL `$BASE/SOUL.md`.
+
+### Erro 404 no curl
+
+`OPENCLAW_SOUL_RAW_URL` provavelmente aponta para branch/path errado. Use a URL acima ou confira se `main` no GitHub já tem os ficheiros.
+
+### Alternativa offline
+
+```bash
+node docs/ops/openclaw-focosimples/generate-paste-deploy.mjs
+# gera paste-in-easypanel-console.sh (~83 KB) para colar no Console
+```
 
 3. **Restart** OpenClaw → WhatsApp **`/new`**
 
