@@ -126,4 +126,23 @@ console.log("hooks ok",c.hooks);
 '
 ```
 
-**Não** activar `channels.whatsapp` (evita ban com Z-API no mesmo número).
+**Não** activar `channels.whatsapp` (evita ban com Z-API no mesmo número) — **excepto** modo dual QR (ver abaixo).
+
+## Modo dual QR (OpenClaw chat + Z-API automático)
+
+Igual FocoMEI / Meu Financeiro. Guia: [`DUAL-QR.md`](./DUAL-QR.md)
+
+Resumo:
+
+```env
+# Backend
+WHATSAPP_DUAL_QR_MODE=true
+OPENCLAW_ZAPI_RELAY_SYNC=false
+```
+
+```sh
+# OpenClaw Console
+export OPENCLAW_DUAL_QR=true
+curl -fsSL .../install-easypanel-console.sh | sh
+openclaw channels login
+```

@@ -20,12 +20,14 @@ import {
 import { evaluateChatGuard } from '../services/openclaw-chat-guard.service.js';
 import { sendWhatsappMessage } from '../services/whatsapp-outbound.service.js';
 import { maybeSendWhatsappWelcome } from '../services/whatsapp-welcome.service.js';
+import { isWhatsappDualQrMode } from '../services/whatsapp-dual-qr.service.js';
 
 export const getZapiMonitor = (_req, res) => {
   return res.json({
     ok: true,
     service: 'zapi-inbound-bridge',
     inboundBridgeVersion: ZAPI_INBOUND_BRIDGE_VERSION,
+    whatsappDualQrMode: isWhatsappDualQrMode(),
     features: [
       'mf_access_commands',
       'slash_skip_relay',
@@ -119,11 +121,17 @@ export const postInbound = async (req, res, next) => {
     }
 
     let welcomeResult = { sent: false, skipRelay: false, reason: null };
+    const dualQr = isWhatsappDualQrMode();
+    if (dualQr) {
+      welcomeResult = { sent: false, skipRelay: true, reason: 'dual_qr_openclaw_chat' };
+    }
     try {
-      welcomeResult = await maybeSendWhatsappWelcome({
-        phone: parsed.phone,
-        text: parsed.text,
-      });
+      if (!dualQr) {
+        welcomeResult = await maybeSendWhatsappWelcome({
+          phone: parsed.phone,
+          text: parsed.text,
+        });
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       // eslint-disable-next-line no-console
@@ -131,8 +139,10 @@ export const postInbound = async (req, res, next) => {
     }
 
     const relayDecision = getOpenclawRelaySkipDecision(parsed.text, accessRequestHandled);
-    const chatGuard = evaluateChatGuard(parsed.text);
-    let skipOpenclawRelay = relayDecision.skip || welcomeResult.skipRelay;
+    const chatGuard = dualQr
+      ? { block: false, reply: null, reason: 'dual_qr' }
+      : evaluateChatGuard(parsed.text);
+    let skipOpenclawRelay = dualQr || relayDecision.skip || welcomeResult.skipRelay;
     let chatGuardHandled = false;
 
     if (!skipOpenclawRelay && chatGuard.block && chatGuard.reply) {

@@ -302,6 +302,11 @@ export const env = {
    * O `/new` no painel OpenClaw não envia WhatsApp — isto cobre o primeiro contacto no chat.
    */
   WHATSAPP_WELCOME_ENABLED: process.env.WHATSAPP_WELCOME_ENABLED || "true",
+  /**
+   * Dois QR no mesmo número: OpenClaw WhatsApp nativo (chat) + Z-API (saída automática).
+   * Com true, o webhook Z-API não faz relay nem boas-vindas — evita resposta duplicada.
+   */
+  WHATSAPP_DUAL_QR_MODE: process.env.WHATSAPP_DUAL_QR_MODE || "false",
   /** Texto opcional (mesma linha WhatsApp: *negrito* com um asterisco). */
   WHATSAPP_WELCOME_MESSAGE: (process.env.WHATSAPP_WELCOME_MESSAGE || "").trim(),
   /** Transcrição de notas de voz Z-API → texto antes do relay OpenClaw. */

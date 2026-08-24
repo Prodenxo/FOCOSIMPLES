@@ -281,7 +281,14 @@ if(!c.hooks.enabled){
   c.hooks.token=process.env.OPENCLAW_HOOKS_TOKEN||"token-hooks-openclaw";
   c.hooks.path="/hooks";
 }
-if(c.channels&&c.channels.whatsapp){
+if(process.env.OPENCLAW_DUAL_QR==="true"){
+  c.channels=c.channels||{};
+  c.channels.whatsapp=c.channels.whatsapp||{};
+  c.channels.whatsapp.enabled=true;
+  c.channels.whatsapp.dmPolicy=c.channels.whatsapp.dmPolicy||"open";
+  c.channels.whatsapp.allowFrom=c.channels.whatsapp.allowFrom||["*"];
+  console.log("[focosimples] channels.whatsapp activo (modo dual QR)");
+}else if(c.channels&&c.channels.whatsapp){
   delete c.channels.whatsapp;
   console.log("[focosimples] channels.whatsapp removido (use Z-API + /hooks/agent)");
 }
