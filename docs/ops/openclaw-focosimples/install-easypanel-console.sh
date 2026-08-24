@@ -275,12 +275,18 @@ c.agents.defaults.heartbeat=c.agents.defaults.heartbeat||{};
 c.agents.defaults.heartbeat.every=c.agents.defaults.heartbeat.every||"0m";
 c.agents.defaults.bootstrapMaxChars=65000;
 c.agents.defaults.bootstrapTotalMaxChars=160000;
-c.channels=c.channels||{};
-c.channels.whatsapp=c.channels.whatsapp||{};
-c.channels.whatsapp.dmPolicy="open";
-c.channels.whatsapp.allowFrom=["*"];
+c.hooks=c.hooks||{};
+if(!c.hooks.enabled){
+  c.hooks.enabled=true;
+  c.hooks.token=process.env.OPENCLAW_HOOKS_TOKEN||"token-hooks-openclaw";
+  c.hooks.path="/hooks";
+}
+if(c.channels&&c.channels.whatsapp){
+  delete c.channels.whatsapp;
+  console.log("[focosimples] channels.whatsapp removido (use Z-API + /hooks/agent)");
+}
 fs.writeFileSync(p,JSON.stringify(c,null,2));
-console.log("[focosimples] tools.exec + bootstrapMaxChars=65000 ok");
+console.log("[focosimples] tools.exec + hooks + bootstrapMaxChars=65000 ok");
 '
 
 echo "[focosimples] ping API..."
