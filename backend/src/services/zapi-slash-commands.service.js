@@ -5,7 +5,7 @@ import {
 import { normalizeInboundCommandText } from './zapi-inbound-text.service.js';
 
 /** Versão do bridge inbound (monitor / diagnóstico de deploy). */
-export const ZAPI_INBOUND_BRIDGE_VERSION = 6;
+export const ZAPI_INBOUND_BRIDGE_VERSION = 7;
 
 export { isAccessManagementCommandMessage, isMfAccessCommandMessage };
 

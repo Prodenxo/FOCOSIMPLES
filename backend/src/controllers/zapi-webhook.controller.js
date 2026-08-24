@@ -7,6 +7,7 @@ import {
 } from '../services/access-request-whatsapp-inbound.service.js';
 import { isMfAccessCommandMessage } from '../services/access-request-command-text.service.js';
 import { isWhatsappOutboundConfigured } from '../services/whatsapp-outbound.service.js';
+import { isOpenclawZapiRelaySyncEnabled } from '../services/openclaw-hook-relay.service.js';
 import {
   getOpenclawRelaySkipDecision,
   ZAPI_INBOUND_BRIDGE_VERSION,
@@ -34,11 +35,13 @@ export const getZapiMonitor = (_req, res) => {
       'chat_guard_internal_probe',
       'chat_guard_investment_advice',
       'whatsapp_welcome_on_greeting',
+      'openclaw_zapi_sync_relay',
     ],
     preferredAccessCommand: 'mf pendentes',
     accessRequestWhatsapp: isAccessRequestWhatsappNotifyEnabled(),
     whatsappOutboundConfigured: isWhatsappOutboundConfigured(),
     relayConfigured: Boolean((env.OPENCLAW_ZAPI_RELAY_URL || '').trim()),
+    openclawRelaySync: isOpenclawZapiRelaySyncEnabled(),
     webhookTokenConfigured: Boolean((env.ZAPI_WEBHOOK_TOKEN || '').trim()),
     inboundWebhookPath: '/api/webhooks/zapi/inbound',
     zapiInboundReady:
@@ -166,8 +169,16 @@ export const postInbound = async (req, res, next) => {
     }
 
     const relayUrl = (env.OPENCLAW_ZAPI_RELAY_URL || '').trim();
+    let openclawRelay = {
+      relayed: false,
+      mode: 'skipped',
+      replySent: false,
+      openclaw: null,
+      whatsappError: null,
+    };
+
     if (relayUrl && !skipOpenclawRelay) {
-      await zapiInbound.relayZapiInbound(parsed);
+      openclawRelay = await zapiInbound.relayZapiInboundToOpenclaw(parsed);
     }
 
     return sendSuccess(
@@ -176,7 +187,9 @@ export const postInbound = async (req, res, next) => {
         accepted: true,
         phone: parsed.phone,
         textPreview: String(parsed.text || '').slice(0, 120),
-        relayed: Boolean(relayUrl) && !skipOpenclawRelay,
+        relayed: openclawRelay.relayed,
+        openclawRelay,
+        whatsappReplySent: openclawRelay.replySent,
         accessRequestHandled,
         accessRequestReason,
         openclawSkipped: skipOpenclawRelay,

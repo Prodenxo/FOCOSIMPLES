@@ -62,3 +62,47 @@ node docs/ops/openclaw-focosimples/generate-paste-deploy.mjs
 /home/node/.openclaw/workspace/mf-curl.sh TELEFONE55 '{"action":"ping"}'
 /home/node/.openclaw/workspace/mf-curl.sh TELEFONE55 '{"action":"resolve_user"}'
 ```
+
+## Z-API → Backend → OpenClaw → Z-API (sem WhatsApp nativo no OpenClaw)
+
+Fluxo recomendado (1 número = Z-API only):
+
+```
+Cliente ↔ Z-API ↔ Backend (/api/webhooks/zapi/inbound)
+                    ↓ POST /hooks/agent (waitForResult)
+                 OpenClaw (Midas + SOUL)
+                    ↓ texto
+                 Backend → Z-API send-text → Cliente
+```
+
+### Backend (Easypanel)
+
+```env
+WHATSAPP_OUTBOUND_MODE=zapi
+ZAPI_INSTANCE_ID=...
+ZAPI_TOKEN=...
+ZAPI_CLIENT_TOKEN=...
+ZAPI_WEBHOOK_TOKEN=...
+
+OPENCLAW_PUBLIC_ORIGIN=https://auto-openclaw-focosimples.4tnf3f.easypanel.host
+OPENCLAW_ZAPI_RELAY_URL=https://auto-openclaw-focosimples.4tnf3f.easypanel.host/hooks/agent
+OPENCLAW_ZAPI_RELAY_SECRET=token-hooks-openclaw
+OPENCLAW_ZAPI_RELAY_SYNC=true
+OPENCLAW_ZAPI_RELAY_TIMEOUT_MS=120000
+```
+
+Webhook Z-API:
+
+```
+https://auto-focosimplesbackend.4tnf3f.easypanel.host/api/webhooks/zapi/inbound?token=...
+```
+
+Monitor: `GET /api/webhooks/zapi/monitor` → `inboundBridgeVersion: 7`, `openclaw_zapi_sync_relay`.
+
+### OpenClaw (openclaw.json)
+
+```json
+"hooks": { "enabled": true, "token": "...", "path": "/hooks" }
+```
+
+**Não** activar `channels.whatsapp` (evita ban com Z-API no mesmo número).

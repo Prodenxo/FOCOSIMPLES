@@ -1,5 +1,10 @@
 import { env } from '../config/env.js';
 import { extractZapiInboundText } from './zapi-inbound-text.service.js';
+import {
+  callOpenclawHookAgentSync,
+  isOpenclawZapiRelaySyncEnabled,
+} from './openclaw-hook-relay.service.js';
+import { isWhatsappOutboundConfigured, sendWhatsappMessage } from './whatsapp-outbound.service.js';
 
 /**
  * Extrai telefone e texto do callback Z-API "Ao receber" (ReceivedCallback).
@@ -84,11 +89,11 @@ const normalizeZapiPhone = (value) => {
 };
 
 /**
- * Encaminha payload normalizado para n8n / OpenClaw / outro orquestrador (POST JSON).
- * @param {{ phone: string, text: string, messageId: string | null, instanceId: string | null }} normalized
+ * Relay legado (fire-and-forget) — payload Z-API bruto para n8n / integrações antigas.
+ * @param {{ phone: string, text: string, messageId: string | null, instanceId: string | null, hasAudio?: boolean }} normalized
  * @returns {Promise<void>}
  */
-export const relayZapiInbound = async (normalized) => {
+export const relayZapiInboundLegacy = async (normalized) => {
   const url = (env.OPENCLAW_ZAPI_RELAY_URL || '').trim();
   if (!url) return;
 
@@ -144,4 +149,79 @@ export const relayZapiInbound = async (normalized) => {
   } finally {
     clearTimeout(timer);
   }
+};
+
+/** @deprecated Use relayZapiInboundToOpenclaw */
+export const relayZapiInbound = relayZapiInboundLegacy;
+
+/**
+ * Z-API → OpenClaw (/hooks/agent) → resposta Z-API ao cliente.
+ * @param {{ phone: string, text: string, messageId?: string | null, instanceId?: string | null, hasAudio?: boolean }} normalized
+ * @returns {Promise<{
+ *   relayed: boolean,
+ *   mode: 'sync' | 'legacy' | 'skipped',
+ *   replySent: boolean,
+ *   openclaw: Awaited<ReturnType<typeof callOpenclawHookAgentSync>> | null,
+ *   whatsappError: string | null
+ * }>}
+ */
+export const relayZapiInboundToOpenclaw = async (normalized) => {
+  const relayUrl = String(env.OPENCLAW_ZAPI_RELAY_URL || '').trim();
+  if (!relayUrl) {
+    return {
+      relayed: false,
+      mode: 'skipped',
+      replySent: false,
+      openclaw: null,
+      whatsappError: null,
+    };
+  }
+
+  if (isOpenclawZapiRelaySyncEnabled() && isWhatsappOutboundConfigured()) {
+    const openclaw = await callOpenclawHookAgentSync(normalized);
+
+    if (!openclaw.ok && openclaw.httpStatus == null) {
+      // eslint-disable-next-line no-console
+      console.warn('[ZAPI] relay sync falhou:', openclaw.error);
+    } else if (!openclaw.ok) {
+      // eslint-disable-next-line no-console
+      console.warn('[ZAPI] relay sync HTTP', openclaw.httpStatus, openclaw.error || '');
+    }
+
+    let replySent = false;
+    let whatsappError = null;
+
+    const replyText = String(openclaw.replyText || '').trim();
+    if (replyText) {
+      try {
+        await sendWhatsappMessage({
+          phone: normalized.phone,
+          message: replyText,
+          source: 'openclaw_zapi_relay',
+        });
+        replySent = true;
+      } catch (err) {
+        whatsappError = err instanceof Error ? err.message : String(err);
+        // eslint-disable-next-line no-console
+        console.warn('[ZAPI] envio resposta OpenClaw falhou:', whatsappError);
+      }
+    }
+
+    return {
+      relayed: openclaw.ok || Boolean(openclaw.runId),
+      mode: 'sync',
+      replySent,
+      openclaw,
+      whatsappError,
+    };
+  }
+
+  await relayZapiInboundLegacy(normalized);
+  return {
+    relayed: true,
+    mode: 'legacy',
+    replySent: false,
+    openclaw: null,
+    whatsappError: null,
+  };
 };

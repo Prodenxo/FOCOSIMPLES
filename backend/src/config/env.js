@@ -277,14 +277,22 @@ export const env = {
   /**
    * URL para onde o backend reencaminha mensagens Z-API normalizadas (n8n, OpenClaw HTTP, etc.).
    */
+  /**
+   * URL do relay Z-API → OpenClaw. Preferir `{gateway}/hooks/agent`.
+   * Se legado (n8n), use OPENCLAW_ZAPI_RELAY_SYNC=false.
+   */
   OPENCLAW_ZAPI_RELAY_URL: (process.env.OPENCLAW_ZAPI_RELAY_URL || "").trim(),
-  /** Bearer opcional para o relay (`Authorization: Bearer …`). */
+  /** Bearer / x-openclaw-token para POST /hooks/agent. */
   OPENCLAW_ZAPI_RELAY_SECRET: (
     process.env.OPENCLAW_ZAPI_RELAY_SECRET || ""
   ).trim(),
-  /** Timeout ms do POST de relay (1000–60000). Padrão 8000. */
+  /** Relay síncrono: OpenClaw responde e o backend envia texto via Z-API. Padrão true. */
+  OPENCLAW_ZAPI_RELAY_SYNC: process.env.OPENCLAW_ZAPI_RELAY_SYNC || "true",
+  /** Timeout ms do relay sync (5000–300000). Padrão 120000 para mf-curl. */
   OPENCLAW_ZAPI_RELAY_TIMEOUT_MS:
-    process.env.OPENCLAW_ZAPI_RELAY_TIMEOUT_MS || "8000",
+    process.env.OPENCLAW_ZAPI_RELAY_TIMEOUT_MS || "120000",
+  /** Origem pública OpenClaw (fallback para derivar /hooks/agent). */
+  OPENCLAW_PUBLIC_ORIGIN: (process.env.OPENCLAW_PUBLIC_ORIGIN || "").trim(),
   /**
    * `true`: em saudações curtas (oi, tudo bom…) envia boas-vindas pela Z-API antes do OpenClaw.
    * O `/new` no painel OpenClaw não envia WhatsApp — isto cobre o primeiro contacto no chat.
