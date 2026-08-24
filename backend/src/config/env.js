@@ -288,6 +288,10 @@ export const env = {
   ).trim(),
   /** Relay síncrono: OpenClaw responde e o backend envia texto via Z-API. Padrão true. */
   OPENCLAW_ZAPI_RELAY_SYNC: process.env.OPENCLAW_ZAPI_RELAY_SYNC || "true",
+  /** sessionKey estável por telefone (exige hooks.allowRequestSessionKey no OpenClaw). */
+  OPENCLAW_ZAPI_RELAY_SESSION_KEY: process.env.OPENCLAW_ZAPI_RELAY_SESSION_KEY || "true",
+  /** Poll GET /sessions/.../history quando waitForResult devolve só runId. */
+  OPENCLAW_ZAPI_RELAY_POLL_HISTORY: process.env.OPENCLAW_ZAPI_RELAY_POLL_HISTORY || "true",
   /** Timeout ms do relay sync (5000–300000). Padrão 120000 para mf-curl. */
   OPENCLAW_ZAPI_RELAY_TIMEOUT_MS:
     process.env.OPENCLAW_ZAPI_RELAY_TIMEOUT_MS || "120000",

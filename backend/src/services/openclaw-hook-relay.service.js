@@ -44,6 +44,7 @@ export const getOpenclawRelayTimeoutMs = (fallbackMs = 120_000) => {
 export const buildOpenclawHookAgentPayload = (normalized) => {
   const phone = String(normalized.phone || '').replace(/\D/g, '');
   const text = String(normalized.text || '').trim();
+  const sessionKey = `hook:zapi:${phone}`;
 
   const hint =
     `REMETENTE_WHATSAPP=${phone}. O 1º argumento de mf-curl.sh DEVE ser exatamente ${phone}. `
@@ -51,12 +52,17 @@ export const buildOpenclawHookAgentPayload = (normalized) => {
 
   const timeoutSeconds = Math.max(5, Math.ceil(getOpenclawRelayTimeoutMs() / 1000));
 
-  /** OpenClaw bloqueia sessionKey externo por padrão — omitir (telefone vai no message/agentHint). */
+  const useSessionKey =
+    String(env.OPENCLAW_ZAPI_RELAY_SESSION_KEY || 'true').trim().toLowerCase() !== 'false';
+
+  /** OpenClaw antigo ignora waitForResult — sessionKey estável permite poll de history. */
   return {
     message: `${hint}${text}`,
+    ...(useSessionKey ? { sessionKey } : {}),
     deliver: false,
     waitForResult: true,
     announceToMain: false,
+    resultMode: 'assistant_text',
     timeoutSeconds,
     agentHint:
       `mandatorySenderPhone=${phone}; mfCurlFirstArg=${phone}; source=zapi; `
@@ -90,6 +96,121 @@ export const extractOpenclawHookAgentReply = (body) => {
   for (const candidate of candidates) {
     const trimmed = String(candidate ?? '').trim();
     if (trimmed) return trimmed;
+  }
+
+  return null;
+};
+
+const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
+/**
+ * @param {unknown} content
+ */
+const flattenMessageContent = (content) => {
+  if (content == null) return '';
+  if (typeof content === 'string') return content.trim();
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') return part;
+        if (part && typeof part === 'object') {
+          const block = /** @type {Record<string, unknown>} */ (part);
+          return String(block.text || block.content || '');
+        }
+        return '';
+      })
+      .join('')
+      .trim();
+  }
+  if (typeof content === 'object') {
+    const record = /** @type {Record<string, unknown>} */ (content);
+    return String(record.text || record.content || '').trim();
+  }
+  return String(content).trim();
+};
+
+/**
+ * @param {unknown} historyBody
+ * @param {string | null} runId
+ */
+export const extractAssistantTextFromSessionHistory = (historyBody, runId = null) => {
+  if (!historyBody || typeof historyBody !== 'object') return null;
+  const record = /** @type {Record<string, unknown>} */ (historyBody);
+  const messages = Array.isArray(record.messages)
+    ? record.messages
+    : Array.isArray(record.data)
+      ? record.data
+      : [];
+
+  const runToken = runId ? String(runId) : '';
+  let lastAssistant = '';
+
+  for (const item of messages) {
+    if (!item || typeof item !== 'object') continue;
+    const msg = /** @type {Record<string, unknown>} */ (item);
+    const role = String(msg.role || msg.type || '').toLowerCase();
+    if (role !== 'assistant') continue;
+
+    const serialized = JSON.stringify(msg);
+    if (runToken && !serialized.includes(runToken)) {
+      const msgRunId = String(msg.runId || msg.run_id || '');
+      if (msgRunId && msgRunId !== runToken) continue;
+    }
+
+    const text = flattenMessageContent(msg.content ?? msg.text ?? msg.message);
+    if (text) lastAssistant = text;
+  }
+
+  return lastAssistant || null;
+};
+
+/**
+ * Poll GET /sessions/:key/history quando waitForResult devolve só runId (OpenClaw async).
+ * @param {{
+ *   sessionKey: string,
+ *   runId: string | null,
+ *   secret: string,
+ *   timeoutMs: number,
+ *   pollIntervalMs?: number
+ * }} params
+ */
+export const pollOpenclawSessionHistoryReply = async ({
+  sessionKey,
+  runId,
+  secret,
+  timeoutMs,
+  pollIntervalMs = 2500,
+}) => {
+  const origin = String(env.OPENCLAW_PUBLIC_ORIGIN || '').trim().replace(/\/$/, '');
+  if (!origin || !sessionKey) return null;
+
+  const headers = /** @type {Record<string, string>} */ ({ Accept: 'application/json' });
+  if (secret) {
+    headers.Authorization = `Bearer ${secret}`;
+    headers['x-openclaw-token'] = secret;
+  }
+
+  const paths = [
+    `/sessions/${encodeURIComponent(sessionKey)}/history?limit=30`,
+    `/api/sessions/${encodeURIComponent(sessionKey)}/history?limit=30`,
+  ];
+
+  const deadline = Date.now() + Math.max(timeoutMs, 10_000);
+
+  while (Date.now() < deadline) {
+    await sleep(pollIntervalMs);
+
+    for (const path of paths) {
+      try {
+        const res = await fetch(`${origin}${path}`, { headers });
+        if (!res.ok) continue;
+        const body = await res.json();
+        const text = extractAssistantTextFromSessionHistory(body, runId);
+        if (text) return text;
+      } catch {
+        /* retry */
+      }
+    }
   }
 
   return null;
@@ -183,30 +304,49 @@ export const callOpenclawHookAgentSync = async (normalized) => {
     const record = body && typeof body === 'object'
       ? /** @type {Record<string, unknown>} */ (body)
       : {};
-    const status = String(record.status || 'completed').trim() || 'completed';
+    const status = String(record.status || (record.ok === true ? 'accepted' : 'completed')).trim() || 'completed';
     const agentError = String(record.agentError || record.error || '').trim();
+    const runId = record.runId != null ? String(record.runId) : null;
+    let sessionKey = record.sessionKey != null ? String(record.sessionKey) : null;
+    const phone = String(normalized.phone || '').replace(/\D/g, '');
+
+    if (!sessionKey && phone) {
+      sessionKey = `hook:zapi:${phone}`;
+    }
 
     if (agentError) {
       return {
         ok: false,
         mode: 'sync',
         status,
-        runId: record.runId != null ? String(record.runId) : null,
-        sessionKey: record.sessionKey != null ? String(record.sessionKey) : null,
+        runId,
+        sessionKey,
         replyText: null,
         httpStatus: res.status,
         error: agentError,
       };
     }
 
-    const replyText = extractOpenclawHookAgentReply(body);
+    let replyText = extractOpenclawHookAgentReply(body);
+
+    if (!replyText && sessionKey && String(env.OPENCLAW_ZAPI_RELAY_POLL_HISTORY || 'true').toLowerCase() !== 'false') {
+      const pollMs = Math.max(timeoutMs - 3000, 15_000);
+      // eslint-disable-next-line no-console
+      console.info('[ZAPI] OpenClaw async — polling session history:', sessionKey);
+      replyText = await pollOpenclawSessionHistoryReply({
+        sessionKey,
+        runId,
+        secret,
+        timeoutMs: pollMs,
+      });
+    }
 
     return {
-      ok: status === 'completed' || status === 'accepted' || Boolean(replyText),
+      ok: Boolean(replyText) || status === 'completed' || Boolean(runId),
       mode: 'sync',
-      status,
-      runId: record.runId != null ? String(record.runId) : null,
-      sessionKey: record.sessionKey != null ? String(record.sessionKey) : null,
+      status: replyText ? 'completed' : status,
+      runId,
+      sessionKey,
       replyText,
       httpStatus: res.status,
       error: null,
