@@ -44,7 +44,7 @@ export const maybeSendWhatsappWelcome = async ({ phone, text }) => {
 
   const prev = welcomeSentAt.get(digits);
   if (prev && Date.now() - prev < DEDUP_MS) {
-    return { sent: false, skipRelay: false, reason: 'dedup_recent' };
+    return { sent: false, skipRelay: true, reason: 'dedup_recent' };
   }
 
   await sendWhatsappMessage({
@@ -57,6 +57,9 @@ export const maybeSendWhatsappWelcome = async ({ phone, text }) => {
   for (const [key, ts] of welcomeSentAt) {
     if (Date.now() - ts >= DEDUP_MS) welcomeSentAt.delete(key);
   }
+
+  // eslint-disable-next-line no-console
+  console.info('[ZAPI] whatsapp welcome enviado:', digits);
 
   return { sent: true, skipRelay: true, reason: 'greeting_welcome_sent' };
 };

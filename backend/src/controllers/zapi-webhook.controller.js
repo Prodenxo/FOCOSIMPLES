@@ -179,6 +179,22 @@ export const postInbound = async (req, res, next) => {
 
     if (relayUrl && !skipOpenclawRelay) {
       openclawRelay = await zapiInbound.relayZapiInboundToOpenclaw(parsed);
+      if (openclawRelay.replySent) {
+        // eslint-disable-next-line no-console
+        console.info('[ZAPI] resposta OpenClaw enviada:', parsed.phone);
+      } else if (openclawRelay.openclaw?.error) {
+        // eslint-disable-next-line no-console
+        console.warn('[ZAPI] relay sync falhou:', openclawRelay.openclaw.error);
+      } else if (openclawRelay.relayed && !openclawRelay.replySent) {
+        // eslint-disable-next-line no-console
+        console.info('[ZAPI] relay OK sem texto WhatsApp (tools/PDF ou resposta vazia)');
+      }
+    } else if (!welcomeResult.sent && skipOpenclawRelay && !chatGuardHandled) {
+      // eslint-disable-next-line no-console
+      console.info(
+        '[ZAPI] sem resposta outbound:',
+        welcomeResult.reason || relayDecision.reason || 'relay_skipped',
+      );
     }
 
     return sendSuccess(
