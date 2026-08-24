@@ -33,7 +33,7 @@ test('buildOpenclawHookAgentPayload inclui telefone e waitForResult', () => {
   assert.equal(payload.announceToMain, false);
   assert.match(payload.message, /5521996185328/);
   assert.match(payload.message, /qual meu saldo/);
-  assert.equal(payload.sessionKey, 'hook:zapi:5521996185328:mid-42');
+  assert.equal(payload.sessionKey, undefined);
   assert.match(payload.agentHint, /mandatorySenderPhone=5521996185328/);
 });
 

@@ -44,8 +44,6 @@ export const getOpenclawRelayTimeoutMs = (fallbackMs = 120_000) => {
 export const buildOpenclawHookAgentPayload = (normalized) => {
   const phone = String(normalized.phone || '').replace(/\D/g, '');
   const text = String(normalized.text || '').trim();
-  const messageId = normalized.messageId != null ? String(normalized.messageId) : 'nomsg';
-  const sessionKey = `hook:zapi:${phone}:${messageId}`;
 
   const hint =
     `REMETENTE_WHATSAPP=${phone}. O 1º argumento de mf-curl.sh DEVE ser exatamente ${phone}. `
@@ -53,9 +51,9 @@ export const buildOpenclawHookAgentPayload = (normalized) => {
 
   const timeoutSeconds = Math.max(5, Math.ceil(getOpenclawRelayTimeoutMs() / 1000));
 
+  /** OpenClaw bloqueia sessionKey externo por padrão — omitir (telefone vai no message/agentHint). */
   return {
     message: `${hint}${text}`,
-    sessionKey,
     deliver: false,
     waitForResult: true,
     announceToMain: false,

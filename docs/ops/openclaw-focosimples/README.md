@@ -102,7 +102,13 @@ Monitor: `GET /api/webhooks/zapi/monitor` → `inboundBridgeVersion: 7`, `opencl
 ### OpenClaw (openclaw.json)
 
 ```json
-"hooks": { "enabled": true, "token": "...", "path": "/hooks" }
+"hooks": {
+  "enabled": true,
+  "token": "token-hooks-openclaw",
+  "path": "/hooks"
+}
 ```
+
+(O backend **não** envia `sessionKey` — compatível com o padrão OpenClaw. Opcional: `allowRequestSessionKey: true` se quiser sessões por telefone no futuro.)
 
 **Não** activar `channels.whatsapp` (evita ban com Z-API no mesmo número).
