@@ -42,6 +42,12 @@ const isOriginAllowed = (origin) => {
   return false;
 };
 
+/** Webhooks (Z-API, Stripe, etc.) são server-to-server — não aplicar CORS de browser. */
+const isWebhookRequest = (req) => {
+  const path = String(req.path || req.url || '').split('?')[0];
+  return path.startsWith('/api/webhooks/');
+};
+
 const corsOptions = {
   origin: (origin, callback) => {
     if (!origin) {
@@ -71,6 +77,16 @@ const corsOptions = {
 app.use((req, res, next) => {
   if (req.method !== 'OPTIONS') return next();
 
+  if (isWebhookRequest(req)) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Authorization, Client-Token, x-zapi-webhook-token',
+    );
+    return res.status(204).end();
+  }
+
   const origin = req.headers.origin;
   const allowOrigin = origin && isOriginAllowed(origin) ? origin : '*';
 
@@ -81,8 +97,14 @@ app.use((req, res, next) => {
   return res.status(204).end();
 });
 
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+app.use((req, res, next) => {
+  if (isWebhookRequest(req)) return next();
+  return cors(corsOptions)(req, res, next);
+});
+app.options('*', (req, res, next) => {
+  if (isWebhookRequest(req)) return next();
+  return cors(corsOptions)(req, res, next);
+});
 
 /** Stripe exige body bruto para validar `Stripe-Signature`. */
 app.post(
