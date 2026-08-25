@@ -91,8 +91,13 @@ export function buildNfeCatalogProdutoMetadata(
   return {
     ...base,
     ncm: onlyDigits(fields.ncm, 8),
+    cfop: onlyDigits(fields.cfop, 4),
     unidade: String(fields.unidade || 'UN').trim() || 'UN',
+    icmsCsosn: onlyDigits(fields.icmsCsosn, 3),
+    pisCst: onlyDigits(fields.pisCst, 2),
+    cofinsCst: onlyDigits(fields.cofinsCst, 2),
     ...(cest ? { cest } : {}),
+    ...(options.hasSt === true ? { hasSt: true } : {}),
   }
 }
 
@@ -101,18 +106,18 @@ export function validateNfeCatalogProdutoFormFields(
 ): string | null {
   const ncm = onlyDigits(fields.ncm, 8)
   if (ncm.length !== 8) return 'Informe o NCM com 8 dígitos.'
+  const cfop = onlyDigits(fields.cfop, 4)
+  if (cfop.length !== 4) return 'Informe o CFOP com 4 dígitos.'
+  if (!String(fields.unidade || '').trim()) return 'Informe a unidade (ex.: UN).'
+  const csosn = onlyDigits(fields.icmsCsosn, 3)
+  if (csosn.length !== 3) return 'Informe o CSOSN do ICMS com 3 dígitos (ex.: 102).'
+  const pis = onlyDigits(fields.pisCst, 2)
+  if (!pis) return 'Informe o CST do PIS (ex.: 49).'
+  const cofins = onlyDigits(fields.cofinsCst, 2)
+  if (!cofins) return 'Informe o CST do COFINS (ex.: 49).'
   const cest = normalizeCestInput(fields.cest)
   if (cest && cest.length !== 7) return 'CEST deve ter 7 dígitos ou ficar em branco.'
   return null
-}
-
-export function isCatalogProdutoUsableForNfeLike(
-  produto: { document_type?: string | null; metadata_json?: unknown; cnae?: string | null },
-  documentType: DocumentType,
-): boolean {
-  const dt = String(produto.document_type || '').toUpperCase()
-  if (dt !== documentType && dt !== 'NFE' && dt !== 'NFCE') return false
-  return resolveCatalogProdutoNcm(produto).length === 8
 }
 
 export function resolveCatalogProdutoNcm(
@@ -126,9 +131,34 @@ export function resolveCatalogProdutoNcm(
   return ''
 }
 
-/** Rascunho de CNAE / produto ainda sem NCM (ou tributos) para emitir NF-e. */
+function catalogProdutoHasPersistedNfeTributos(metadataJson: unknown): boolean {
+  const meta = readNfeCatalogProdutoMetadata(metadataJson)
+  return (
+    onlyDigits(meta.cfop ?? '', 4).length === 4
+    && onlyDigits(meta.icmsCsosn ?? '', 3).length === 3
+    && onlyDigits(meta.pisCst ?? '', 2).length >= 2
+    && onlyDigits(meta.cofinsCst ?? '', 2).length >= 2
+  )
+}
+
+export function isCatalogProdutoUsableForNfeLike(
+  produto: { document_type?: string | null; metadata_json?: unknown; cnae?: string | null },
+  documentType: DocumentType,
+): boolean {
+  const dt = String(produto.document_type || '').toUpperCase()
+  if (dt !== documentType && dt !== 'NFE' && dt !== 'NFCE') return false
+  if (resolveCatalogProdutoNcm(produto).length !== 8) return false
+  if (!catalogProdutoHasPersistedNfeTributos(produto.metadata_json)) return false
+  const fields = nfeCatalogProdutoFormFieldsFromMetadata(produto.metadata_json)
+  return validateNfeCatalogProdutoFormFields(fields) === null
+}
+
+/** Produto NF-e ainda sem NCM ou tributos completos para emitir. */
 export function catalogProdutoNeedsNfeCompletion(
   produto: { metadata_json?: unknown; cnae?: string | null },
 ): boolean {
-  return resolveCatalogProdutoNcm(produto).length !== 8
+  if (resolveCatalogProdutoNcm(produto).length !== 8) return true
+  if (!catalogProdutoHasPersistedNfeTributos(produto.metadata_json)) return true
+  const fields = nfeCatalogProdutoFormFieldsFromMetadata(produto.metadata_json)
+  return validateNfeCatalogProdutoFormFields(fields) !== null
 }

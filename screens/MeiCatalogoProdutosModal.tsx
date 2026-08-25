@@ -522,7 +522,7 @@ export default function MeiCatalogoProdutosModal ({
                 tipo,
                 item.cnae ? `CNAE ${item.cnae}` : null,
                 !isNfeLike && (needsCodigo || missingCodigo) ? 'Completar código LC 116' : null,
-                needsNcm ? 'Completar NCM' : null,
+                needsNcm ? 'Completar cadastro fiscal' : null,
               ].filter(Boolean)
               return (
                 <MeiCatalogListCard
@@ -547,7 +547,7 @@ export default function MeiCatalogoProdutosModal ({
         onClose={() => setAddChoiceVisible(false)}
       >
         <Text style={[flow.hint, { marginBottom: 14 }]}>
-          Produtos NF-e precisam de nome e NCM. O sistema calcula impostos na emissão.
+          Produtos NF-e: cadastre NCM, CFOP, CSOSN, PIS e COFINS (configuração do contador).
         </Text>
         <Pressable
           accessibilityRole="button"
@@ -567,7 +567,7 @@ export default function MeiCatalogoProdutosModal ({
           <View style={{ flex: 1 }}>
             <Text style={{ color: theme.text, fontWeight: '700', fontSize: 15 }}>Criar produto</Text>
             <Text style={{ color: theme.textSecondary, fontSize: 12, marginTop: 2 }}>
-              Nome, NCM e preço — impostos calculados automaticamente
+              Formulário completo com tributos (CFOP, CSOSN, PIS, COFINS)
             </Text>
           </View>
         </Pressable>
@@ -684,25 +684,27 @@ export default function MeiCatalogoProdutosModal ({
         {isNfeLikeCatalogDocumentType(form.documentType) ? (
           <>
             <MeiFormBanner>
-              Informe nome, NCM e preço. O sistema define impostos e códigos fiscais
-              automaticamente na hora de emitir a nota.
+              Cadastre aqui NCM, CFOP e tributos do produto. Na emissão de NF-e, basta escolher
+              este item no catálogo. Para venda interestadual, o CFOP ajusta automaticamente
+              (5102 → 6102, 5101 → 6101).
             </MeiFormBanner>
-            <MeiFormSectionLabel>Dados do produto</MeiFormSectionLabel>
+            <MeiFormSectionLabel>Dados do produto (NF-e / NFC-e)</MeiFormSectionLabel>
             <MeiFormField
               label="Código / SKU"
-              placeholder="Opcional — ex.: AGUA20L"
+              required
+              placeholder="Ex.: AGUA20L"
               value={form.codigo}
               onChangeText={(t) => setForm((f) => ({ ...f, codigo: t }))}
             />
             <MeiFormField
-              label="Nome do produto"
+              label="Descrição"
               required
               placeholder="Ex.: Refrigerante Cola 2L PET, Cerveja 350ml Lata"
               hint="Inclua a embalagem (PET, lata, garrafa) quando aplicável — ajuda a vincular o CEST em produtos com ST."
               value={form.discriminacao}
               onChangeText={(t) => setForm((f) => ({ ...f, discriminacao: t }))}
               multiline
-              style={{ minHeight: 72, textAlignVertical: 'top' }}
+              style={{ minHeight: 80, textAlignVertical: 'top' }}
             />
             <NcmAutocompleteField
               required
@@ -711,6 +713,64 @@ export default function MeiCatalogoProdutosModal ({
               onChange={(ncm) =>
                 setForm((f) => ({ ...f, nfe: { ...f.nfe, ncm } }))
               }
+            />
+            <MeiFormField
+              label="CFOP (venda no seu estado)"
+              required
+              placeholder="5102"
+              hint="Cadastre o CFOP de venda interna. Na emissão para outro estado, o app ajusta para 6xxx."
+              value={form.nfe.cfop}
+              onChangeText={(t) =>
+                setForm((f) => ({ ...f, nfe: { ...f.nfe, cfop: t.replace(/\D/g, '').slice(0, 4) } }))
+              }
+              keyboardType="number-pad"
+              maxLength={4}
+            />
+            <MeiFormField
+              label="Unidade"
+              required
+              placeholder="UN"
+              value={form.nfe.unidade}
+              onChangeText={(t) => setForm((f) => ({ ...f, nfe: { ...f.nfe, unidade: t } }))}
+            />
+            <MeiFormField
+              label={isFocoSimples ? 'CSOSN ICMS (Simples Nacional)' : 'CSOSN ICMS (MEI)'}
+              required
+              placeholder="102"
+              hint="Ex.: 102 — tributado pelo Simples Nacional sem permissão de crédito."
+              value={form.nfe.icmsCsosn}
+              onChangeText={(t) =>
+                setForm((f) => ({
+                  ...f,
+                  nfe: { ...f.nfe, icmsCsosn: t.replace(/\D/g, '').slice(0, 3) },
+                }))
+              }
+              keyboardType="number-pad"
+              maxLength={3}
+            />
+            <MeiFormField
+              label="CST PIS"
+              required
+              placeholder="49"
+              hint="Ex.: 49 — outras operações de saída (Simples Nacional / DAS)."
+              value={form.nfe.pisCst}
+              onChangeText={(t) =>
+                setForm((f) => ({ ...f, nfe: { ...f.nfe, pisCst: t.replace(/\D/g, '').slice(0, 2) } }))
+              }
+              keyboardType="number-pad"
+              maxLength={2}
+            />
+            <MeiFormField
+              label="CST COFINS"
+              required
+              placeholder="49"
+              hint="Ex.: 49 — outras operações de saída (Simples Nacional / DAS)."
+              value={form.nfe.cofinsCst}
+              onChangeText={(t) =>
+                setForm((f) => ({ ...f, nfe: { ...f.nfe, cofinsCst: t.replace(/\D/g, '').slice(0, 2) } }))
+              }
+              keyboardType="number-pad"
+              maxLength={2}
             />
             <MeiFormField
               label="CEST (opcional)"
@@ -726,8 +786,8 @@ export default function MeiCatalogoProdutosModal ({
               keyboardType="number-pad"
             />
             <MeiFormField
-              label="Preço de venda (opcional)"
-              placeholder="Ex.: 12,50"
+              label="Valor sugerido"
+              placeholder="Opcional — ex.: 100,00"
               hint="Pré-preenche o valor na hora de emitir a nota."
               value={form.valorSugerido}
               onChangeText={(t) => setForm((f) => ({ ...f, valorSugerido: t }))}

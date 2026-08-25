@@ -3800,10 +3800,10 @@ function MeiScreenContent() {
                   <TouchableOpacity
                     style={styles.notasBtnSecondary}
                     onPress={() => setCatalogProdutosManageVisible(true)}
-                    accessibilityLabel="Abrir catálogo de serviços"
+                    accessibilityLabel="Abrir catálogo de produtos e serviços"
                   >
                     <Ionicons name="cube-outline" size={15} color={theme.primary} />
-                    <Text style={styles.dasBtnSecondaryText}>Serviços</Text>
+                    <Text style={styles.dasBtnSecondaryText}>Catálogo</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -3904,7 +3904,7 @@ function MeiScreenContent() {
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.typeButton, { flex: 1 }]} onPress={() => setCatalogProdutosManageVisible(true)}>
                   <Ionicons name="cube-outline" size={15} color={theme.primary} />
-                  <Text style={[styles.typeButtonText, { color: theme.primary, marginLeft: 4 }]}>Serviços</Text>
+                  <Text style={[styles.typeButtonText, { color: theme.primary, marginLeft: 4 }]}>Catálogo</Text>
                 </TouchableOpacity>
               </View>
 

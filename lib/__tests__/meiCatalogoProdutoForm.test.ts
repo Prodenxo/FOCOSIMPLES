@@ -78,7 +78,7 @@ describe('meiCatalogoProdutoForm', () => {
     expect(payload.aliquota).toBeUndefined()
   })
 
-  it('aceita produto NF-e e grava NCM no metadata (tributos calculados na emissão)', () => {
+  it('aceita produto NF-e e grava tributos completos no metadata', () => {
     const payload = buildProdutoCatalogPayload(
       {
         codigo: 'AGUA20',
@@ -101,7 +101,11 @@ describe('meiCatalogoProdutoForm', () => {
     )
     expect(payload.metadata_json).toMatchObject({
       ncm: '22011000',
+      cfop: '5102',
       unidade: 'UN',
+      icmsCsosn: '102',
+      pisCst: '49',
+      cofinsCst: '49',
     })
     expect(payload.cnae).toBe('')
   })

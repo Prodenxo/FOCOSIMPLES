@@ -538,6 +538,12 @@ export default function SettingsScreen() {
                   icon="people-outline"
                   onPress={() => router.push(SETTINGS_ROUTES.usuarios)}
                 />
+                <SettingsActionLink
+                  title="Produtos e Configuração Fiscal"
+                  description="Tratamento fiscal aprovado por CNPJ"
+                  icon="file-tray-full-outline"
+                  onPress={() => router.push(SETTINGS_ROUTES.produtosFiscais)}
+                />
                 {effectiveRole === "superadmin" ? (
                   <SettingsActionLink
                     title="Solicitações de acesso"

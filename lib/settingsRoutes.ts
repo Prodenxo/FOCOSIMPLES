@@ -5,6 +5,7 @@ export const SETTINGS_ROUTES = {
   index: '/(app)/configuracoes',
   usuarios: '/(app)/configuracoes/usuarios',
   solicitacoes: '/(app)/configuracoes/solicitacoes',
+  produtosFiscais: '/(app)/configuracoes/produtos-fiscais',
 } as const
 
 /** Checklist pós-login (ativação guiada). */
