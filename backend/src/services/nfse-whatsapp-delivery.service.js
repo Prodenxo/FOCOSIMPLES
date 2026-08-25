@@ -2,9 +2,9 @@ import { env } from '../config/env.js';
 import { createSupabaseClient, getServiceDbConfigError } from '../config/supabase.js';
 import { badRequest } from '../utils/errors.js';
 import {
-  fetchOpenclawNfsePdfBase64,
-  isNfsePdfReadyStatus,
-} from './openclaw-nfse.service.js';
+  fetchOpenclawNotaPdfBase64,
+  isOpenclawNotaPdfReadyStatus,
+} from './openclaw-nota-pdf.service.js';
 import {
   isWhatsappOutboundConfigured,
   sendWhatsappMessage,
@@ -12,6 +12,9 @@ import {
 
 const MEI_NFSE_TABLE = 'mei_nfse';
 const DOCUMENT_TYPE_NFSE = 'NFSE';
+const DOCUMENT_TYPE_NFE = 'NFE';
+const DOCUMENT_TYPE_NFCE = 'NFCE';
+const WHATSAPP_DOCUMENT_TYPES = [DOCUMENT_TYPE_NFSE, DOCUMENT_TYPE_NFE, DOCUMENT_TYPE_NFCE];
 const MAX_BATCH = 40;
 const MAX_DELIVERY_ATTEMPTS = 36;
 const MAX_PENDING_AGE_MS = 72 * 60 * 60 * 1000;
@@ -47,6 +50,24 @@ export const isOpenclawNfseAutoWhatsappEnabled = () => {
   const raw = process.env.OPENCLAW_NFSE_AUTO_WHATSAPP_ENABLED
     ?? env.OPENCLAW_NFSE_AUTO_WHATSAPP_ENABLED;
   return String(raw || '').toLowerCase() === 'true';
+};
+
+/** NF-e/NFC-e: flag própria ou herda NFSe. */
+export const isOpenclawNfeAutoWhatsappEnabled = () => {
+  const raw = process.env.OPENCLAW_NFE_AUTO_WHATSAPP_ENABLED
+    ?? env.OPENCLAW_NFE_AUTO_WHATSAPP_ENABLED;
+  if (String(raw || '').trim() !== '') {
+    return String(raw).toLowerCase() === 'true';
+  }
+  return isOpenclawNfseAutoWhatsappEnabled();
+};
+
+export const isOpenclawNotaAutoWhatsappEnabled = (documentType = DOCUMENT_TYPE_NFSE) => {
+  const dt = String(documentType || DOCUMENT_TYPE_NFSE).toUpperCase();
+  if (dt === DOCUMENT_TYPE_NFE || dt === DOCUMENT_TYPE_NFCE) {
+    return isOpenclawNfeAutoWhatsappEnabled();
+  }
+  return isOpenclawNfseAutoWhatsappEnabled();
 };
 
 const getAdmin = () => {
@@ -172,8 +193,8 @@ const listPendingDeliveries = async () => {
   const admin = getAdmin();
   const { data, error } = await admin
     .from(MEI_NFSE_TABLE)
-    .select('id, user_id, status, metadata_json, created_at')
-    .eq('document_type', DOCUMENT_TYPE_NFSE)
+    .select('id, user_id, status, document_type, metadata_json, created_at')
+    .in('document_type', WHATSAPP_DOCUMENT_TYPES)
     .is('archived_at', null)
     .contains('metadata_json', { [OPENCLAW_NFSE_META.PENDING]: true })
     .order('created_at', { ascending: true })
@@ -231,7 +252,28 @@ const claimOpenclawNfseWhatsappDeliverySlot = async (userId, notaId) => {
   return { ok: true };
 };
 
-const trySendNfsePdfZapi = async ({ userId, phone, pdfBase64, fileName, notaId }) => {
+const whatsappMessageForDocumentType = (documentType) => {
+  const dt = String(documentType || DOCUMENT_TYPE_NFSE).toUpperCase();
+  if (dt === DOCUMENT_TYPE_NFE) return 'Segue a NF-e emitida.';
+  if (dt === DOCUMENT_TYPE_NFCE) return 'Segue a NFC-e emitida.';
+  return 'Segue a NFSe emitida.';
+};
+
+const whatsappSourceForDocumentType = (documentType) => {
+  const dt = String(documentType || DOCUMENT_TYPE_NFSE).toUpperCase();
+  if (dt === DOCUMENT_TYPE_NFE) return 'openclaw_nfe_auto';
+  if (dt === DOCUMENT_TYPE_NFCE) return 'openclaw_nfce_auto';
+  return 'openclaw_nfse_auto';
+};
+
+const trySendNotaPdfZapi = async ({
+  userId,
+  phone,
+  pdfBase64,
+  fileName,
+  notaId,
+  documentType = DOCUMENT_TYPE_NFSE,
+}) => {
   if (!isWhatsappOutboundConfigured()) {
     return { whatsappStatus: 'skipped_no_whatsapp' };
   }
@@ -240,8 +282,8 @@ const trySendNfsePdfZapi = async ({ userId, phone, pdfBase64, fileName, notaId }
       phone,
       pdfBase64,
       fileName,
-      message: 'Segue a NFSe emitida.',
-      source: 'openclaw_nfse_auto',
+      message: whatsappMessageForDocumentType(documentType),
+      source: whatsappSourceForDocumentType(documentType),
       userId,
       notaId,
     });
@@ -267,13 +309,14 @@ export const deliverOpenclawNfseWhatsappPdf = async (userId, notaId, phone) => {
   }
 
   try {
-    const pdfResult = await fetchOpenclawNfsePdfBase64(userId, { id: notaId, sync: true });
-    const whatsapp = await trySendNfsePdfZapi({
+    const pdfResult = await fetchOpenclawNotaPdfBase64(userId, { id: notaId, sync: true });
+    const whatsapp = await trySendNotaPdfZapi({
       userId,
       phone: normalizedPhone,
       pdfBase64: pdfResult.base64,
       fileName: pdfResult.fileName,
       notaId,
+      documentType: pdfResult.nota?.document_type,
     });
 
     if (whatsapp.whatsappStatus === 'sent') {
@@ -318,7 +361,8 @@ const clearScheduledRetries = (userId, notaId) => {
  * @returns {Promise<object|null>}
  */
 export const tryDeliverPendingOpenclawNfseIfReady = async (userId, record) => {
-  if (!isOpenclawNfseAutoWhatsappEnabled() || !isWhatsappOutboundConfigured()) {
+  const documentType = String(record?.document_type || DOCUMENT_TYPE_NFSE).toUpperCase();
+  if (!isOpenclawNotaAutoWhatsappEnabled(documentType) || !isWhatsappOutboundConfigured()) {
     return null;
   }
   if (!userId || !record?.id) return null;
@@ -335,7 +379,7 @@ export const tryDeliverPendingOpenclawNfseIfReady = async (userId, record) => {
   deliveryInFlight.add(key);
 
   try {
-    if (isNfsePdfReadyStatus(record.status)) {
+    if (isOpenclawNotaPdfReadyStatus(record.status)) {
       const delivered = await deliverOpenclawNfseWhatsappPdf(userId, record.id, phone);
       const result = {
         notaId: record.id,
@@ -369,8 +413,8 @@ export const tryDeliverPendingOpenclawNfseIfReady = async (userId, record) => {
 /**
  * Após emit_nfse com nota ainda em processamento: tenta enviar PDF sem depender só do cron externo.
  */
-export const scheduleOpenclawNfseWhatsappDeliveryRetries = (userId, notaId) => {
-  if (!isOpenclawNfseAutoWhatsappEnabled()) return;
+export const scheduleOpenclawNfseWhatsappDeliveryRetries = (userId, notaId, documentType = DOCUMENT_TYPE_NFSE) => {
+  if (!isOpenclawNotaAutoWhatsappEnabled(documentType)) return;
   if (!userId || !notaId) return;
 
   clearScheduledRetries(userId, notaId);
@@ -383,7 +427,7 @@ export const scheduleOpenclawNfseWhatsappDeliveryRetries = (userId, notaId) => {
           const admin = getAdmin();
           const { data: row, error } = await admin
             .from(MEI_NFSE_TABLE)
-            .select('id, user_id, status, metadata_json, created_at')
+            .select('id, user_id, status, document_type, metadata_json, created_at')
             .eq('id', notaId)
             .eq('user_id', userId)
             .maybeSingle();
@@ -393,6 +437,10 @@ export const scheduleOpenclawNfseWhatsappDeliveryRetries = (userId, notaId) => {
           }
           const meta = toObject(row.metadata_json);
           if (meta[OPENCLAW_NFSE_META.PENDING] !== true) {
+            clearScheduledRetries(userId, notaId);
+            return;
+          }
+          if (!isOpenclawNotaAutoWhatsappEnabled(row.document_type)) {
             clearScheduledRetries(userId, notaId);
             return;
           }
@@ -445,7 +493,7 @@ const processPendingRow = async (row) => {
     const { obterNota } = await import('./mei-notas.service.js');
     const synced = await obterNota(userId, notaId, { sync: true, skipWhatsappDelivery: true });
     noteStatus = synced.status;
-    if (!isNfsePdfReadyStatus(noteStatus)) {
+    if (!isOpenclawNotaPdfReadyStatus(noteStatus)) {
       const statusKey = normalizeStatusKey(noteStatus);
       if (TERMINAL_FAILURE_STATUSES.has(statusKey)) {
         await markOpenclawNfseWhatsappFailed(userId, notaId, `nota_${statusKey}`, { clearPending: true });
@@ -456,7 +504,7 @@ const processPendingRow = async (row) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const code = err?.errors?.code || err?.code;
-    if (code === 'NFSE_PDF_NOT_READY') {
+    if (code === 'NFSE_PDF_NOT_READY' || code === 'NOTA_PDF_NOT_READY') {
       return { notaId, userId, status: 'waiting', noteStatus };
     }
     await markOpenclawNfseWhatsappFailed(userId, notaId, message);
@@ -469,7 +517,7 @@ const processPendingRow = async (row) => {
     return { notaId, userId, status: statusKey };
   }
 
-  if (!isNfsePdfReadyStatus(noteStatus)) {
+  if (!isOpenclawNotaPdfReadyStatus(noteStatus)) {
     return { notaId, userId, status: 'waiting', noteStatus };
   }
 
@@ -487,7 +535,7 @@ const processPendingRow = async (row) => {
  */
 export const runOpenclawNfseWhatsappDeliveryJob = async () => {
   const startedAt = new Date().toISOString();
-  if (!isOpenclawNfseAutoWhatsappEnabled()) {
+  if (!isOpenclawNfseAutoWhatsappEnabled() && !isOpenclawNfeAutoWhatsappEnabled()) {
     return {
       ok: true,
       skipped: 'disabled',

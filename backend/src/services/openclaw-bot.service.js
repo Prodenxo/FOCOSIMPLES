@@ -75,11 +75,16 @@ import { getEmitenteNfseSnapshot } from './mei-certificate-store.js';
 import {
   deliverOpenclawNfseWhatsappPdf,
   getOpenclawNfseWhatsappDeliveryState,
+  isOpenclawNotaAutoWhatsappEnabled,
   isOpenclawNfseAutoWhatsappEnabled,
   markOpenclawNfseWhatsappSent,
   registerOpenclawNfseWhatsappDelivery,
   scheduleOpenclawNfseWhatsappDeliveryRetries,
 } from './nfse-whatsapp-delivery.service.js';
+import {
+  fetchOpenclawNotaPdfBase64,
+  isOpenclawNotaPdfReadyStatus,
+} from './openclaw-nota-pdf.service.js';
 import {
   openclawApproveAccessRequest,
   openclawListAccessRequests,
@@ -2009,14 +2014,40 @@ export const runOpenclawAction = async (input) => {
       }
       const nota = result.nota;
       const status = nota?.status || 'processando';
+      const destinationPhone = resolveOpenclawWhatsappPhone(phoneDigits, matchedUserNumber);
+      const pdfReady = isOpenclawNotaPdfReadyStatus(status);
+      const autoEnabled = isOpenclawNotaAutoWhatsappEnabled('NFE');
+      let autoWhatsapp = null;
+
+      if (autoEnabled && destinationPhone && nota?.id && !result.deduplicated) {
+        await registerOpenclawNfseWhatsappDelivery(userId, nota.id, destinationPhone);
+        if (pdfReady) {
+          autoWhatsapp = await deliverOpenclawNfseWhatsappPdf(
+            userId,
+            nota.id,
+            destinationPhone,
+          );
+        }
+      }
+
+      const autoSent = autoWhatsapp?.whatsappStatus === 'sent';
+      const autoFailed = ['failed', 'skipped_no_whatsapp'].includes(
+        autoWhatsapp?.whatsappStatus || '',
+      );
+      if (autoEnabled && nota?.id && !autoSent && !result.deduplicated) {
+        scheduleOpenclawNfseWhatsappDeliveryRetries(userId, nota.id, 'NFE');
+      }
+
       const dedupNote = result.deduplicated
         ? ' (chamada duplicada ignorada — mesma nota)'
         : '';
+
       return {
         ok: true,
         message: buildNfEmittedUserMessage(result.preview, {
           status,
-          pdfPending: true,
+          pdfSent: autoSent,
+          pdfPending: autoEnabled && !pdfReady && !autoSent,
         }),
         data: {
           nota: {
@@ -2026,12 +2057,24 @@ export const runOpenclawAction = async (input) => {
             document_type: nota?.document_type || 'NFE',
           },
           deduplicated: result.deduplicated === true,
+          autoWhatsappEnabled: autoEnabled,
+          autoWhatsapp: autoWhatsapp
+            ? {
+              status: autoWhatsapp.whatsappStatus,
+              error: autoWhatsapp.whatsappError ?? null,
+            }
+            : null,
+          pdfWhatsappAlreadySent: autoSent,
           userId,
           actorContext,
           ...linkDebug,
           agentInstructions:
             `${BOT_NF_EMIT_SUCCESS_GUARD}${dedupNote} `
-            + 'Repita APENAS message — não mencione payload nem confirm:true.',
+            + (autoSent
+              ? ' PDF já enviado no WhatsApp.'
+              : autoEnabled
+                ? ' O PDF será enviado automaticamente neste chat.'
+                : ' Repita APENAS message — não mencione payload nem confirm:true.'),
         },
       };
     } catch (err) {
@@ -2148,7 +2191,7 @@ export const runOpenclawAction = async (input) => {
         autoWhatsapp?.whatsappStatus || '',
       );
       if (autoEnabled && nota?.id && !autoSent && !result.deduplicated) {
-        scheduleOpenclawNfseWhatsappDeliveryRetries(userId, nota.id);
+        scheduleOpenclawNfseWhatsappDeliveryRetries(userId, nota.id, 'NFSE');
       }
       const useOpenclawScriptFallback = !autoSent && (!autoEnabled || autoFailed);
       const execCommand =
@@ -2265,6 +2308,108 @@ export const runOpenclawAction = async (input) => {
       };
     } catch (err) {
       rethrowNfseErrorForBot(err);
+    }
+  }
+
+  if (action === 'get_nfe_pdf') {
+    try {
+      const sync =
+        payload?.sync !== false
+        && String(payload?.sync || '').toLowerCase() !== 'false';
+      const pdfResult = await fetchOpenclawNotaPdfBase64(userId, {
+        id: payload?.id,
+        sync,
+      });
+      const destinationPhone = resolveOpenclawWhatsappPhone(phoneDigits, matchedUserNumber);
+      const includeBase64 =
+        payload?.includeBase64 === true
+        || String(payload?.includeBase64 || '').toLowerCase() === 'true'
+        || payload?.includeBase64 === 1;
+
+      if (!includeBase64) {
+        return {
+          ok: true,
+          message: `PDF NF-e pronto (${pdfResult.nota.status}). Para enviar no WhatsApp use send_nfe_whatsapp.`,
+          data: {
+            fileName: pdfResult.fileName,
+            mimeType: pdfResult.mimeType,
+            includeBase64: false,
+            nota: pdfResult.nota,
+            execCommand: buildNfseSendExecCommand(destinationPhone, pdfResult.nota.id),
+            actorContext,
+            ...linkDebug,
+          },
+        };
+      }
+
+      return {
+        ok: true,
+        message: `PDF NF-e obtido (status ${pdfResult.nota.status}).`,
+        data: {
+          fileName: pdfResult.fileName,
+          mimeType: pdfResult.mimeType,
+          base64: pdfResult.base64,
+          nota: pdfResult.nota,
+          actorContext,
+          ...linkDebug,
+        },
+      };
+    } catch (err) {
+      rethrowNfeErrorForBot(err);
+    }
+  }
+
+  if (action === 'send_nfe_whatsapp') {
+    try {
+      const notaId = String(payload?.id || '').trim();
+      const priorDelivery = await getOpenclawNfseWhatsappDeliveryState(userId, notaId);
+      if (priorDelivery.alreadySent) {
+        return {
+          ok: true,
+          message: 'PDF desta NF-e já foi enviado no WhatsApp (sem duplicar).',
+          data: {
+            notaId,
+            whatsappStatus: 'already_sent',
+            whatsappDelivery: priorDelivery,
+            userId,
+            actorContext,
+            ...linkDebug,
+          },
+        };
+      }
+
+      const sync =
+        payload?.sync !== false
+        && String(payload?.sync || '').toLowerCase() !== 'false';
+      const pdfResult = await fetchOpenclawNotaPdfBase64(userId, { id: notaId, sync });
+      const destinationPhone = resolveOpenclawWhatsappPhone(phoneDigits, matchedUserNumber);
+      const whatsapp = await trySendWhatsappPdfOutbound({
+        phone: destinationPhone,
+        pdfBase64: pdfResult.base64,
+        fileName: pdfResult.fileName,
+        message: String(payload?.message || '').trim() || 'Segue a NF-e emitida.',
+        extraPayload: { notaId: pdfResult.nota.id, userId },
+      });
+      const sent = whatsapp.whatsappStatus === 'sent';
+      if (sent) {
+        await markOpenclawNfseWhatsappSent(userId, pdfResult.nota.id);
+      }
+      return {
+        ok: true,
+        message: sent
+          ? `PDF NF-e enviado no WhatsApp (nota ${pdfResult.nota.id}).`
+          : `PDF obtido; envio WhatsApp: ${whatsapp.whatsappStatus}.`,
+        data: {
+          nota: pdfResult.nota,
+          whatsappStatus: whatsapp.whatsappStatus,
+          whatsappError: whatsapp.whatsappError ?? null,
+          userId,
+          actorContext,
+          ...linkDebug,
+        },
+      };
+    } catch (err) {
+      rethrowNfeErrorForBot(err);
     }
   }
 
@@ -2410,6 +2555,6 @@ export const runOpenclawAction = async (input) => {
   }
 
   throw badRequest(
-    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_contas, get_saldo, create_conta, update_conta, delete_conta, list_transactions, create_transaction, update_transaction, delete_transaction, list_calendar_events, list_agenda_checklist_today, complete_calendar_event, list_upcoming_calendar_events, get_next_calendar_event, create_calendar_event, add_calendar_event_meet, delete_calendar_event, get_nfse_setup_status, list_nfse_clientes, register_nfse_cliente, list_nfse_produtos, list_catalog_servicos, list_nfe_produtos, register_nfse_produto, register_nfe_cliente, register_nfe_produto, preview_nfse, emit_nfse, preview_nfe, emit_nfe, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
+    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_contas, get_saldo, create_conta, update_conta, delete_conta, list_transactions, create_transaction, update_transaction, delete_transaction, list_calendar_events, list_agenda_checklist_today, complete_calendar_event, list_upcoming_calendar_events, get_next_calendar_event, create_calendar_event, add_calendar_event_meet, delete_calendar_event, get_nfse_setup_status, list_nfse_clientes, register_nfse_cliente, list_nfse_produtos, list_catalog_servicos, list_nfe_produtos, register_nfse_produto, register_nfe_cliente, register_nfe_produto, preview_nfse, emit_nfse, preview_nfe, emit_nfe, list_nfse_notas, consult_nfse, get_nfse_pdf, get_nfe_pdf, send_nfse_whatsapp, send_nfe_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
   );
 };

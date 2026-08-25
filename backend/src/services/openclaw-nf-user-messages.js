@@ -101,7 +101,7 @@ export const BOT_NF_EMIT_FAILED_INSTRUCTION =
 /** Após emissão bem-sucedida — evita triplicar nota no WhatsApp. */
 export const BOT_NF_EMIT_SUCCESS_GUARD =
   'Nota JÁ emitida nesta conversa. PROIBIDO chamar emit_nfe ou emit_nfse de novo com os mesmos dados. '
-  + 'Repita APENAS message ao utilizador; se pedirem PDF, use get_nfse_pdf ou aguarde envio automático.';
+  + 'Repita APENAS message ao utilizador; se pedirem PDF, use get_nfe_pdf / send_nfe_whatsapp ou aguarde envio automático.';
 
 /**
  * Mensagem amigável para erros técnicos de emissão NFS-e (WhatsApp).
