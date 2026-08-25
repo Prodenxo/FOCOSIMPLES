@@ -68,7 +68,12 @@ import {
 import { resolveFiscalTenantId, isEmpresaUuid } from '../lib/resolve-fiscal-tenant-id.js';
 import { calculateItemsTax } from './tax.service.js';
 import { resolveUserEmpresaContext } from './certificate-repository.js';
+import { getEmitenteNfseSnapshot } from './mei-certificate-store.js';
 import { validateNfeLikePayload } from '../lib/nfe-like-payload-validate.js';
+import {
+  emitenteHasNfeTaxUf,
+  mapNfeEmitenteEnderecoFromCertificateSnapshot,
+} from '../lib/nfe-emitente-endereco.js';
 import { triggerNfeEmissionShadowComparisonAfterSuccess } from '../fiscal-engine/shadow/nfe-emission-shadow-hook.js';
 import { isEmissionEligibleForShadowObservation } from '../fiscal-engine/shadow/shadow-emission-confirmation-policy.js';
 import { reconcileShadowLedgerOnMeiNotaStatusChange } from '../fiscal-engine/shadow/shadow-ledger-reconciliation.js';
@@ -2155,11 +2160,18 @@ export const emitirNota = async (userId, input) => {
           const emitenteCnpj = String(
             emitenteRaw.cpfCnpj ?? emitenteRaw.cnpj ?? cnpj ?? '',
           ).replace(/\D/g, '');
+          let emitenteEndereco = emitenteRaw.endereco;
+          if (!emitenteHasNfeTaxUf({ ...emitenteRaw, endereco: emitenteEndereco })) {
+            const snap = await getEmitenteNfseSnapshot(userId);
+            const fromSnap = mapNfeEmitenteEnderecoFromCertificateSnapshot(snap);
+            if (fromSnap) emitenteEndereco = fromSnap;
+          }
           const commercialHydrated = {
             ...commercial,
             emitente: {
               ...emitenteRaw,
               ...(emitenteCnpj.length === 14 ? { cpfCnpj: emitenteCnpj } : {}),
+              ...(emitenteEndereco ? { endereco: emitenteEndereco } : {}),
               crt: emitenteRaw.crt ?? emitenteRaw.CRT ?? 1,
             },
           };

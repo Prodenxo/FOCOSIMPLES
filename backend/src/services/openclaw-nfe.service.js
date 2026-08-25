@@ -694,6 +694,8 @@ export const buildOpenclawNfeEmitInput = async (userId, payload = {}) => {
     emitente: {
       cpfCnpj: prestador.prestadorCpfCnpj,
       razaoSocial: prestador.prestadorRazaoSocial,
+      endereco: prestador.prestadorEndereco,
+      crt: 1,
       ...(emitente.inscricaoEstadual
         ? { inscricaoEstadual: String(emitente.inscricaoEstadual).trim() }
         : {}),
@@ -708,6 +710,7 @@ export const buildOpenclawNfeEmitInput = async (userId, payload = {}) => {
     consumidorFinal: destinatario.consumidorFinal,
     itens: [item],
     pagamentos: [{ meio: '99', valor: total, descricaoMeio: 'Outros' }],
+    config: { producao: true },
     metadata: {
       source: 'openclaw_whatsapp',
       catalogoProdutoId: produto.id,

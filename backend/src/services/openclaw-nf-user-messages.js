@@ -137,7 +137,10 @@ export const formatNfeEmitErrorForUser = (rawMessage = '', context = {}) => {
       hints.push('Sua empresa pode não ter NF-e activa no Plugnotas — verifique em Certificado → Empresa.');
     }
     hints.push(
-      'Confira CPF/CNPJ, endereço completo do cliente (CEP, cidade, UF), NCM e valor do produto.',
+      'Confira CPF/CNPJ, endereço completo do cliente (CEP, cidade, UF, IBGE), NCM e valor do produto.',
+    );
+    hints.push(
+      'Em vendas para outro estado, o CFOP deve ser interestadual (ex.: 6108) — confira se o cliente está noutro UF que o emitente.',
     );
     hints.push('Se persistir, emita pelo app Foco Simples → Notas.');
     return hints.join(' ');
