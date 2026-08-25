@@ -614,17 +614,36 @@ const resolveDestinatarioNfe = async (userId, payload) => {
   });
 
   const { listarCatalogoClientes } = await import('./mei-notas.service.js');
-  const clientes = await listarCatalogoClientes(userId, {
-    q: tomador.tomadorCpfCnpj,
-    limit: 5,
-    documentType: 'NFE',
-  });
-  const catalogo = (clientes || []).find(
-    (c) => normalizeDoc(c.documento) === tomador.tomadorCpfCnpj,
-  );
+  const docTomador = tomador.tomadorCpfCnpj;
+  let catalogo = null;
+
+  if (docTomador) {
+    const clientes = await listarCatalogoClientes(userId, {
+      q: docTomador,
+      limit: 5,
+      documentType: 'NFE',
+    });
+    catalogo = (clientes || []).find(
+      (c) => normalizeDoc(c.documento) === docTomador,
+    );
+    if (!catalogo) {
+      const all = await listarCatalogoClientes(userId, { limit: 100, documentType: 'NFE' });
+      catalogo = (all || []).find(
+        (c) => normalizeDoc(c.documento) === docTomador,
+      );
+    }
+  }
+
+  if (!catalogo && tomador.tomadorRazaoSocial) {
+    const nomeNorm = normalizeCatalogDiscriminacao(tomador.tomadorRazaoSocial);
+    const all = await listarCatalogoClientes(userId, { limit: 100, documentType: 'NFE' });
+    catalogo = (all || []).find(
+      (c) => normalizeCatalogDiscriminacao(c.nome) === nomeNorm,
+    );
+  }
 
   let endereco = toObject(catalogo?.metadata_json?.endereco);
-  if (!hasCompleteNfeEndereco(endereco) && tomador.tomadorCpfCnpj.length === 14) {
+  if (!hasCompleteNfeEndereco(endereco) && docTomador.length === 14) {
     try {
       const lookup = await lookupCnpjBrasilApi(tomador.tomadorCpfCnpj);
       const fromLookup = enderecoFromCnpjLookup(lookup);

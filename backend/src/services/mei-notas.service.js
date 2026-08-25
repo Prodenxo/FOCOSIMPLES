@@ -591,6 +591,29 @@ const buildPayloadFromInput = (input, userId) => {
   return { payload, prestadorDoc, tomadorDoc };
 };
 
+const computeNfeItensTotal = (itens) => {
+  if (!Array.isArray(itens)) return 0;
+  return itens.reduce((acc, item) => {
+    const qtd = extractNfeItemQuantidade(item);
+    const vu = extractNfeItemValorUnitario(item);
+    const direct = Number(item?.valor);
+    const line = Number.isFinite(direct) && direct > 0
+      ? direct
+      : (qtd != null && vu != null && qtd > 0 && vu > 0 ? qtd * vu : 0);
+    return acc + line;
+  }, 0);
+};
+
+/** Preserva pagamentos do input ou gera meio 99 com total dos itens (exigido pela SEFAZ/Plugnotas). */
+const resolveNfePagamentosFromInput = (input, itens) => {
+  if (Array.isArray(input?.pagamentos) && input.pagamentos.length) {
+    return input.pagamentos;
+  }
+  const total = computeNfeItensTotal(itens);
+  if (total <= 0) return undefined;
+  return [{ meio: '99', valor: total, descricaoMeio: 'Outros' }];
+};
+
 const buildNfeLikePayloadFromInput = (input, userId, { defaultModel = '55' } = {}) => {
   const idIntegracao = input?.idIntegracao || buildMeiIdIntegracao(userId);
   const emitenteDoc = normalizeDoc(
@@ -609,12 +632,18 @@ const buildNfeLikePayloadFromInput = (input, userId, { defaultModel = '55' } = {
   const itensInput = Array.isArray(input?.itens)
     ? input.itens
     : (input?.item ? [input.item] : []);
+  const pagamentos = resolveNfePagamentosFromInput(input, itensInput);
+  const informacoesComplementares = String(
+    input?.informacoesComplementares || input?.observacoes || '',
+  ).trim();
 
   const payload = prune({
     idIntegracao,
     ...(input?.payload && typeof input.payload === 'object' ? input.payload : {}),
     modelo: input?.modelo || defaultModel,
     natureza: input?.natureza || input?.descricao || 'VENDA',
+    ...(input?.consumidorFinal !== undefined ? { consumidorFinal: input.consumidorFinal } : {}),
+    ...(informacoesComplementares ? { informacoesComplementares } : {}),
     emitente: prune({
       ...(input?.emitente || {}),
       cpfCnpj: emitenteDoc || input?.emitente?.cpfCnpj || null,
@@ -632,6 +661,7 @@ const buildNfeLikePayloadFromInput = (input, userId, { defaultModel = '55' } = {
       endereco: prune(input?.destinatario?.endereco || input?.destinatarioEndereco || null)
     }),
     itens: itensInput,
+    ...(pagamentos ? { pagamentos } : {}),
     ...(input?.config && typeof input.config === 'object'
       ? { config: { ...input.config } }
       : {})
@@ -643,6 +673,8 @@ const buildNfeLikePayloadFromInput = (input, userId, { defaultModel = '55' } = {
 
   return { payload, prestadorDoc: emitenteDoc, tomadorDoc: destinatarioDoc };
 };
+
+export { buildNfeLikePayloadFromInput };
 
 const validatePayload = (payload) => {
   const prestadorDoc = normalizeDoc(payload?.prestador?.cpfCnpj || '');

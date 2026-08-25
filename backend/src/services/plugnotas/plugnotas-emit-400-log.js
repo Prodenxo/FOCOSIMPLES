@@ -86,9 +86,9 @@ const emit400Log = (...args) => {
  * @param {unknown} options.responseBody
  * @param {unknown} [options.body] corpo enviado no fetch (ex.: array com um documento)
  */
-export const logPlugnotasEmitir400 = ({ kind, responseBody, body }) => {
+export const logPlugnotasEmitir400 = ({ kind, responseBody, body, httpStatus = 400 }) => {
   const prefix = `[emissao-fiscal ${kind}]`;
-  emit400Log(`${prefix} 400 response:`, JSON.stringify(responseBody));
+  emit400Log(`${prefix} ${httpStatus} response:`, JSON.stringify(responseBody));
   const idIntegracao = pickIdIntegracao(body);
   if (idIntegracao) {
     emit400Log(`${prefix} 400 idIntegracao:`, idIntegracao);
@@ -114,8 +114,8 @@ export const resolvePlugnotasRequestJsonError = async (response, { kind, body })
     responseBody = await response.text();
   }
   const message = messageFromPlugnotasParsedBody(responseBody, response.statusText);
-  if (response.status === 400) {
-    logPlugnotasEmitir400({ kind, responseBody, body });
+  if (response.status === 400 || response.status >= 500) {
+    logPlugnotasEmitir400({ kind, responseBody, body, httpStatus: response.status });
   }
   return message;
 };
