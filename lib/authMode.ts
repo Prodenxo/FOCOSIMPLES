@@ -1,4 +1,5 @@
 import { getMeiApiBaseUrl, getPublicEnv } from './runtimeEnv';
+import { getLocalAccessToken } from './localAuthSession';
 import { isSupabaseConfigured } from './supabase';
 
 /**
@@ -11,6 +12,17 @@ export function isLocalApiAuthMode(): boolean {
   if (flag === 'local') return true;
   if (flag === 'supabase') return false;
   return Boolean(getMeiApiBaseUrl()) && !isSupabaseConfigured();
+}
+
+/**
+ * Lançamentos/saldo: usar API do backend (Postgres) em vez de supabase.from().
+ * Cobre login local mesmo quando EXPO_PUBLIC_SUPABASE_* ainda está no env.
+ */
+export async function prefersBackendTransactionsApi(): Promise<boolean> {
+  if (isLocalApiAuthMode()) return true;
+  if (!getMeiApiBaseUrl()) return false;
+  const localToken = await getLocalAccessToken();
+  return Boolean(localToken);
 }
 
 /** App pode abrir: Supabase clássico OU Auth local + API. */

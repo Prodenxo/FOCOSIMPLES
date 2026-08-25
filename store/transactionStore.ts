@@ -5,7 +5,7 @@ import { useRecorrenciaStore } from './recorrenciaStore';
 import { createCalendarEvent } from '../lib/google-calendar';
 import { getErrorMessage } from '../lib/errors';
 import { apiClient } from '../lib/apiClient';
-import { isLocalApiAuthMode } from '../lib/authMode';
+import { isLocalApiAuthMode, prefersBackendTransactionsApi } from '../lib/authMode';
 
 interface Transaction {
   id: string; // UUID no Supabase
@@ -76,7 +76,8 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       let data: Record<string, unknown>[] | null = null;
-      if (isLocalApiAuthMode()) {
+      const useBackendApi = await prefersBackendTransactionsApi();
+      if (useBackendApi) {
         data = await apiClient.get<Record<string, unknown>[]>('/transactions');
       } else {
         const res = await supabase

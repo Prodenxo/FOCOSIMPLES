@@ -37,7 +37,27 @@ openclaw channels login
 
 Restart → `/new` no WhatsApp.
 
-## 3. Z-API (painel)
+### Se `status --probe` mostrar `dm:disabled`
+
+DMs bloqueados — cola no Console:
+
+```sh
+node -e '
+const fs=require("fs");
+const p="/home/node/.openclaw/openclaw.json";
+const c=JSON.parse(fs.readFileSync(p,"utf8"));
+c.channels=c.channels||{};
+c.channels.whatsapp=c.channels.whatsapp||{};
+c.channels.whatsapp.enabled=true;
+c.channels.whatsapp.dmPolicy="open";
+c.channels.whatsapp.allowFrom=["*"];
+fs.writeFileSync(p,JSON.stringify(c,null,2));
+console.log("whatsapp dm:", c.channels.whatsapp);
+'
+```
+
+Restart OpenClaw → `openclaw channels status --probe` deve mostrar **`dm:open`**.
+
 
 1. Conecta o **mesmo número** (segundo QR)
 2. Webhook continua apontando pro backend (comandos admin `mf pendentes` etc.)

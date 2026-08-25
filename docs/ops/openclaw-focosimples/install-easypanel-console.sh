@@ -285,12 +285,39 @@ if(process.env.OPENCLAW_DUAL_QR==="true"){
   c.channels=c.channels||{};
   c.channels.whatsapp=c.channels.whatsapp||{};
   c.channels.whatsapp.enabled=true;
-  c.channels.whatsapp.dmPolicy=c.channels.whatsapp.dmPolicy||"open";
-  c.channels.whatsapp.allowFrom=c.channels.whatsapp.allowFrom||["*"];
-  console.log("[focosimples] channels.whatsapp activo (modo dual QR)");
+  c.channels.whatsapp.dmPolicy="open";
+  c.channels.whatsapp.allowFrom=["*"];
+  console.log("[focosimples] channels.whatsapp activo (modo dual QR, dm:open)");
 }else if(c.channels&&c.channels.whatsapp){
   delete c.channels.whatsapp;
   console.log("[focosimples] channels.whatsapp removido (use Z-API + /hooks/agent)");
+}
+const groqKey=(process.env.GROQ_API_KEY||"").trim();
+const openaiKey=(process.env.OPENAI_API_KEY||"").trim();
+if(groqKey||openaiKey){
+  c.tools.media=c.tools.media||{};
+  c.tools.media.audio=c.tools.media.audio||{};
+  c.tools.media.audio.enabled=true;
+  c.tools.media.audio.maxBytes=20971520;
+  if(groqKey){
+    c.tools.media.audio.models=[{
+      provider:"groq",
+      model:"whisper-large-v3",
+      baseUrl:"https://api.groq.com/openai/v1",
+      capabilities:["audio"],
+      language:"pt",
+      timeoutSeconds:60
+    }];
+    console.log("[focosimples] STT audio: groq whisper-large-v3");
+  }else{
+    c.tools.media.audio.models=[{
+      provider:"openai",
+      model:"gpt-4o-mini-transcribe",
+      capabilities:["audio"],
+      language:"pt"
+    }];
+    console.log("[focosimples] STT audio: openai gpt-4o-mini-transcribe");
+  }
 }
 fs.writeFileSync(p,JSON.stringify(c,null,2));
 console.log("[focosimples] tools.exec + hooks + bootstrapMaxChars=65000 ok");
