@@ -10,6 +10,7 @@ import {
 } from './mei-notas.service.js';
 import {
   parseValorReais,
+  pickProdutoCatalogoByIndexResult,
   pickProdutoCatalogoByNomeResult,
   resolveOpenclawTomador,
   rethrowNfseErrorForBot,
@@ -161,6 +162,34 @@ const pickProdutoNomeFromPayload = (payload) =>
     payload?.servico,
     payload?.item,
   );
+
+const pickProdutoIndiceFromPayload = (payload) =>
+  firstNonEmpty(
+    payload?.produtoIndice,
+    payload?.produtoNumero,
+    payload?.itemNumero,
+    payload?.indice,
+  );
+
+const parseProdutoIndiceFromLabel = (value) => {
+  const s = String(value || '').trim();
+  if (!/^\d{1,3}$/.test(s)) return null;
+  const index = Number(s);
+  return Number.isInteger(index) && index >= 1 ? index : null;
+};
+
+const findProdutoCatalogoNfeByNome = async (userId, nome) => {
+  const q = String(nome || '').trim();
+  if (!q) return { kind: 'missing' };
+
+  let rows = await listOpenclawNfeProdutos(userId, { q, limit: 50 });
+  let result = pickProdutoCatalogoByNomeResult(rows, q);
+  if (result.kind === 'not_found' || result.kind === 'ambiguous') {
+    const all = await listOpenclawNfeProdutos(userId, { limit: 100 });
+    result = pickProdutoCatalogoByNomeResult(all, q);
+  }
+  return result;
+};
 
 export const listOpenclawNfeProdutos = async (userId, { q = '', limit = 20 } = {}) => {
   const rows = await listarCatalogoProdutos(userId, { q, limit, documentType: 'NFE' });
@@ -366,10 +395,11 @@ const mapCatalogProdutoToNfeItem = (produto, { quantidade, valorUnitario }) => {
 };
 
 const resolveProdutoNfe = async (userId, payload) => {
+  const catalogNfe = await listOpenclawNfeProdutos(userId, { limit: 100 });
+
   const produtoId = String(payload?.produtoId || payload?.catalogoProdutoId || '').trim();
   if (produtoId) {
-    const rows = await listOpenclawNfeProdutos(userId, { limit: 100 });
-    const found = rows.find((r) => String(r.id) === produtoId);
+    const found = catalogNfe.find((r) => String(r.id) === produtoId);
     if (!found) {
       throw badRequest('Produto não encontrado no catálogo NF-e.', {
         code: 'NFE_PRODUTO_NOT_FOUND',
@@ -379,11 +409,27 @@ const resolveProdutoNfe = async (userId, payload) => {
     return found;
   }
 
+  const produtoIndice = pickProdutoIndiceFromPayload(payload);
+  if (produtoIndice) {
+    const byIndex = pickProdutoCatalogoByIndexResult(catalogNfe, produtoIndice);
+    if (byIndex.kind === 'ok') return byIndex.produto;
+    throw badRequest(formatNfeCatalogChoiceMessage(catalogNfe), {
+      code: 'NFE_PRODUTO_NOT_FOUND',
+      produtoIndice,
+      botHint: 'Use produtoIndice (1, 2, 3…) da lista list_nfe_produtos.',
+    });
+  }
+
   const nomeRaw = pickProdutoNomeFromPayload(payload);
+  const indiceFromNome = parseProdutoIndiceFromLabel(nomeRaw);
+  if (indiceFromNome) {
+    const byIndex = pickProdutoCatalogoByIndexResult(catalogNfe, indiceFromNome);
+    if (byIndex.kind === 'ok') return byIndex.produto;
+  }
+
   const nome = isVagueNfItemLabel(nomeRaw) ? '' : nomeRaw;
 
   if (!nome) {
-    const catalogNfe = await listOpenclawNfeProdutos(userId, { limit: 20 });
     if (!catalogNfe.length) {
       throw badRequest(
         'Nenhum produto cadastrado para NF-e. Cadastre na app (MEI → Notas) ou use register_nfe_produto.',
@@ -402,19 +448,17 @@ const resolveProdutoNfe = async (userId, payload) => {
         codigo: p.codigo,
       })),
       botHint:
-        'O utilizador não disse qual produto. Liste com list_nfe_produtos e só depois preview_nfe '
-        + 'com produtoNome exato.',
+        'O utilizador não disse qual produto. Liste com list_nfe_produtos e use produtoIndice '
+        + '(número da lista) ou produtoNome exato.',
     });
   }
 
-  const rows = await listOpenclawNfeProdutos(userId, { q: nome, limit: 20 });
-  const lookup = pickProdutoCatalogoByNomeResult(rows, nome);
+  const lookup = await findProdutoCatalogoNfeByNome(userId, nome);
   if (lookup.kind === 'not_found') {
-    const catalogNfe = await listOpenclawNfeProdutos(userId, { limit: 20 });
     throw badRequest(formatNfCatalogNotFoundMessage(nome, catalogNfe, 'NFE'), {
       code: 'NFE_PRODUTO_NOT_IN_CATALOG',
       produtoNome: nome,
-      botHint: 'Liste o catálogo e espere escolha antes de preview_nfe.',
+      botHint: 'Liste o catálogo e use produtoIndice (número) ou produtoNome exato.',
     });
   }
   if (lookup.kind === 'ambiguous') {
@@ -425,7 +469,7 @@ const resolveProdutoNfe = async (userId, payload) => {
         discriminacao: p.discriminacao,
         codigo: p.codigo,
       })),
-      botHint: 'Mostre a lista numerada e peça produtoNome ou número.',
+      botHint: 'Mostre a lista numerada e use produtoIndice (1, 2, 3…) ou produtoNome exato.',
     });
   }
   return lookup.produto;

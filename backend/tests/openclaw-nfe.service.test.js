@@ -5,6 +5,10 @@ import {
   formatOpenclawCatalogServicosMessage,
   isCatalogProdutoUsableForNfe,
 } from '../src/services/openclaw-nfe.service.js';
+import {
+  pickProdutoCatalogoByIndexResult,
+  pickProdutoCatalogoByNomeResult,
+} from '../src/services/openclaw-nfse.service.js';
 
 test('isCatalogProdutoUsableForNfe — produto completo', () => {
   const ok = isCatalogProdutoUsableForNfe({
@@ -47,4 +51,28 @@ test('formatOpenclawCatalogServicosMessage — serviços NFS-e', () => {
   ]);
   assert.match(msg, /serviço\(s\) NFS-e/);
   assert.match(msg, /Manutenção/);
+});
+
+test('pickProdutoCatalogoByNomeResult — fallback catálogo completo (busca q vazia)', () => {
+  const nome = 'Camiseta masculina 100% algodão, manga curta 002';
+  const catalog = [{ id: 'p3', discriminacao: nome }];
+  const searchRows = [];
+
+  const fromSearch = pickProdutoCatalogoByNomeResult(searchRows, nome);
+  assert.equal(fromSearch.kind, 'not_found');
+
+  const fromCatalog = pickProdutoCatalogoByNomeResult(catalog, nome);
+  assert.equal(fromCatalog.kind, 'ok');
+  assert.equal(fromCatalog.produto.id, 'p3');
+});
+
+test('pickProdutoCatalogoByIndexResult — produto 3 da lista numerada', () => {
+  const catalog = [
+    { id: '1', discriminacao: 'Produto A' },
+    { id: '2', discriminacao: 'Produto B' },
+    { id: '3', discriminacao: 'Camiseta masculina 100% algodão, manga curta 002' },
+  ];
+  const result = pickProdutoCatalogoByIndexResult(catalog, 3);
+  assert.equal(result.kind, 'ok');
+  assert.equal(result.produto.id, '3');
 });

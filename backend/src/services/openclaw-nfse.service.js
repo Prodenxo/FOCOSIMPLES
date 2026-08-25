@@ -276,7 +276,7 @@ const findProdutoCatalogoByNome = async (userId, nome) => {
   return result;
 };
 
-const pickProdutoCatalogoByIndexResult = (rows, indexRaw) => {
+export const pickProdutoCatalogoByIndexResult = (rows, indexRaw) => {
   const index = Number(indexRaw);
   if (!Number.isInteger(index) || index < 1) return { kind: 'missing' };
   const list = Array.isArray(rows) ? rows : [];

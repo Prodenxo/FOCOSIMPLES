@@ -1927,7 +1927,8 @@ export const runOpenclawAction = async (input) => {
         actorContext,
         ...linkDebug,
         agentInstructions:
-          'Mostre APENAS message (lista numerada). Espere escolha do produto antes de preview_nfe.',
+          'Mostre APENAS message (lista numerada). Na preview_nfe use produtoIndice (número da lista, ex.: 3) '
+          + 'ou produtoNome exato — prefira produtoIndice quando o utilizador disser "produto 3".',
       },
     };
   }
