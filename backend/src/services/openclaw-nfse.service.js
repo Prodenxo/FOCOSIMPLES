@@ -47,6 +47,10 @@ import {
 } from './openclaw-nf-user-messages.js';
 import { lookupCnpjBrasilApi } from './cnpj-lookup.service.js';
 import { isValidCpfOrCnpj, normalizeDocDigits } from '../utils/cpf-cnpj.js';
+import {
+  buildOpenclawNfseEmitFingerprint,
+  runOpenclawEmitWithDedup,
+} from './openclaw-nf-emit-dedup.service.js';
 
 const normalizeDoc = (value) => normalizeDocDigits(value);
 
@@ -1319,7 +1323,11 @@ export const emitOpenclawNfse = async (userId, payload = {}) => {
     };
   }
 
-  const created = await emitirNota(userId, input);
+  const fingerprint = buildOpenclawNfseEmitFingerprint(userId, input);
+  const { nota: created, deduplicated } = await runOpenclawEmitWithDedup(
+    fingerprint,
+    () => emitirNota(userId, input),
+  );
   const preview = {
     documentType: 'NFSE',
     tomadorRazaoSocial: input.tomadorRazaoSocial,
@@ -1328,7 +1336,13 @@ export const emitOpenclawNfse = async (userId, payload = {}) => {
     discriminacao: input.servico.discriminacao,
     codigoServico: input.servico.codigo,
   };
-  return { nota: created, preview, requiresConfirm: false, notEmitted: false };
+  return {
+    nota: created,
+    preview,
+    requiresConfirm: false,
+    notEmitted: false,
+    deduplicated: deduplicated === true,
+  };
 };
 
 export const listOpenclawNfseNotas = async (userId, { limit = 10 } = {}) => {

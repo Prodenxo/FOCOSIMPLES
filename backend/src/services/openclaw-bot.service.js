@@ -66,6 +66,7 @@ import {
 import {
   BOT_NF_CONFIRM_INSTRUCTION,
   BOT_NF_PREVIEW_LOOP_GUARD,
+  BOT_NF_EMIT_SUCCESS_GUARD,
   buildNfConfirmRequestUserMessage,
   buildNfEmittedUserMessage,
 } from './openclaw-nf-user-messages.js';
@@ -2008,6 +2009,9 @@ export const runOpenclawAction = async (input) => {
       }
       const nota = result.nota;
       const status = nota?.status || 'processando';
+      const dedupNote = result.deduplicated
+        ? ' (chamada duplicada ignorada — mesma nota)'
+        : '';
       return {
         ok: true,
         message: buildNfEmittedUserMessage(result.preview, {
@@ -2021,11 +2025,13 @@ export const runOpenclawAction = async (input) => {
             plugnotas_id: nota?.plugnotas_id,
             document_type: nota?.document_type || 'NFE',
           },
+          deduplicated: result.deduplicated === true,
           userId,
           actorContext,
           ...linkDebug,
           agentInstructions:
-            'Nota NF-e em processamento. Repita APENAS message — não mencione payload nem confirm:true.',
+            `${BOT_NF_EMIT_SUCCESS_GUARD}${dedupNote} `
+            + 'Repita APENAS message — não mencione payload nem confirm:true.',
         },
       };
     } catch (err) {
@@ -2126,7 +2132,7 @@ export const runOpenclawAction = async (input) => {
       const autoEnabled = isOpenclawNfseAutoWhatsappEnabled();
       let autoWhatsapp = null;
 
-      if (autoEnabled && destinationPhone && nota?.id) {
+      if (autoEnabled && destinationPhone && nota?.id && !result.deduplicated) {
         await registerOpenclawNfseWhatsappDelivery(userId, nota.id, destinationPhone);
         if (pdfReady) {
           autoWhatsapp = await deliverOpenclawNfseWhatsappPdf(
@@ -2141,7 +2147,7 @@ export const runOpenclawAction = async (input) => {
       const autoFailed = ['failed', 'skipped_no_whatsapp'].includes(
         autoWhatsapp?.whatsappStatus || '',
       );
-      if (autoEnabled && nota?.id && !autoSent) {
+      if (autoEnabled && nota?.id && !autoSent && !result.deduplicated) {
         scheduleOpenclawNfseWhatsappDeliveryRetries(userId, nota.id);
       }
       const useOpenclawScriptFallback = !autoSent && (!autoEnabled || autoFailed);
@@ -2157,8 +2163,11 @@ export const runOpenclawAction = async (input) => {
       });
 
       let agentInstructions =
-        'Repita APENAS o campo message ao utilizador. PROIBIDO mencionar payload, confirm:true ou ações técnicas.';
-      if (autoSent) {
+        `${BOT_NF_EMIT_SUCCESS_GUARD} `
+        + 'Repita APENAS o campo message ao utilizador. PROIBIDO mencionar payload, confirm:true ou ações técnicas.';
+      if (result.deduplicated) {
+        agentInstructions += ' Chamada duplicada ignorada — mesma nota.';
+      } else if (autoSent) {
         agentInstructions += ' PDF já enviado no WhatsApp — não peça confirmação nem script.';
       } else if (autoEnabled) {
         agentInstructions += ' O PDF será enviado automaticamente — não peça mf-nfse-send.sh ao utilizador.';
@@ -2187,7 +2196,8 @@ export const runOpenclawAction = async (input) => {
             }
             : null,
           pdfWhatsappAlreadySent: autoSent,
-          doNotRunNfseSendScript: autoSent || (autoEnabled && !autoFailed),
+          deduplicated: result.deduplicated === true,
+          doNotRunNfseSendScript: autoSent || (autoEnabled && !autoFailed) || result.deduplicated,
           userId,
           actorContext,
           ...linkDebug,

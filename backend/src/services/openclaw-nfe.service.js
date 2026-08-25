@@ -31,7 +31,12 @@ import {
   formatNfCatalogNotFoundMessage,
   formatNfeEmitErrorForUser,
   BOT_NF_EMIT_FAILED_INSTRUCTION,
+  BOT_NF_EMIT_SUCCESS_GUARD,
 } from './openclaw-nf-user-messages.js';
+import {
+  buildOpenclawNfeEmitFingerprint,
+  runOpenclawEmitWithDedup,
+} from './openclaw-nf-emit-dedup.service.js';
 
 const normalizeDoc = (value) => normalizeDocDigits(value);
 
@@ -803,7 +808,11 @@ export const emitOpenclawNfe = async (userId, payload = {}) => {
     };
   }
 
-  const created = await emitirNota(userId, input);
+  const fingerprint = buildOpenclawNfeEmitFingerprint(userId, input);
+  const { nota: created, deduplicated } = await runOpenclawEmitWithDedup(
+    fingerprint,
+    () => emitirNota(userId, input),
+  );
   const item = input.itens[0];
   const preview = {
     documentType: 'NFE',
@@ -813,7 +822,13 @@ export const emitOpenclawNfe = async (userId, payload = {}) => {
     produtoCodigo: item.codigo,
     valorTotal: item.valor,
   };
-  return { nota: created, preview, requiresConfirm: false, notEmitted: false };
+  return {
+    nota: created,
+    preview,
+    requiresConfirm: false,
+    notEmitted: false,
+    deduplicated: deduplicated === true,
+  };
 };
 
 export const rethrowNfeErrorForBot = (err) => {

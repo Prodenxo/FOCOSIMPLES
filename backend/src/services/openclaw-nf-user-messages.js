@@ -95,7 +95,13 @@ export const BOT_NF_EMIT_FAILED_INSTRUCTION =
   'Emissão falhou. Repita APENAS message ao utilizador (motivo em português curto). '
   + 'Se pedir para tentar de novo: emit_nfse com confirm:true e os MESMOS dados — '
   + 'PROIBIDO chamar emit_nfse sem confirm:true após falha ou confirmação. '
-  + 'AGUARDE o exec terminar antes de responder.';
+  + 'AGUARDE o exec terminar antes de responder. '
+  + 'PROIBIDO chamar emit_nfe/emit_nfse mais de uma vez para o mesmo preview confirmado.';
+
+/** Após emissão bem-sucedida — evita triplicar nota no WhatsApp. */
+export const BOT_NF_EMIT_SUCCESS_GUARD =
+  'Nota JÁ emitida nesta conversa. PROIBIDO chamar emit_nfe ou emit_nfse de novo com os mesmos dados. '
+  + 'Repita APENAS message ao utilizador; se pedirem PDF, use get_nfse_pdf ou aguarde envio automático.';
 
 /**
  * Mensagem amigável para erros técnicos de emissão NFS-e (WhatsApp).
