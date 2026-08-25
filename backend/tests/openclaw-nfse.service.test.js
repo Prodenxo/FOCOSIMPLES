@@ -126,6 +126,17 @@ test('pickProdutoCatalogoByCodigoResult — apenas código municipal', () => {
   assert.equal(r.produto.id, '1');
 });
 
+test('pickProdutoCatalogoByNomeResult — duplicatas idênticas resolvem automaticamente', () => {
+  const nome = 'Camiseta masculina 100% algodão, manga curta 002';
+  const rows = [
+    { id: '1', discriminacao: nome, codigo: 'CAM-ALG-001' },
+    { id: '2', discriminacao: nome, codigo: 'CAM-ALG-001' },
+  ];
+  const r = pickProdutoCatalogoByNomeResult(rows, nome);
+  assert.equal(r.kind, 'ok');
+  assert.equal(r.produto.id, '1');
+});
+
 test('pickProdutoCatalogoByNomeResult — descrição abreviada pelo bot', () => {
   const rows = [
     {

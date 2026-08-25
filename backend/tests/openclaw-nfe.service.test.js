@@ -76,3 +76,15 @@ test('pickProdutoCatalogoByIndexResult — produto 3 da lista numerada', () => {
   assert.equal(result.kind, 'ok');
   assert.equal(result.produto.id, '3');
 });
+
+test('pickProdutoCatalogoByNomeResult — duplicatas idênticas no catálogo', () => {
+  const nome = 'Camiseta masculina 100% algodão, manga curta 002';
+  const catalog = [
+    { id: 'a', discriminacao: nome, codigo: 'CAM-ALG-001' },
+    { id: 'b', discriminacao: nome, codigo: 'CAM-ALG-001' },
+    { id: 'c', discriminacao: nome, codigo: 'CAM-ALG-001' },
+  ];
+  const result = pickProdutoCatalogoByNomeResult(catalog, nome);
+  assert.equal(result.kind, 'ok');
+  assert.equal(result.produto.id, 'a');
+});

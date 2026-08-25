@@ -197,6 +197,14 @@ export const pickProdutoCatalogoByNomeResult = (rows, nome) => {
     (r) => normalizeCatalogDiscriminacao(r.discriminacao) === q,
   );
   if (exact.length === 1) return { kind: 'ok', produto: exact[0] };
+  if (exact.length > 1) {
+    const codigoRef = normalizeProdutoCodigoForMatch(exact[0].codigo);
+    const allIdentical = exact.every(
+      (r) => normalizeProdutoCodigoForMatch(r.codigo) === codigoRef,
+    );
+    if (allIdentical) return { kind: 'ok', produto: exact[0] };
+    return { kind: 'ambiguous', matches: exact, q: nome };
+  }
 
   const partial = list.filter((r) => {
     const n = normalizeCatalogDiscriminacao(r.discriminacao);

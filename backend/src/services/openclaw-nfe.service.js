@@ -10,6 +10,7 @@ import {
 } from './mei-notas.service.js';
 import {
   parseValorReais,
+  normalizeCatalogDiscriminacao,
   pickProdutoCatalogoByIndexResult,
   pickProdutoCatalogoByNomeResult,
   resolveOpenclawTomador,
@@ -153,6 +154,98 @@ const assertNfePermitida = async (userId) => {
   }
 };
 
+const normalizeProdutoCodigoForMatch = (value) =>
+  normalizeDoc(value) || String(value || '').replace(/\s/g, '');
+
+const CATALOG_INDICE_ORDINALS = {
+  um: 1,
+  uma: 1,
+  primeiro: 1,
+  primeira: 1,
+  dois: 2,
+  duas: 2,
+  segundo: 2,
+  segunda: 2,
+  tres: 3,
+  três: 3,
+  terceiro: 3,
+  terceira: 3,
+  quatro: 4,
+  quarto: 4,
+  quarta: 4,
+  cinco: 5,
+  seis: 6,
+  sete: 7,
+  oito: 8,
+  nove: 9,
+  dez: 10,
+};
+
+const parseProdutoIndiceFromLabel = (value) => {
+  const s = String(value || '').trim();
+  if (!/^\d{1,3}$/.test(s)) return null;
+  const index = Number(s);
+  return Number.isInteger(index) && index >= 1 ? index : null;
+};
+
+const parseOrdinalToken = (token) => {
+  const digits = parseProdutoIndiceFromLabel(token);
+  if (digits) return digits;
+  const key = String(token || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\u0300/g, '');
+  return CATALOG_INDICE_ORDINALS[key] ?? null;
+};
+
+const parseProdutoIndiceFromText = (value) => {
+  const direct = parseProdutoIndiceFromLabel(value);
+  if (direct) return direct;
+
+  const text = String(value || '').trim().toLowerCase();
+  if (!text) return null;
+
+  const produtoMatch = text.match(
+    /\b(?:produto|item|opcao|opção)\s*(?:n[úu]mero|nº|#)?\s*(\d{1,3}|[a-záéíóúãõ]+)\b/i,
+  );
+  if (produtoMatch) return parseOrdinalToken(produtoMatch[1]);
+
+  const shortMatch = text.match(/^(?:é\s+)?(?:o|a)\s+(\d{1,3}|[a-záéíóúãõ]+)$/i);
+  if (shortMatch) return parseOrdinalToken(shortMatch[1]);
+
+  return null;
+};
+
+const collectUtteranceTextValues = (payload) => {
+  const fields = [
+    payload?.transcript,
+    payload?.mensagem,
+    payload?.mensagemUsuario,
+    payload?.texto,
+    payload?.utterance,
+    payload?.userMessage,
+    payload?.produto,
+    payload?.item,
+    payload?.escolha,
+    payload?.opcao,
+  ];
+  return fields.filter((value) => typeof value === 'string' && value.trim());
+};
+
+const dedupeCatalogProdutos = (rows) => {
+  const seen = new Set();
+  return (rows || []).filter((row) => {
+    const key = [
+      normalizeCatalogDiscriminacao(row.discriminacao),
+      normalizeProdutoCodigoForMatch(row.codigo),
+    ].join('|');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
 const pickProdutoNomeFromPayload = (payload) =>
   firstNonEmpty(
     payload?.produtoNome,
@@ -163,19 +256,26 @@ const pickProdutoNomeFromPayload = (payload) =>
     payload?.item,
   );
 
-const pickProdutoIndiceFromPayload = (payload) =>
-  firstNonEmpty(
+const pickProdutoIndiceFromPayload = (payload) => {
+  const direct = firstNonEmpty(
     payload?.produtoIndice,
     payload?.produtoNumero,
     payload?.itemNumero,
     payload?.indice,
+    payload?.opcao,
+    payload?.escolha,
   );
+  if (direct != null && direct !== '') {
+    const parsed = parseOrdinalToken(direct);
+    if (parsed) return parsed;
+  }
 
-const parseProdutoIndiceFromLabel = (value) => {
-  const s = String(value || '').trim();
-  if (!/^\d{1,3}$/.test(s)) return null;
-  const index = Number(s);
-  return Number.isInteger(index) && index >= 1 ? index : null;
+  for (const text of collectUtteranceTextValues(payload)) {
+    const parsed = parseProdutoIndiceFromText(text);
+    if (parsed) return parsed;
+  }
+
+  return null;
 };
 
 const findProdutoCatalogoNfeByNome = async (userId, nome) => {
@@ -193,7 +293,7 @@ const findProdutoCatalogoNfeByNome = async (userId, nome) => {
 
 export const listOpenclawNfeProdutos = async (userId, { q = '', limit = 20 } = {}) => {
   const rows = await listarCatalogoProdutos(userId, { q, limit, documentType: 'NFE' });
-  return (rows || []).filter(isCatalogProdutoUsableForNfe);
+  return dedupeCatalogProdutos((rows || []).filter(isCatalogProdutoUsableForNfe));
 };
 
 export const formatOpenclawNfeProdutosMessage = (produtos) => {
@@ -462,6 +562,22 @@ const resolveProdutoNfe = async (userId, payload) => {
     });
   }
   if (lookup.kind === 'ambiguous') {
+    const ambIndice = parseProdutoIndiceFromText(
+      firstNonEmpty(payload?.opcao, payload?.escolha, payload?.numero, nomeRaw),
+    );
+    if (ambIndice) {
+      const byAmbIndex = pickProdutoCatalogoByIndexResult(lookup.matches, ambIndice);
+      if (byAmbIndex.kind === 'ok') return byAmbIndex.produto;
+    }
+
+    const codigoRef = normalizeProdutoCodigoForMatch(lookup.matches?.[0]?.codigo);
+    const allIdentical = (lookup.matches || []).every(
+      (row) => normalizeProdutoCodigoForMatch(row.codigo) === codigoRef
+        && normalizeCatalogDiscriminacao(row.discriminacao)
+          === normalizeCatalogDiscriminacao(lookup.matches[0].discriminacao),
+    );
+    if (allIdentical && lookup.matches?.[0]) return lookup.matches[0];
+
     throw badRequest(formatNfCatalogAmbiguousMessage(nome, lookup.matches, 'NFE'), {
       code: 'NFE_PRODUTO_AMBIGUOUS',
       matches: (lookup.matches || []).map((p) => ({
