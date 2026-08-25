@@ -26,6 +26,10 @@ export const buildNfConfirmRequestUserMessage = (preview = {}) => {
   ).trim();
   const valor = formatValorBr(preview.valorServico ?? preview.valorTotal);
   const tipo = tipoNotaLabel(preview.documentType);
+  const cfop = String(preview.cfop || '').trim();
+  const ufLinha = preview.emitenteUf && preview.destinatarioUf
+    ? `• UF: ${preview.emitenteUf} → ${preview.destinatarioUf}`
+    : '';
 
   return [
     'Resumo da nota fiscal:',
@@ -33,6 +37,8 @@ export const buildNfConfirmRequestUserMessage = (preview = {}) => {
     `• Cliente: ${cliente}`,
     `• ${preview.documentType === 'NFE' || preview.documentType === 'NFCE' ? 'Produto' : 'Serviço'}: ${item}`,
     `• Valor: ${valor}`,
+    ...(cfop ? [`• CFOP: ${cfop}`] : []),
+    ...(ufLinha ? [ufLinha] : []),
     '',
     'Posso emitir? Responda *sim* ou *confirmo* que eu envio a nota.',
   ].join('\n');

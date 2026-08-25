@@ -28,6 +28,32 @@ const toObject = (value) => {
   return value;
 };
 
+const cfopScope = (cfop) => {
+  const first = String(cfop || '').replace(/\D/g, '').slice(0, 1);
+  if (first === '5') return 'estadual';
+  if (first === '6') return 'interestadual';
+  return 'unknown';
+};
+
+const resolveMergedCfop = (accountantCfop, matrixCfop) => {
+  const accountant = String(accountantCfop || '').trim();
+  const matrix = String(matrixCfop || '').trim();
+  if (!accountant) return matrix || null;
+  if (!matrix) return accountant || null;
+
+  const accountantScope = cfopScope(accountant);
+  const matrixScope = cfopScope(matrix);
+  if (
+    accountantScope !== 'unknown'
+    && matrixScope !== 'unknown'
+    && accountantScope !== matrixScope
+  ) {
+    return matrix;
+  }
+
+  return accountant;
+};
+
 /**
  * CSOSN 500 na regra do contador só vira ST na nota se o NCM tiver ST na matriz.
  * Evita exigir CEST em produtos sem ST (ex.: camisa 61091000).
@@ -40,7 +66,7 @@ export const mergeAccountantTaxWithMatrixTax = (accountantTax, matrixTax) => {
   const csosn = isSt ? CSOSN_ST : (csosnIsSt ? CSOSN_TRIBUTADO_SN : accountantCsosn);
 
   return {
-    cfop: accountantTax?.cfop ?? matrixTax?.cfop ?? null,
+    cfop: resolveMergedCfop(accountantTax?.cfop, matrixTax?.cfop),
     csosn,
     has_st: isSt,
     cest: isSt ? (accountantTax?.cest ?? matrixTax?.cest ?? null) : null,

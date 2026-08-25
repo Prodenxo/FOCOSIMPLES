@@ -2,6 +2,10 @@ import { badRequest, forbidden } from '../utils/errors.js';
 import { isValidCpfOrCnpj, normalizeDocDigits } from '../utils/cpf-cnpj.js';
 import { getDocumentosAtivosMirror } from './mei-certificate-store.js';
 import { lookupCnpjBrasilApi } from './cnpj-lookup.service.js';
+import { enrichDestinatarioEnderecoForNfeEmit } from '../lib/nfe-destinatario-endereco.js';
+import { recalculateNfeLikePayloadTaxForEmit } from '../lib/nfe-like-payload-tax-apply.js';
+import { resolveFiscalTenantId } from '../lib/resolve-fiscal-tenant-id.js';
+import { getBusinessTypeMirror } from './empresa-business-type.service.js';
 import {
   criarCatalogoCliente,
   criarCatalogoProduto,
@@ -630,6 +634,8 @@ const resolveDestinatarioNfe = async (userId, payload) => {
     }
   }
 
+  endereco = await enrichDestinatarioEnderecoForNfeEmit(endereco);
+
   if (!hasCompleteNfeEndereco(endereco)) {
     throw badRequest('Cliente sem endereço completo para NF-e.', {
       code: 'NFE_DESTINATARIO_ENDERECO_MISSING',
@@ -656,6 +662,32 @@ const parseQuantidade = (raw) => {
   if (raw === undefined || raw === null || raw === '') return 1;
   const n = Number(String(raw).replace(',', '.'));
   return Number.isFinite(n) && n > 0 ? n : 1;
+};
+
+const recalculateOpenclawNfeTaxes = async (userId, input, catalogoProdutoId) => {
+  const businessType = await getBusinessTypeMirror(userId);
+  const tenantId = await resolveFiscalTenantId(userId, input?.metadata?.empresaId);
+  const payload = {
+    emitente: input.emitente,
+    destinatario: input.destinatario,
+    consumidorFinal: input.consumidorFinal,
+    itens: input.itens,
+    pagamentos: input.pagamentos,
+    config: input.config,
+  };
+
+  const recalculated = await recalculateNfeLikePayloadTaxForEmit(payload, {
+    businessType,
+    tenantId,
+    resolveCatalogProductId: async () => catalogoProdutoId || null,
+  });
+
+  return {
+    ...input,
+    itens: recalculated.itens ?? input.itens,
+    pagamentos: recalculated.pagamentos ?? input.pagamentos,
+    config: recalculated.config ?? input.config,
+  };
 };
 
 /**
@@ -689,7 +721,7 @@ export const buildOpenclawNfeEmitInput = async (userId, payload = {}) => {
   });
   const total = item.valor;
 
-  return {
+  const baseInput = {
     documentType: 'NFE',
     emitente: {
       cpfCnpj: prestador.prestadorCpfCnpj,
@@ -717,6 +749,8 @@ export const buildOpenclawNfeEmitInput = async (userId, payload = {}) => {
       catalogoClienteId: destinatario.catalogoClienteId,
     },
   };
+
+  return recalculateOpenclawNfeTaxes(userId, baseInput, produto.id);
 };
 
 export const previewOpenclawNfeEmit = async (userId, payload = {}) => {
@@ -730,6 +764,8 @@ export const previewOpenclawNfeEmit = async (userId, payload = {}) => {
     produtoCodigo: item.codigo,
     ncm: item.ncm,
     cfop: item.cfop,
+    destinatarioUf: input.destinatario?.endereco?.estado,
+    emitenteUf: input.emitente?.endereco?.estado,
     quantidade: item.quantidade?.comercial,
     valorUnitario: item.valorUnitario?.comercial,
     valorTotal: item.valor,
