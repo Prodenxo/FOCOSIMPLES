@@ -10,6 +10,9 @@ import {
 import {
   PLUGNOTAS_REGIME_ESPECIAL_MEI,
 } from './plugnotas-mei-empresa-policy.js';
+import {
+  extractDocumentosAtivosFromEmpresaResponse,
+} from './plugnotas-empresa-documentos-ativos.js';
 import { env } from '../../config/env.js';
 import { normalizeCertificadoIdCandidate } from './plugnotas-certificado-listagem-parse.js';
 
@@ -25,6 +28,33 @@ const toObject = (value) => (
 
 const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
 
+/** @internal — injecção para testes */
+export let plugnotasNfeEmitPrepDeps = {
+  consultarEmpresaPlugNotas,
+  atualizarEmpresaPlugNotas,
+  resolverCertificadoIdPorCnpj,
+  vincularCertificadoEmpresaPlugNotas,
+};
+
+export const configurePlugnotasNfeEmitPrepDeps = (deps = {}) => {
+  plugnotasNfeEmitPrepDeps = {
+    consultarEmpresaPlugNotas: deps.consultarEmpresaPlugNotas ?? consultarEmpresaPlugNotas,
+    atualizarEmpresaPlugNotas: deps.atualizarEmpresaPlugNotas ?? atualizarEmpresaPlugNotas,
+    resolverCertificadoIdPorCnpj: deps.resolverCertificadoIdPorCnpj ?? resolverCertificadoIdPorCnpj,
+    vincularCertificadoEmpresaPlugNotas:
+      deps.vincularCertificadoEmpresaPlugNotas ?? vincularCertificadoEmpresaPlugNotas,
+  };
+};
+
+export const resetPlugnotasNfeEmitPrepDeps = () => {
+  plugnotasNfeEmitPrepDeps = {
+    consultarEmpresaPlugNotas,
+    atualizarEmpresaPlugNotas,
+    resolverCertificadoIdPorCnpj,
+    vincularCertificadoEmpresaPlugNotas,
+  };
+};
+
 const isFocoSimplesProduct = () =>
   String(env.APP_PRODUCT || '').trim().toLowerCase() === 'focosimples';
 
@@ -37,6 +67,64 @@ export const isMeiNfeEmitForceEnabled = () => {
 const empresaPrecisaVersaoEsquemaMei = (empresa) => {
   const versao = String(empresa?.nfe?.config?.versaoEsquema || '').trim();
   return versao !== PLUGNOTAS_NFE_VERSAO_ESQUEMA_MEI;
+};
+
+const isNfeBlockAtivo = (empresa) => toObject(empresa?.nfe).ativo === true;
+
+/**
+ * Garante bloco NF-e activo no cadastro Plugnotas antes de POST /nfe.
+ * Empresas cadastradas só com NFS-e (default histórico) falham com erro genérico da Plugnotas.
+ * @param {string} cnpj
+ * @param {Record<string, unknown>} empresa
+ */
+const ensureEmpresaPlugnotasNfeAtivoForEmit = async (cnpj, empresa) => {
+  if (isNfeBlockAtivo(empresa)) return empresa;
+
+  const current = extractDocumentosAtivosFromEmpresaResponse(empresa)
+    || { nfse: true, nfe: false, nfce: false };
+  const certId = readCertificadoIdFromEmpresa(empresa)
+    || await plugnotasNfeEmitPrepDeps.resolverCertificadoIdPorCnpj(cnpj);
+
+  try {
+    await plugnotasNfeEmitPrepDeps.atualizarEmpresaPlugNotas({
+      cpfCnpj: cnpj,
+      ...(certId ? { certificado: certId } : {}),
+      documentosAtivos: {
+        nfse: current.nfse,
+        nfe: true,
+        nfce: current.nfce,
+      },
+    });
+    const refreshed = unwrapPlugnotasEmpresaRecord(
+      await plugnotasNfeEmitPrepDeps.consultarEmpresaPlugNotas(cnpj),
+    ) || empresa;
+    if (!isNfeBlockAtivo(refreshed)) {
+      throw badRequest(
+        'NF-e não está activa no emissor fiscal. Abra Certificado → Empresa na app e active NF-e antes de emitir.',
+        {
+          code: 'NFE_PLUGNOTAS_INACTIVE',
+          botHint:
+            'Peça ao utilizador abrir Foco Simples → Certificado → Empresa, marcar NF-e e gravar. '
+            + 'Depois tente emit_nfe de novo com confirm:true.',
+        },
+      );
+    }
+    return refreshed;
+  } catch (error) {
+    if (error?.errors?.code === 'NFE_PLUGNOTAS_INACTIVE') throw error;
+    console.warn('[plugnotas] falha ao activar NF-e antes da emissão', {
+      cnpj14: `${cnpj.slice(0, 4)}***${cnpj.slice(-2)}`,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw badRequest(
+      'Não foi possível activar NF-e no emissor fiscal. Verifique certificado e cadastro da empresa na app.',
+      {
+        code: 'NFE_PLUGNOTAS_ACTIVATE_FAILED',
+        botHint:
+          'Oriente Certificado → Empresa (certificado .pfx + NF-e activa). Não volte ao preview — só repita emit após corrigir.',
+      },
+    );
+  }
 };
 
 const readCertificadoIdFromEmpresa = (empresa) => {
@@ -67,7 +155,7 @@ const readCertificadoIdFromEmpresa = (empresa) => {
  * @param {Record<string, unknown>} empresa
  */
 const ensureCertificadoVinculadoAntesNfe = async (cnpj, empresa) => {
-  const resolved = await resolverCertificadoIdPorCnpj(cnpj);
+  const resolved = await plugnotasNfeEmitPrepDeps.resolverCertificadoIdPorCnpj(cnpj);
   if (!resolved) {
     throw badRequest(
       'Certificado digital não encontrado no emissor para este CNPJ. '
@@ -80,8 +168,10 @@ const ensureCertificadoVinculadoAntesNfe = async (cnpj, empresa) => {
   if (linked === resolved) return empresa;
 
   try {
-    await vincularCertificadoEmpresaPlugNotas(cnpj, resolved, empresa);
-    return unwrapPlugnotasEmpresaRecord(await consultarEmpresaPlugNotas(cnpj)) || empresa;
+    await plugnotasNfeEmitPrepDeps.vincularCertificadoEmpresaPlugNotas(cnpj, resolved, empresa);
+    return unwrapPlugnotasEmpresaRecord(
+      await plugnotasNfeEmitPrepDeps.consultarEmpresaPlugNotas(cnpj),
+    ) || empresa;
   } catch (error) {
     console.warn('[plugnotas] falha ao vincular certificado antes da NF-e', {
       cnpj14: `${cnpj.slice(0, 4)}***${cnpj.slice(-2)}`,
@@ -104,7 +194,7 @@ export const ensureMeiNfePlugnotasCadastroBeforeEmit = async (cnpjInput) => {
   // Foco Simples: NÃO forçar regime MEI / IE ISENTO (quebra NF-e de Simples com IE real).
   if (!isFocoSimplesProduct()) {
     try {
-      const certId = await resolverCertificadoIdPorCnpj(cnpj);
+      const certId = await plugnotasNfeEmitPrepDeps.resolverCertificadoIdPorCnpj(cnpj);
       await ensureMeiRegimeEspecialPlugnotasEmpresa(cnpj, certId);
     } catch (error) {
       console.warn('[plugnotas] falha ao garantir regime MEI antes da NF-e', {
@@ -116,13 +206,14 @@ export const ensureMeiNfePlugnotasCadastroBeforeEmit = async (cnpjInput) => {
 
   let empresaJson;
   try {
-    empresaJson = await consultarEmpresaPlugNotas(cnpj);
+    empresaJson = await plugnotasNfeEmitPrepDeps.consultarEmpresaPlugNotas(cnpj);
   } catch {
     return null;
   }
 
   let empresa = unwrapPlugnotasEmpresaRecord(empresaJson) || {};
   empresa = await ensureCertificadoVinculadoAntesNfe(cnpj, empresa);
+  empresa = await ensureEmpresaPlugnotasNfeAtivoForEmit(cnpj, empresa);
 
   // Versão de esquema MEI (CRT 4) só no produto MEI.
   if (isFocoSimplesProduct() || !empresaPrecisaVersaoEsquemaMei(empresa)) {
@@ -133,8 +224,8 @@ export const ensureMeiNfePlugnotasCadastroBeforeEmit = async (cnpjInput) => {
     const nfe = toObject(empresa.nfe);
     const config = toObject(nfe.config);
     const certId = readCertificadoIdFromEmpresa(empresa)
-      || await resolverCertificadoIdPorCnpj(cnpj);
-    await atualizarEmpresaPlugNotas({
+      || await plugnotasNfeEmitPrepDeps.resolverCertificadoIdPorCnpj(cnpj);
+    await plugnotasNfeEmitPrepDeps.atualizarEmpresaPlugNotas({
       cpfCnpj: cnpj,
       ...(certId ? { certificado: certId } : {}),
       regimeTributario: 1,
@@ -151,7 +242,9 @@ export const ensureMeiNfePlugnotasCadastroBeforeEmit = async (cnpjInput) => {
       },
       nfce: empresa.nfce,
     });
-    return unwrapPlugnotasEmpresaRecord(await consultarEmpresaPlugNotas(cnpj)) || empresa;
+    return unwrapPlugnotasEmpresaRecord(
+      await plugnotasNfeEmitPrepDeps.consultarEmpresaPlugNotas(cnpj),
+    ) || empresa;
   } catch (error) {
     console.warn('[plugnotas] falha ao aplicar versaoEsquema MEI antes da NF-e', {
       cnpj14: `${cnpj.slice(0, 4)}***${cnpj.slice(-2)}`,

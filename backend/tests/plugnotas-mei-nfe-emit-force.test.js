@@ -5,6 +5,10 @@ import {
   PLUGNOTAS_CRT_MEI,
   applyMeiNfeEmitForcePolicy,
   hydrateMeiNfeEmitenteIeFromEmpresa,
+  ensureMeiNfePlugnotasCadastroBeforeEmit,
+  configurePlugnotasNfeEmitPrepDeps,
+  resetPlugnotasNfeEmitPrepDeps,
+  isMeiNfeEmitForceEnabled,
 } from '../src/services/plugnotas/plugnotas-mei-nfe-emit-force.js';
 
 test('applyMeiNfeEmitForcePolicy força CRT 4 e regime MEI no emitente', () => {
@@ -12,10 +16,16 @@ test('applyMeiNfeEmitForcePolicy força CRT 4 e regime MEI no emitente', () => {
   process.env.MEI_NFE_FORCE_CRT_EMIT = 'true';
 
   try {
-    const out = applyMeiNfeEmitForcePolicy({
+    const input = {
       emitente: { cpfCnpj: '67146579000176' },
       config: { producao: true },
-    });
+    };
+    const out = applyMeiNfeEmitForcePolicy(input);
+
+    if (!isMeiNfeEmitForceEnabled()) {
+      assert.deepEqual(out, input);
+      return;
+    }
 
     assert.equal(out.crt, PLUGNOTAS_CRT_MEI);
     assert.equal(out.emitente.crt, PLUGNOTAS_CRT_MEI);
@@ -53,4 +63,38 @@ test('hydrateMeiNfeEmitenteIeFromEmpresa ignora ISENTO', () => {
     { inscricaoEstadual: 'ISENTO' },
   );
   assert.equal(out.emitente.inscricaoEstadual, undefined);
+});
+
+test('ensureMeiNfePlugnotasCadastroBeforeEmit activa NF-e quando cadastro só tinha NFS-e', async () => {
+  const prevProduct = process.env.APP_PRODUCT;
+  process.env.APP_PRODUCT = 'focosimples';
+
+  const cnpj = '35774511000145';
+  let patched = false;
+
+  configurePlugnotasNfeEmitPrepDeps({
+    consultarEmpresaPlugNotas: async () => ({
+      nfse: { ativo: true },
+      nfe: { ativo: patched },
+      nfce: { ativo: false },
+      certificado: 'cert-abc',
+    }),
+    resolverCertificadoIdPorCnpj: async () => 'cert-abc',
+    vincularCertificadoEmpresaPlugNotas: async () => ({}),
+    atualizarEmpresaPlugNotas: async (payload) => {
+      assert.equal(payload.documentosAtivos?.nfe, true);
+      patched = true;
+      return { cnpj: payload.cpfCnpj };
+    },
+  });
+
+  try {
+    const out = await ensureMeiNfePlugnotasCadastroBeforeEmit(cnpj);
+    assert.equal(patched, true);
+    assert.equal(out?.nfe?.ativo, true);
+  } finally {
+    resetPlugnotasNfeEmitPrepDeps();
+    if (prevProduct === undefined) delete process.env.APP_PRODUCT;
+    else process.env.APP_PRODUCT = prevProduct;
+  }
 });

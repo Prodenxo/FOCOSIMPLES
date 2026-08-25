@@ -113,6 +113,46 @@ export const formatNfseEmitErrorForUser = (rawMessage = '') => {
   return msg || 'Não foi possível emitir a nota fiscal agora. Tente de novo em instantes.';
 };
 
+/**
+ * Mensagem amigável para erros de emissão NF-e (WhatsApp / OpenClaw).
+ * @param {string} rawMessage
+ * @param {{ nfeAtivo?: boolean }} [context]
+ */
+export const formatNfeEmitErrorForUser = (rawMessage = '', context = {}) => {
+  const msg = String(rawMessage || '').trim();
+  const lower = msg.toLowerCase();
+
+  if (/nfe.*n[aã]o est[aá] activ|nfe_plugnotas_inactive|nfe_plugnotas_activate/i.test(lower)) {
+    return (
+      'A NF-e (produto) não está activa no emissor fiscal. '
+      + 'Abra Foco Simples → Certificado → Empresa, marque NF-e, grave o cadastro e tente emitir de novo.'
+    );
+  }
+
+  if (/erro interno/i.test(msg)) {
+    const hints = [
+      'O emissor fiscal recusou a nota com erro genérico.',
+    ];
+    if (context.nfeAtivo === false) {
+      hints.push('Sua empresa pode não ter NF-e activa no Plugnotas — verifique em Certificado → Empresa.');
+    }
+    hints.push(
+      'Confira CPF/CNPJ, endereço completo do cliente (CEP, cidade, UF), NCM e valor do produto.',
+    );
+    hints.push('Se persistir, emita pelo app Foco Simples → Notas.');
+    return hints.join(' ');
+  }
+
+  if (/certificado|plugnotas/i.test(msg)) {
+    return (
+      'Não foi possível emitir a NF-e. Verifique certificado A1 e dados fiscais '
+      + 'no app Foco Simples → Certificado → Empresa.'
+    );
+  }
+
+  return formatNfseEmitErrorForUser(msg);
+};
+
 const CONFIRM_WORDS = new Set([
   'sim',
   'confirmo',

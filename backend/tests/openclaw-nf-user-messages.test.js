@@ -5,6 +5,7 @@ import {
   buildNfEmittedUserMessage,
   formatNfseCatalogChoiceMessage,
   formatNfseEmitErrorForUser,
+  formatNfeEmitErrorForUser,
   formatValorBr,
   isNfEmitConfirmed,
   isVagueNfItemLabel,
@@ -72,6 +73,16 @@ test('formatNfseEmitErrorForUser traduz timeout PlugNotas', () => {
   assert.match(msg, /PlugNotas/i);
   assert.match(msg, /tentar de novo/i);
   assert.doesNotMatch(msg, /aborted/i);
+});
+
+test('formatNfeEmitErrorForUser expande erro interno genérico da Plugnotas', () => {
+  const msg = formatNfeEmitErrorForUser(
+    'Ocorreu um erro interno, nossa equipe já foi notificado do problema.',
+    { nfeAtivo: false },
+  );
+  assert.match(msg, /erro genérico/i);
+  assert.match(msg, /NF-e activa/i);
+  assert.match(msg, /Certificado/i);
 });
 
 test('isVagueNfItemLabel rejeita nomes genéricos do áudio', () => {

@@ -17,7 +17,15 @@ import {
   emitenteMissingAddressFields,
   emitenteToPrestadorInput,
 } from './openclaw-nfse.service.js';
-import { isNfEmitConfirmed, isVagueNfItemLabel, formatNfeCatalogChoiceMessage, formatNfCatalogAmbiguousMessage, formatNfCatalogNotFoundMessage } from './openclaw-nf-user-messages.js';
+import {
+  isNfEmitConfirmed,
+  isVagueNfItemLabel,
+  formatNfeCatalogChoiceMessage,
+  formatNfCatalogAmbiguousMessage,
+  formatNfCatalogNotFoundMessage,
+  formatNfeEmitErrorForUser,
+  BOT_NF_EMIT_FAILED_INSTRUCTION,
+} from './openclaw-nf-user-messages.js';
 
 const normalizeDoc = (value) => normalizeDocDigits(value);
 
@@ -595,13 +603,21 @@ export const rethrowNfeErrorForBot = (err) => {
     rethrowNfseErrorForBot(err);
   } catch (e) {
     const code = e?.errors?.code || e?.code;
-    const botHint = e?.errors?.botHint || e?.botHint;
-    if (botHint) throw e;
-    const msg = String(e?.message || '');
-    if (/NF-e|NFE|produto|destinatário/i.test(msg)) {
-      throw badRequest(msg, {
+    const existingHint = e?.errors?.botHint || e?.botHint;
+    const rawMsg = String(e?.message || '');
+    const userMessage = formatNfeEmitErrorForUser(rawMsg, {
+      nfeAtivo: e?.errors?.nfeAtivo,
+    });
+    const loopGuard = `${BOT_NF_EMIT_FAILED_INSTRUCTION} ${existingHint || ''}`.trim();
+
+    if (existingHint) {
+      throw badRequest(userMessage, { code, botHint: loopGuard });
+    }
+
+    if (/NF-e|NFE|produto|destinatário|plugnotas|erro interno/i.test(rawMsg)) {
+      throw badRequest(userMessage, {
         code: code || 'NFE_OPENCLAW',
-        botHint: 'Use list_nfe_produtos, register_nfe_cliente e register_nfe_produto antes de emit_nfe.',
+        botHint: loopGuard || 'Use list_nfe_produtos, register_nfe_cliente e register_nfe_produto antes de emit_nfe.',
       });
     }
     throw e;
