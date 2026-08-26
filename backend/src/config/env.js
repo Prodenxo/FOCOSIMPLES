@@ -37,14 +37,24 @@ const DEFAULT_DEV_CORS_ORIGINS = [
 ];
 /** Origens de produto conhecidas (sempre mergeadas, mesmo com CORS_ORIGIN custom). */
 const DEFAULT_PRODUCT_CORS_ORIGINS = [
+  "https://focosimples.com.br",
+  "http://focosimples.com.br",
+  "https://www.focosimples.com.br",
   "https://focomei.com.br",
   "http://focomei.com.br",
   "https://www.focomei.com.br",
   "https://meiinfinito.com.br",
   "https://www.meiinfinito.com.br",
 ];
+const APP_PRODUCT_RAW = String(process.env.APP_PRODUCT || "focosimples")
+  .trim()
+  .toLowerCase();
+const DEFAULT_FRONTEND_URL =
+  APP_PRODUCT_RAW === "focomei"
+    ? "https://focomei.com.br"
+    : "https://focosimples.com.br";
 const DEFAULT_PROD_CORS_ORIGIN =
-  process.env.FRONTEND_URL || "https://focomei.com.br";
+  process.env.FRONTEND_URL || DEFAULT_FRONTEND_URL;
 const DEFAULT_CORS_ORIGINS =
   process.env.NODE_ENV === "development"
     ? DEFAULT_DEV_CORS_ORIGINS
@@ -119,9 +129,9 @@ export const env = {
   /** Garante tabela calendar_checklist_completions no arranque (default true). */
   CALENDAR_CHECKLIST_SCHEMA_ENSURE:
     process.env.CALENDAR_CHECKLIST_SCHEMA_ENSURE || "",
-  FRONTEND_URL: process.env.FRONTEND_URL || "https://focomei.com.br",
+  FRONTEND_URL: process.env.FRONTEND_URL || DEFAULT_FRONTEND_URL,
   /** focosimples | focomei — política de produto (notas / gates). */
-  APP_PRODUCT: String(process.env.APP_PRODUCT || "focosimples").trim().toLowerCase(),
+  APP_PRODUCT: APP_PRODUCT_RAW,
   /** Dev/local: pula checagem de optante Simples no upload de certificado (Foco Simples). */
   FOCOSIMPLES_CERT_SKIP_SIMPLES_CHECK: String(
     process.env.FOCOSIMPLES_CERT_SKIP_SIMPLES_CHECK || "",

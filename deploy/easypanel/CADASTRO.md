@@ -80,12 +80,12 @@ curl https://SUA-URL-BACKEND/health
    EXPO_PUBLIC_AUTH_MODE=local
    EXPO_PUBLIC_APP_PRODUCT=focosimples
    EXPO_PUBLIC_MEI_API_URL=https://<URL-DO-BACKEND>.easypanel.host
-   EXPO_PUBLIC_INVITE_APP_BASE_URL=https://<URL-DESTE-FRONTEND>.easypanel.host
+   EXPO_PUBLIC_INVITE_APP_BASE_URL=https://focosimples.com.br
    ```
 
    O `docker-entrypoint.sh` gera `env-config.js` na **subida** do container — URLs vão na aba **Environment**, não em Build Args.
 
-7. **Domains:** URL gerada (`*.easypanel.host`) ou `focomei.com.br` (já responde DNS).
+7. **Domains:** adicione **`focosimples.com.br`** (e opcionalmente `www.focosimples.com.br`) apontando para o serviço. Mantenha o `*.easypanel.host` para debug se quiser.
 8. **Deploy** → aguarde build (~5–10 min, `expo export` é pesado).
 9. **Teste:** abra a URL → login local → confira chamadas à API no DevTools (Network).
 
@@ -96,9 +96,9 @@ curl https://SUA-URL-BACKEND/health
 Volte em **focosimples-api → Environment** e atualize:
 
 ```env
-CORS_ORIGIN=https://URL-DO-FRONTEND,https://focomei.com.br
-FRONTEND_URL=https://URL-DO-FRONTEND
-INVITE_APP_BASE_URL=https://URL-DO-FRONTEND
+CORS_ORIGIN=https://focosimples.com.br,https://www.focosimples.com.br
+FRONTEND_URL=https://focosimples.com.br
+INVITE_APP_BASE_URL=https://focosimples.com.br
 ```
 
 **Redeploy** do backend.
