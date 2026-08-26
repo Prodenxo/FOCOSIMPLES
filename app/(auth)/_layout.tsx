@@ -15,7 +15,7 @@ export default function AuthLayout() {
   useEffect(() => {
     if (!sessionRestored || !user || isResetPasswordRoute) return;
     void (async () => {
-      const href = await resolvePostAuthHref(SCREEN_TO_HREF.MeuMei as Href);
+      const href = await resolvePostAuthHref(SCREEN_TO_HREF.Notas as Href);
       router.replace(href);
     })();
   }, [sessionRestored, user, router, isResetPasswordRoute]);

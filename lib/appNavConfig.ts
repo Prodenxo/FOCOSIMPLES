@@ -72,7 +72,7 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
     showInBottomNav: true,
   },
   {
-    screen: 'MeuMei',
+    screen: 'Notas',
     label: 'Notas',
     icon: 'briefcase-outline',
     activeIcon: 'briefcase',
@@ -96,7 +96,7 @@ export const SCREEN_TO_HREF: Record<AppScreenName, string> = {
   Categorias: '/(app)/categorias',
   Orcamentos: '/(app)/orcamentos',
   Agenda: '/(app)/agenda',
-  MeuMei: '/(app)/mei',
+  Notas: '/(app)/notas',
   Configuracoes: '/(app)/configuracoes',
 };
 
@@ -110,7 +110,8 @@ const PATH_SUFFIX_TO_SCREEN: Record<string, AppScreenName> = {
   '/categorias': 'Categorias',
   '/orcamentos': 'Orcamentos',
   '/agenda': 'Agenda',
-  '/mei': 'MeuMei',
+  '/notas': 'Notas',
+  '/mei': 'Notas',
   '/configuracoes': 'Configuracoes',
 };
 

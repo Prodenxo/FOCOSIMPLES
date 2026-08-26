@@ -32,6 +32,10 @@ import {
   DAS_PERIODO_INDISPONIVEL_HINT,
   DAS_TAB_LABEL,
   CERT_PREFILL_MISSING,
+  DAS_GUIDE_DIALOG_TITLE,
+  DAS_GUIDE_DIALOG_UPDATED,
+  dasGuideDialogTitle,
+  FISCAL_CNPJ_FIELD_LABEL,
   NOTAS_ACCESS_DENIED,
   NOTAS_AREA_SUBTITLE,
   NOTAS_AREA_TITLE,
@@ -1208,7 +1212,7 @@ function MeiScreenContent() {
             { localUri: saved.localUri, filename: saved.filename },
             {
               mimeType: 'application/pdf',
-              dialogTitle: 'Guia MEI atualizada',
+              dialogTitle: DAS_GUIDE_DIALOG_UPDATED,
               successMessage: saved.localUri
                 ? `Guia com valor atualizado salva em: ${saved.localUri}`
                 : 'Guia regenerada na Receita com valor atualizado.',
@@ -1220,7 +1224,7 @@ function MeiScreenContent() {
           });
           await presentDownloadedFile(result, {
             mimeType: 'application/pdf',
-            dialogTitle: 'Guia MEI atualizada',
+            dialogTitle: DAS_GUIDE_DIALOG_UPDATED,
             successMessage: result.localUri
               ? `Guia com valor atualizado salva em: ${result.localUri}`
               : undefined,
@@ -1231,7 +1235,7 @@ function MeiScreenContent() {
         const result = await downloadMeiGuide(normalizedCnpj, periodoApuracao, contrib);
         await presentDownloadedFile(result, {
           mimeType: 'application/pdf',
-          dialogTitle: 'Guia MEI',
+          dialogTitle: DAS_GUIDE_DIALOG_TITLE,
           successMessage: result.localUri ? `Guia salva em: ${result.localUri}` : undefined,
         });
       }
@@ -1335,7 +1339,7 @@ function MeiScreenContent() {
                 { localUri: saved.localUri, filename: saved.filename },
                 {
                   mimeType: 'application/pdf',
-                  dialogTitle: `Guia MEI ${periodoApuracao}`,
+                  dialogTitle: dasGuideDialogTitle(periodoApuracao),
                   successMessage: saved.localUri
                     ? `Período ${p.competencia} (valor atualizado): ${saved.localUri}`
                     : undefined,
@@ -1347,7 +1351,7 @@ function MeiScreenContent() {
               });
               await presentDownloadedFile(result, {
                 mimeType: 'application/pdf',
-                dialogTitle: `Guia MEI ${periodoApuracao}`,
+                dialogTitle: dasGuideDialogTitle(periodoApuracao),
                 successMessage: result.localUri
                   ? `Período ${p.competencia}: ${result.localUri}`
                   : undefined,
@@ -1357,7 +1361,7 @@ function MeiScreenContent() {
             const result = await downloadMeiGuide(normalizedCnpj, periodoApuracao, contrib);
             await presentDownloadedFile(result, {
               mimeType: 'application/pdf',
-              dialogTitle: `Guia MEI ${periodoApuracao}`,
+              dialogTitle: dasGuideDialogTitle(periodoApuracao),
               successMessage: result.localUri
                 ? `Período ${p.competencia}: ${result.localUri}`
                 : undefined,
@@ -1932,7 +1936,7 @@ function MeiScreenContent() {
       );
       await presentDownloadedFile(saved, {
         mimeType: 'application/pdf',
-        dialogTitle: 'Guia MEI',
+        dialogTitle: DAS_GUIDE_DIALOG_TITLE,
       });
       Alert.alert('Sucesso', 'PDF gerado. Abra o arquivo e confira se o nome é o seu (Fernando).');
       loadMeiPeriods({ refresh: true });
@@ -3722,6 +3726,7 @@ function MeiScreenContent() {
             onRefreshPeriods={() => void handleAtualizarPeriodosDas()}
             onOpenPgmei={() => void handleOpenPgmei()}
             portalButtonLabel={DAS_PORTAL_LABEL}
+            cnpjFieldLabel={FISCAL_CNPJ_FIELD_LABEL}
             selectedMonth={selectedMonth}
             selectedYear={selectedYear}
             onSelectPeriod={handleSelectDasPeriod}

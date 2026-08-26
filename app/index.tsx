@@ -41,7 +41,7 @@ export default function RootIndex() {
         return;
       }
       if (user) {
-        void resolvePostAuthHref(SCREEN_TO_HREF.MeuMei as Href).then((href) => {
+        void resolvePostAuthHref(SCREEN_TO_HREF.Notas as Href).then((href) => {
           router.replace(href);
         });
       }
@@ -53,7 +53,7 @@ export default function RootIndex() {
     if (!onboardingDone) {
       router.replace('/onboarding');
     } else if (user) {
-      void resolvePostAuthHref(SCREEN_TO_HREF.MeuMei as Href).then((href) => {
+      void resolvePostAuthHref(SCREEN_TO_HREF.Notas as Href).then((href) => {
         router.replace(href);
       });
     } else {

@@ -4,9 +4,9 @@ export type DestinatarioIndIeDest = '1' | '2' | '9'
 
 export const DEFAULT_DESTINATARIO_IND_IE_DEST: DestinatarioIndIeDest = '9'
 
-/** Texto de ajuda na secção de IE do destinatário (não confundir com IE do emitente MEI). */
+/** Texto de ajuda na secção de IE do destinatário (não confundir com IE do emitente). */
 export const DESTINATARIO_IE_SECTION_HINT =
-  'IE do cliente (destinatário), não a IE do seu MEI. Condomínios e consumidores = não contribuinte.'
+  'IE do cliente (destinatário), não a IE da sua empresa. Condomínios e consumidores = não contribuinte.'
 
 export const DESTINATARIO_IE_OPTIONS: ReadonlyArray<{
   value: DestinatarioIndIeDest
@@ -16,7 +16,7 @@ export const DESTINATARIO_IE_OPTIONS: ReadonlyArray<{
   {
     value: '9',
     label: 'Não contribuinte',
-    hint: 'Consumidor, condomínio ou pessoa física — não use a IE do seu MEI aqui',
+    hint: 'Consumidor, condomínio ou pessoa física — não use a IE da sua empresa aqui',
   },
   {
     value: '2',

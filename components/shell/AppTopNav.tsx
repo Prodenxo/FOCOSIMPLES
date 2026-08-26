@@ -83,7 +83,7 @@ export default function AppTopNav({
               </Pressable>
             ) : null}
             <Pressable
-              onPress={() => goTo('MeuMei')}
+              onPress={() => goTo('Notas')}
               style={({ pressed }) => [pressed && styles.pressed]}
               accessibilityRole="link"
               accessibilityLabel={`${APP_BRAND_NAME} — início`}

@@ -55,7 +55,10 @@ export function pathToExpoHref(path: string): Href {
     return '/(auth)/login' as Href
   }
 
-  const appPath = normalized.startsWith('/') ? normalized : `/${normalized}`
+  let appPath = normalized.startsWith('/') ? normalized : `/${normalized}`
+  if (appPath === '/mei' || appPath.startsWith('/mei/')) {
+    appPath = appPath.replace(/^\/mei/, '/notas')
+  }
   const href = `/(app)${appPath}`
   return (query ? `${href}?${query}` : href) as Href
 }

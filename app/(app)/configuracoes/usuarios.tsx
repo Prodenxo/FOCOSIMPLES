@@ -11,7 +11,7 @@ export default function ConfiguracoesUsuariosRoute() {
     <ManageUsersScreen
       onBack={() => goBackToSettings(router)}
       onImpersonateSuccess={() => {
-        void resolvePostAuthHref(SCREEN_TO_HREF.MeuMei as Href).then((href) => {
+        void resolvePostAuthHref(SCREEN_TO_HREF.Notas as Href).then((href) => {
           router.replace(href as never)
         })
       }}

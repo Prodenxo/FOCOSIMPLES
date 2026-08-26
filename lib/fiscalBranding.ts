@@ -35,4 +35,8 @@ export const FISCAL_SLOT_DISABLED = 'Emissão fiscal desativada';
 export const FISCAL_USER_TYPE_OTHER = 'PF / Outros';
 
 export const EMPRESA_FISCAL_SLOTS_LABEL = 'Vagas fiscais (CNPJ)';
-export const EMPRESA_NON_FISCAL_SLOTS_LABEL = 'Usuários sem emissão';
+export const DAS_GUIDE_DIALOG_TITLE = 'Guia DAS (Simples Nacional)';
+export const DAS_GUIDE_DIALOG_UPDATED = 'Guia DAS atualizada';
+export const dasGuideDialogTitle = (periodoApuracao: string) =>
+  `Guia DAS ${periodoApuracao}`;
+export const FISCAL_CNPJ_FIELD_LABEL = 'CNPJ da empresa';

@@ -3,6 +3,7 @@ import { normalizeRoleValue, type UserRole } from './auth-roles';
 import { apiClient } from './apiClient';
 import { getMeiApiBaseUrl } from './runtimeEnv';
 import { isLocalApiAuthMode } from './authMode';
+import { resolveAppOrigin } from './appOrigin';
 
 export interface ManagedUser {
   id: string;
@@ -26,6 +27,9 @@ export interface EmpresaOption {
 export function formatManageUserError(message: string): string {
   const text = message.trim();
   if (text.includes('Limite de MEI atingido')) {
+    if (resolveAppOrigin() === 'focosimples') {
+      return 'Esta empresa já atingiu o limite de vagas fiscais. Desative a emissão de outro usuário ou aumente o limite da empresa.';
+    }
     return 'Esta empresa já atingiu o limite de vagas MEI. Desative o MEI de outro usuário ou aumente o limite da empresa.';
   }
   if (text.includes('Limite de usuarios nao MEI')) {

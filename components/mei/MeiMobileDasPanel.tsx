@@ -42,6 +42,7 @@ type Props = {
   onRefreshPeriods?: () => void
   onOpenPgmei: () => void
   portalButtonLabel?: string
+  cnpjFieldLabel?: string
   selectedMonth: string
   selectedYear: number
   onSelectPeriod: (period: MeiPeriod) => void
@@ -113,6 +114,7 @@ export function MeiMobileDasPanel ({
   onRefreshPeriods,
   onOpenPgmei,
   portalButtonLabel = 'PGDAS-D',
+  cnpjFieldLabel = 'CNPJ do MEI',
   selectedMonth,
   selectedYear,
   onSelectPeriod,
@@ -161,7 +163,7 @@ export function MeiMobileDasPanel ({
     <View style={[styles.root, isWide && styles.rootWide]}>
       {!certDocumento ? (
         <View style={styles.cnpjBlock}>
-          <Text style={styles.cnpjLabel}>CNPJ do MEI</Text>
+          <Text style={styles.cnpjLabel}>{cnpjFieldLabel}</Text>
           <TextInput
             style={styles.input}
             placeholder="00.000.000/0000-00"

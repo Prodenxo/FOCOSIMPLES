@@ -117,7 +117,7 @@ export default function EmpresaCnpjOnboardingScreen () {
     const stillRequired = await isEmpresaCnpjOnboardingRequired()
     if (stillRequired) return
     const needsActivation = await shouldRequireActivationRoute()
-    router.replace((needsActivation ? ACTIVATION_ROUTE : SCREEN_TO_HREF.MeuMei) as never)
+    router.replace((needsActivation ? ACTIVATION_ROUTE : SCREEN_TO_HREF.Notas) as never)
   }, [router])
 
   useFocusEffect(

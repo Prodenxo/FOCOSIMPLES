@@ -60,7 +60,7 @@ const ALL_ITEMS: (DrawerItem<AppScreenName> & {
     label: "Agenda",
   },
   {
-    name: "MeuMei",
+    name: "Notas",
     icon: "briefcase-outline",
     activeIcon: "briefcase",
     label: "Notas",
@@ -122,7 +122,7 @@ export default function SimpleNavigator() {
   ).current;
 
   useEffect(() => {
-    if (currentScreen === "MeuMei" && !showMeiTab) {
+    if (currentScreen === "Notas" && !showMeiTab) {
       setCurrentScreen("Dashboard");
       setScreenHistory([]);
     }
@@ -157,7 +157,7 @@ export default function SimpleNavigator() {
         return <OrcamentosScreen />;
       case "Agenda":
         return <AgendaScreen />;
-      case "MeuMei":
+      case "Notas":
         return <MeiScreen />;
       case "Configuracoes":
         return <SettingsScreen />;

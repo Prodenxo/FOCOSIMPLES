@@ -3,7 +3,8 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Theme } from '../../lib/theme';
 import type { ManagedUser } from '../../lib/user-management';
-import { getInitial, avatarColor } from './UserPicker';
+import { FISCAL_SLOT_LABEL } from '../../lib/fiscalBranding';
+import { resolveAppOrigin } from '../../lib/appOrigin';
 
 interface Props {
   user: ManagedUser | null;
@@ -33,6 +34,8 @@ export function UserContextHeader({
   const display = user.displayName || user.email || user.id;
   const meta = [user.email, user.role, user.empresaName].filter(Boolean).join(' · ');
   const meiAvailable = Boolean(meiCnpj);
+  const fiscalBadgeLabel =
+    resolveAppOrigin() === 'focomei' ? 'MEI' : FISCAL_SLOT_LABEL;
 
   return (
     <View style={styles.container}>
@@ -52,7 +55,7 @@ export function UserContextHeader({
           <View style={styles.meiBadge}>
             <Ionicons name="business" size={12} color={theme.primary} />
             <Text style={styles.meiText}>
-              MEI · CNPJ {formatCnpj(meiCnpj || '')}
+              {fiscalBadgeLabel} · CNPJ {formatCnpj(meiCnpj || '')}
               {certificateLabel ? ` · Certificado: ${certificateLabel}` : ''}
               {meiValidityLabel ? ` · ${meiValidityLabel}` : ''}
             </Text>
