@@ -1,3 +1,4 @@
+import { env } from '../config/env.js';
 import { getServiceRoleClient } from '../config/supabase.js';
 import { query } from '../config/pg.js';
 import { badRequest } from '../utils/errors.js';
@@ -28,6 +29,19 @@ const normalizeSignupMode = (value) => {
   return 'self_serve';
 };
 
+const isFocoSimplesProduct = () =>
+  String(env.APP_PRODUCT || 'focosimples').trim().toLowerCase() === 'focosimples';
+
+/** Foco Simples: cadastro liberado na hora (sem fila manual). */
+const shouldAutoApproveSignup = (body = {}, originMeta = {}) => {
+  if (isFocoSimplesProduct()) return true;
+  const origin = String(originMeta?.app_origin ?? body?.appOrigin ?? body?.app_origin ?? '')
+    .trim()
+    .toLowerCase();
+  if (origin === 'focosimples') return true;
+  return normalizeSignupMode(body.signupMode ?? body.mode) !== 'manual_approval';
+};
+
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 
 const resolveAdminRoleIdPg = async () => {
@@ -45,8 +59,9 @@ const submitSelfServeEmpresaSignupLocal = async (body = {}, originMeta = {}) => 
   const user = body.user ?? {};
   const empresaInput = body.empresa ?? {};
   const observacao = normalizeText(body.observacao);
-  const signupMode = normalizeSignupMode(body.signupMode ?? body.mode);
-  const isManualApproval = signupMode === 'manual_approval';
+  const autoApprove = shouldAutoApproveSignup(body, originMeta);
+  const signupMode = autoApprove ? 'self_serve' : normalizeSignupMode(body.signupMode ?? body.mode);
+  const isManualApproval = !autoApprove && signupMode === 'manual_approval';
 
   const email = normalizeEmail(user.email);
   const password = String(user.password || '').trim();
@@ -187,8 +202,9 @@ export const submitSelfServeEmpresaSignup = async (body = {}, originMeta = {}) =
   const user = body.user ?? {};
   const empresaInput = body.empresa ?? {};
   const observacao = normalizeText(body.observacao);
-  const signupMode = normalizeSignupMode(body.signupMode ?? body.mode);
-  const isManualApproval = signupMode === 'manual_approval';
+  const autoApprove = shouldAutoApproveSignup(body, originMeta);
+  const signupMode = autoApprove ? 'self_serve' : normalizeSignupMode(body.signupMode ?? body.mode);
+  const isManualApproval = !autoApprove && signupMode === 'manual_approval';
 
   const email = normalizeText(user.email)?.toLowerCase();
   const password = String(user.password || '').trim();
@@ -356,7 +372,7 @@ export const unlockPendingSelfServeSignup = async (userId) => {
       [id],
     );
     const signupMode = normalizeSignupMode(userRows[0]?.raw_user_meta_data?.signup_mode);
-    if (signupMode === 'manual_approval') {
+    if (signupMode === 'manual_approval' && !isFocoSimplesProduct()) {
       return {
         unlocked: false,
         reason: 'manual_approval',
@@ -406,7 +422,7 @@ export const unlockPendingSelfServeSignup = async (userId) => {
   const signupMode = normalizeSignupMode(
     authData?.user?.user_metadata?.signup_mode,
   );
-  if (signupMode === 'manual_approval') {
+  if (signupMode === 'manual_approval' && !isFocoSimplesProduct()) {
     return {
       unlocked: false,
       reason: 'manual_approval',

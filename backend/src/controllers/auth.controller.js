@@ -29,7 +29,7 @@ export const registerEmpresa = async (req, res, next) => {
     const result = await submitSelfServeEmpresaSignup(req.body ?? {}, originMeta);
     const message = result?.pendingApproval
       ? 'Cadastro enviado. Aguarde a análise da equipe.'
-      : 'Cadastro criado. Faça login e escolha um plano.';
+      : 'Cadastro criado com sucesso. Você já pode usar o sistema.';
     return sendCreated(res, result, message);
   } catch (error) {
     if (error?.status === 409) {

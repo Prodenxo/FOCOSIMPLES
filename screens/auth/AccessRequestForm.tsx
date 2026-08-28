@@ -234,7 +234,6 @@ export function AccessRequestForm({
       }
 
       if (onRegistered && signupMode === 'self_serve') {
-        // Self-serve: entra na conta e segue para planos / Checkout.
         await signIn(email.trim(), password);
         onRegistered();
       } else {
@@ -249,6 +248,7 @@ export function AccessRequestForm({
   };
 
   const isSelfServe = signupMode === 'self_serve' && Boolean(onRegistered);
+  const isFocoSimples = resolveAppOrigin() === 'focosimples';
 
   const successContent = (
     <View style={styles.successWrap}>
@@ -260,11 +260,13 @@ export function AccessRequestForm({
       </Text>
       <Text style={[styles.successText, { color: palette.subtitleText }]}>
         {isSelfServe
-          ? 'Sua conta foi criada. Escolha um plano MEI para liberar o acesso ao sistema.'
-          : 'Recebemos seus dados. A CF Contabilidade vai analisar e liberar o acesso. Você pode fazer login depois para acompanhar.'}
+          ? isFocoSimples
+            ? 'Sua conta foi criada. Você já pode usar o Foco Simples.'
+            : 'Sua conta foi criada. Escolha um plano para liberar o acesso ao sistema.'
+          : 'Recebemos seus dados. A equipe vai analisar e liberar o acesso. Você pode fazer login depois para acompanhar.'}
       </Text>
       <AuthButton
-        label={isSelfServe ? 'Escolher plano' : 'Ir para o login'}
+        label={isSelfServe ? (isFocoSimples ? 'Entrar no app' : 'Escolher plano') : 'Ir para o login'}
         onPress={() => (isSelfServe && onRegistered ? onRegistered() : onGoToLogin())}
         palette={palette}
       />

@@ -7,6 +7,51 @@ import { assertStrongPassword } from '../utils/passwordPolicy.js';
 const ROLE_DEFAULT = 'usuario';
 const TOKEN_TTL_SEC = 60 * 60 * 24 * 7; // 7 dias
 
+const isFocoSimplesProduct = () =>
+  String(env.APP_PRODUCT || 'focosimples').trim().toLowerCase() === 'focosimples';
+
+const resolveAdminRoleIdPg = async () => {
+  const { rows } = await query(
+    `SELECT id FROM public.roles WHERE lower(trim(roles)) = 'admin' LIMIT 1`,
+  );
+  return rows[0]?.id || null;
+};
+
+/** Contas criadas antes da auto-liberação — desbloqueia no login (Foco Simples). */
+const autoUnlockFocoSimplesPendingUser = async (userId) => {
+  if (!isFocoSimplesProduct()) return;
+
+  const { rows: linkRows } = await query(
+    `SELECT user_id, empresas_id, status
+     FROM public.role_x_user_x_empresa
+     WHERE user_id = $1
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [userId],
+  );
+  const link = linkRows[0];
+  if (!link?.empresas_id || link.status !== false) return;
+
+  const adminRoleId = await resolveAdminRoleIdPg();
+  if (!adminRoleId) return;
+
+  await query(
+    `UPDATE public.empresas SET status = 'active', requested_by = $1 WHERE id = $2`,
+    [userId, link.empresas_id],
+  );
+  await query(
+    `UPDATE public.role_x_user_x_empresa
+     SET status = true, roles_id = $1, mei = false
+     WHERE user_id = $2 AND empresas_id = $3`,
+    [adminRoleId, userId, link.empresas_id],
+  );
+  await query(
+    `INSERT INTO public.profiles (id, role) VALUES ($1, 'admin')
+     ON CONFLICT (id) DO UPDATE SET role = 'admin'`,
+    [userId],
+  );
+};
+
 const bufferToBase64Url = (buf) =>
   Buffer.from(buf)
     .toString('base64')
@@ -397,6 +442,7 @@ export const localSignIn = async ({ email, password }) => {
     throw unauthorized('Email ou senha incorretos');
   }
 
+  await autoUnlockFocoSimplesPendingUser(userRow.id);
   await ensureUserNotBlocked(userRow.id);
 
   const meta = userRow.raw_user_meta_data || {};
@@ -427,6 +473,7 @@ export const localGetSession = async (accessToken) => {
   const user = verifyLocalAccessToken(accessToken);
   if (!user) return null;
 
+  await autoUnlockFocoSimplesPendingUser(user.id);
   await ensureUserNotBlocked(user.id);
   const { role, empresaId, mei } = await getRoleAndCompany(user.id);
 
