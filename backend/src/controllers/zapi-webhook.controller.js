@@ -74,14 +74,36 @@ export const postInbound = async (req, res, next) => {
 
     let transcriptionSource = null;
     if (!parsed.text && parsed.hasAudio) {
+      const audioStatus = getWhatsappAudioTranscriptionStatus();
+      // eslint-disable-next-line no-console
+      console.info(
+        '[ZAPI] inbound áudio:',
+        parsed.phone,
+        audioStatus.enabled ? `provider=${audioStatus.provider}` : 'transcricao_desligada',
+      );
       const transcription = await transcribeZapiInboundAudio(req.body);
       if (transcription) {
         parsed = { ...parsed, text: transcription, hasAudio: true };
         transcriptionSource = 'zapi_audio_stt';
+        // eslint-disable-next-line no-console
+        console.info('[ZAPI] áudio transcrito:', parsed.phone, transcription.slice(0, 100));
       }
     }
 
     if (!parsed.text?.trim()) {
+      if (parsed.hasAudio) {
+        try {
+          await sendWhatsappMessage({
+            phone: parsed.phone,
+            message:
+              'Não consegui entender o áudio. Pode escrever o que você precisa?',
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          // eslint-disable-next-line no-console
+          console.warn('[ZAPI] aviso de áudio falhou:', msg);
+        }
+      }
       return sendSuccess(
         res,
         {

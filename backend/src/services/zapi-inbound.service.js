@@ -1,5 +1,6 @@
 import { env } from '../config/env.js';
 import { extractZapiInboundText } from './zapi-inbound-text.service.js';
+import { extractZapiAudioFromBody } from './whatsapp-audio-transcription.service.js';
 import {
   callOpenclawHookAgentSync,
   isOpenclawZapiRelaySyncEnabled,
@@ -49,11 +50,7 @@ export const parseZapiInbound = (raw) => {
 
   const text = extractZapiInboundText(body);
 
-  const hasAudio = Boolean(
-    body.audio
-    && typeof body.audio === 'object'
-    && String(/** @type {Record<string, unknown>} */ (body.audio).audioUrl || '').trim(),
-  );
+  const hasAudio = Boolean(extractZapiAudioFromBody(body));
 
   return {
     ignored: false,

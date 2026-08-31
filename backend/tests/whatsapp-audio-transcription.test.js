@@ -19,6 +19,13 @@ test('extractZapiAudioFromBody lê audioUrl do payload Z-API', () => {
   assert.equal(audio.mimeType, 'audio/ogg');
 });
 
+test('extractZapiAudioFromBody aceita audio.url', () => {
+  const audio = extractZapiAudioFromBody({
+    audio: { url: 'https://cdn.z-api.io/other.ogg' },
+  });
+  assert.equal(audio?.audioUrl, 'https://cdn.z-api.io/other.ogg');
+});
+
 test('extractZapiAudioFromBody retorna null sem áudio', () => {
   assert.equal(extractZapiAudioFromBody({ text: { message: 'oi' } }), null);
 });

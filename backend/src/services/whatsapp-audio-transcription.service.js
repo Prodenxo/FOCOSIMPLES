@@ -39,7 +39,9 @@ export const extractZapiAudioFromBody = (raw) => {
   if (!body?.audio || typeof body.audio !== 'object') return null;
 
   const audio = /** @type {Record<string, unknown>} */ (body.audio);
-  const audioUrl = String(audio.audioUrl || audio.url || '').trim();
+  const audioUrl = String(
+    audio.audioUrl || audio.url || audio.downloadUrl || audio.link || '',
+  ).trim();
   if (!audioUrl.startsWith('http')) return null;
 
   const mimeType = String(audio.mimeType || 'audio/ogg').trim() || 'audio/ogg';
@@ -73,7 +75,14 @@ const downloadZapiAudio = async (audioUrl) => {
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), DOWNLOAD_TIMEOUT_MS);
   try {
-    const res = await fetch(audioUrl, { signal: ac.signal });
+    const headers = {};
+    const clientToken = (
+      process.env.ZAPI_CLIENT_TOKEN || env.ZAPI_CLIENT_TOKEN || ''
+    ).trim();
+    if (clientToken && /z-api/i.test(audioUrl)) {
+      headers['Client-Token'] = clientToken;
+    }
+    const res = await fetch(audioUrl, { signal: ac.signal, headers });
     if (!res.ok) {
       throw new Error(`download_audio_http_${res.status}`);
     }
@@ -107,45 +116,52 @@ const transcribeWithOpenAiCompatible = async (buffer, mimeType) => {
     ? 'https://api.groq.com/openai/v1/audio/transcriptions'
     : 'https://api.openai.com/v1/audio/transcriptions';
 
-  const model = creds.provider === 'groq' ? 'whisper-large-v3' : 'gpt-4o-mini-transcribe';
+  const models = creds.provider === 'groq'
+    ? ['whisper-large-v3']
+    : ['whisper-1', 'gpt-4o-mini-transcribe'];
 
   const ext = extensionForMime(mimeType);
-  const form = new FormData();
-  form.append(
-    'file',
-    new Blob([buffer], { type: mimeType || 'audio/ogg' }),
-    `voice.${ext}`,
-  );
-  form.append('model', model);
-  form.append('language', 'pt');
-  form.append('response_format', 'json');
+  let lastError = 'transcription_failed';
 
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), TRANSCRIBE_TIMEOUT_MS);
-  try {
-    const res = await fetch(baseUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${creds.apiKey}`,
-      },
-      body: form,
-      signal: ac.signal,
-    });
-    const payload = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      const detail = typeof payload === 'object' && payload
-        ? String(payload.error?.message || payload.message || JSON.stringify(payload)).slice(0, 300)
-        : `http_${res.status}`;
-      throw new Error(`transcription_failed:${detail}`);
+  for (const model of models) {
+    const form = new FormData();
+    form.append(
+      'file',
+      new Blob([buffer], { type: mimeType.split(';')[0].trim() || 'audio/ogg' }),
+      `voice.${ext}`,
+    );
+    form.append('model', model);
+    form.append('language', 'pt');
+    form.append('response_format', 'json');
+
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), TRANSCRIBE_TIMEOUT_MS);
+    try {
+      const res = await fetch(baseUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${creds.apiKey}`,
+        },
+        body: form,
+        signal: ac.signal,
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const detail = typeof payload === 'object' && payload
+          ? String(payload.error?.message || payload.message || JSON.stringify(payload)).slice(0, 300)
+          : `http_${res.status}`;
+        lastError = `transcription_failed:${model}:${detail}`;
+        continue;
+      }
+      const text = String(payload?.text || '').trim();
+      if (text) return text;
+      lastError = `transcription_empty:${model}`;
+    } finally {
+      clearTimeout(timer);
     }
-    const text = String(payload?.text || '').trim();
-    if (!text) {
-      throw new Error('transcription_empty');
-    }
-    return text;
-  } finally {
-    clearTimeout(timer);
   }
+
+  throw new Error(lastError);
 };
 
 /**
