@@ -62,6 +62,19 @@ test('parseZapiInbound marca hasAudio em nota de voz', () => {
   }
 });
 
+test('parseZapiInbound aceita zaapId quando messageId falta', () => {
+  const r = parseZapiInbound({
+    type: 'ReceivedCallback',
+    phone: '5548123456789',
+    zaapId: 'zaap-9',
+    text: { message: 'oi' },
+  });
+  assert.equal(r.ignored, false);
+  if (!r.ignored) {
+    assert.equal(r.messageId, 'zaap-9');
+  }
+});
+
 test('parseZapiInbound aceita primeiro item de array', () => {
   const r = parseZapiInbound([
     {

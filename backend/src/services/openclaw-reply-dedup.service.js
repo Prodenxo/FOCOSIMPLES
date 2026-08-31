@@ -16,7 +16,7 @@ const pushedAt = new Map();
 /** @type {Map<string, number>} */
 const inboundSeenAt = new Map();
 
-const INBOUND_WINDOW_MS = 180_000;
+const INBOUND_WINDOW_MS = 60_000;
 
 const purgeExpired = (windowMs) => {
   const limit = Date.now() - windowMs;
@@ -34,25 +34,42 @@ export const markReplyPushed = (phone) => {
 };
 
 /**
- * Consome o registro: devolve `true` uma única vez se o agente entregou a resposta
- * dentro da janela.
+ * Chaves para reconhecer o mesmo inbound mesmo quando a Z-API muda o messageId
+ * no retry. Sempre inclui telefone+texto (janela curta).
+ * @param {{ phone?: string, text?: string, messageId?: string | null }} parsed
+ * @returns {string[]}
  */
+export const buildInboundDedupKeys = (parsed) => {
+  const keys = [];
+  const messageId = String(parsed?.messageId || '').trim();
+  if (messageId) keys.push(`id:${messageId}`);
+  const phone = normalizeWhatsappPhoneDigits(parsed?.phone || '');
+  const text = String(parsed?.text || '').trim().toLowerCase();
+  if (phone && text) keys.push(`txt:${phone}:${text}`);
+  return keys;
+};
+
 /**
- * A Z-API reenvia o webhook se a primeira chamada demora (o OpenClaw pode levar
- * dezenas de segundos). Marca o messageId na hora: a segunda cópia é ignorada.
- * @returns {boolean} true se esta é a primeira vez que vemos o id
+ * A Z-API reenvia o webhook se a primeira chamada demora. Marca as chaves na
+ * hora: qualquer chave já vista → duplicata.
+ * @returns {boolean} true se esta é a primeira vez
  */
-export const claimInboundMessage = (messageId, windowMs = INBOUND_WINDOW_MS) => {
-  const key = String(messageId || '').trim();
-  if (!key) return true;
+export const claimInboundMessage = (messageIdOrKeys, windowMs = INBOUND_WINDOW_MS) => {
+  const keys = Array.isArray(messageIdOrKeys)
+    ? messageIdOrKeys.map((k) => String(k || '').trim()).filter(Boolean)
+    : [String(messageIdOrKeys || '').trim()].filter(Boolean);
+  if (keys.length === 0) return true;
   const now = Date.now();
   const limit = now - windowMs;
   for (const [id, at] of inboundSeenAt) {
     if (at < limit) inboundSeenAt.delete(id);
   }
-  if (inboundSeenAt.has(key)) return false;
-  inboundSeenAt.set(key, now);
-  return true;
+  let seen = false;
+  for (const key of keys) {
+    if (inboundSeenAt.has(key)) seen = true;
+    else inboundSeenAt.set(key, now);
+  }
+  return !seen;
 };
 
 export const consumeReplyPushed = (phone, windowMs = DEFAULT_WINDOW_MS) => {

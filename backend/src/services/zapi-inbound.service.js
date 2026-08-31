@@ -5,7 +5,7 @@ import {
   isOpenclawZapiRelaySyncEnabled,
 } from './openclaw-hook-relay.service.js';
 import { isWhatsappOutboundConfigured, sendWhatsappMessage } from './whatsapp-outbound.service.js';
-import { claimInboundMessage, consumeReplyPushed } from './openclaw-reply-dedup.service.js';
+import { consumeReplyPushed } from './openclaw-reply-dedup.service.js';
 
 /**
  * Extrai telefone e texto do callback Z-API "Ao receber" (ReceivedCallback).
@@ -59,7 +59,7 @@ export const parseZapiInbound = (raw) => {
     phone,
     text,
     hasAudio,
-    messageId: body.messageId != null ? String(body.messageId) : null,
+    messageId: extractZapiMessageId(body),
     instanceId: body.instanceId != null ? String(body.instanceId) : null,
     isGroup: Boolean(body.isGroup),
   };
@@ -69,6 +69,16 @@ export const parseZapiInbound = (raw) => {
  * @param {unknown} raw
  * @returns {Record<string, unknown> | null}
  */
+const extractZapiMessageId = (body) => {
+  const ids = body.ids && typeof body.ids === 'object'
+    ? /** @type {Record<string, unknown>} */ (body.ids)
+    : null;
+  const raw = body.messageId ?? body.zaapId ?? ids?.messageId ?? ids?.zaapId;
+  if (raw == null) return null;
+  const value = String(raw).trim();
+  return value || null;
+};
+
 const unwrapZapiBody = (raw) => {
   if (raw == null) return null;
   if (Array.isArray(raw) && raw.length > 0 && typeof raw[0] === 'object') {
@@ -179,18 +189,6 @@ export const relayZapiInboundToOpenclaw = async (normalized) => {
   }
 
   if (isOpenclawZapiRelaySyncEnabled() && isWhatsappOutboundConfigured()) {
-    if (!claimInboundMessage(normalized.messageId)) {
-      // eslint-disable-next-line no-console
-      console.info('[ZAPI] webhook repetido — ignorado:', normalized.messageId);
-      return {
-        relayed: true,
-        mode: 'sync',
-        replySent: false,
-        openclaw: null,
-        whatsappError: null,
-      };
-    }
-
     const openclaw = await callOpenclawHookAgentSync(normalized);
 
     if (!openclaw.ok && openclaw.httpStatus == null) {

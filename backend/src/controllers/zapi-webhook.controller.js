@@ -21,6 +21,10 @@ import { evaluateChatGuard } from '../services/openclaw-chat-guard.service.js';
 import { sendWhatsappMessage } from '../services/whatsapp-outbound.service.js';
 import { maybeSendWhatsappWelcome } from '../services/whatsapp-welcome.service.js';
 import { isWhatsappDualQrMode } from '../services/whatsapp-dual-qr.service.js';
+import {
+  buildInboundDedupKeys,
+  claimInboundMessage,
+} from '../services/openclaw-reply-dedup.service.js';
 
 export const getZapiMonitor = (_req, res) => {
   return res.json({
@@ -87,8 +91,19 @@ export const postInbound = async (req, res, next) => {
       );
     }
 
-  // eslint-disable-next-line no-console
+    // eslint-disable-next-line no-console
     console.info('[ZAPI] inbound texto:', parsed.phone, String(parsed.text || '').slice(0, 100));
+
+    const dedupKeys = buildInboundDedupKeys(parsed);
+    if (!claimInboundMessage(dedupKeys)) {
+      // eslint-disable-next-line no-console
+      console.info('[ZAPI] webhook repetido — ignorado:', dedupKeys.join(' | '));
+      return sendSuccess(
+        res,
+        { ignored: true, reason: 'duplicate_webhook', phone: parsed.phone },
+        'repetido',
+      );
+    }
 
     let accessRequestHandled = false;
     let accessRequestReason = null;
@@ -188,18 +203,49 @@ export const postInbound = async (req, res, next) => {
     };
 
     if (relayUrl && !skipOpenclawRelay) {
-      openclawRelay = await zapiInbound.relayZapiInboundToOpenclaw(parsed);
-      if (openclawRelay.replySent) {
-        // eslint-disable-next-line no-console
-        console.info('[ZAPI] resposta OpenClaw enviada:', parsed.phone);
-      } else if (openclawRelay.openclaw?.error) {
-        // eslint-disable-next-line no-console
-        console.warn('[ZAPI] relay sync falhou:', openclawRelay.openclaw.error);
-      } else if (openclawRelay.relayed && !openclawRelay.replySent) {
-        // eslint-disable-next-line no-console
-        console.info('[ZAPI] relay OK sem texto WhatsApp (tools/PDF ou resposta vazia)');
-      }
-    } else if (!welcomeResult.sent && skipOpenclawRelay && !chatGuardHandled) {
+      sendSuccess(
+        res,
+        {
+          accepted: true,
+          queued: true,
+          phone: parsed.phone,
+          textPreview: String(parsed.text || '').slice(0, 120),
+          accessRequestHandled,
+          accessRequestReason,
+          inboundBridgeVersion: ZAPI_INBOUND_BRIDGE_VERSION,
+          transcriptionSource,
+        },
+        'aceite',
+      );
+
+      setImmediate(() => {
+        zapiInbound.relayZapiInboundToOpenclaw(parsed)
+          .then((result) => {
+            if (result.replySent) {
+              // eslint-disable-next-line no-console
+              console.info('[ZAPI] resposta OpenClaw enviada:', parsed.phone);
+              return;
+            }
+            if (result.openclaw?.error) {
+              // eslint-disable-next-line no-console
+              console.warn('[ZAPI] relay sync falhou:', result.openclaw.error);
+              return;
+            }
+            if (result.relayed && !result.replySent) {
+              // eslint-disable-next-line no-console
+              console.info('[ZAPI] relay OK sem texto WhatsApp (tools/PDF ou resposta vazia)');
+            }
+          })
+          .catch((err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            // eslint-disable-next-line no-console
+            console.warn('[ZAPI] relay em background falhou:', msg);
+          });
+      });
+      return;
+    }
+
+    if (!welcomeResult.sent && skipOpenclawRelay && !chatGuardHandled) {
       // eslint-disable-next-line no-console
       console.info(
         '[ZAPI] sem resposta outbound:',
