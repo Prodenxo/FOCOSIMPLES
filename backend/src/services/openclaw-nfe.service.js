@@ -688,7 +688,126 @@ const parseQuantidade = (raw) => {
   return Number.isFinite(n) && n > 0 ? n : 1;
 };
 
-const recalculateOpenclawNfeTaxes = async (userId, input, catalogoProdutoId) => {
+/** Payload legado (1 produto no root) ou array `itens` / `produtos` / `items`. */
+export const extractNfeItemSpecsFromPayload = (payload = {}) => {
+  const rawList = payload?.itens || payload?.produtos || payload?.items;
+  if (Array.isArray(rawList) && rawList.length > 0) {
+    return rawList.map((entry) => ({
+      ...(entry && typeof entry === 'object' ? entry : {}),
+      produtoNome: pickProdutoNomeFromPayload(entry),
+      produtoId: entry?.produtoId || entry?.catalogoProdutoId,
+      produtoIndice: entry?.produtoIndice ?? entry?.indice,
+      valorUnitario: entry?.valorUnitario ?? entry?.valor ?? entry?.valorReais,
+      quantidade: entry?.quantidade ?? entry?.qtd,
+    }));
+  }
+  return [payload];
+};
+
+const resolveProdutoNfeByIndice = async (userId, indiceRaw) => {
+  const indice = parseOrdinalToken(indiceRaw) ?? Number(indiceRaw);
+  if (!Number.isFinite(indice) || indice < 1) return null;
+  const catalogNfe = await listOpenclawNfeProdutos(userId, { limit: 100 });
+  const byIndex = pickProdutoCatalogoByIndexResult(catalogNfe, indice);
+  return byIndex.kind === 'ok' ? byIndex.produto : null;
+};
+
+const resolveProdutoNfeFromSpec = async (userId, payload, spec = {}) => {
+  if (spec?.produtoIndice != null || spec?.indice != null) {
+    const byIndex = await resolveProdutoNfeByIndice(
+      userId,
+      spec?.produtoIndice ?? spec?.indice,
+    );
+    if (byIndex) return byIndex;
+    throw badRequest('Índice de produto inválido no catálogo NF-e.', {
+      code: 'NFE_PRODUTO_INDEX_INVALID',
+      botHint: 'Use list_nfe_produtos e informe produtoNome ou produtoIndice válido.',
+    });
+  }
+  return resolveProdutoNfe(userId, { ...payload, ...spec });
+};
+
+const buildNfeItemFromCatalog = async (userId, payload, spec) => {
+  const produto = await resolveProdutoNfeFromSpec(userId, payload, spec);
+  const valorUnitario = parseValorReais(
+    spec?.valorUnitario
+      ?? spec?.valor
+      ?? spec?.valorReais
+      ?? payload?.valorUnitario
+      ?? payload?.valor
+      ?? payload?.valorReais
+      ?? payload?.valorServico,
+  );
+  const quantidade = parseQuantidade(
+    spec?.quantidade ?? spec?.qtd ?? payload?.quantidade ?? payload?.qtd,
+  );
+  const item = mapCatalogProdutoToNfeItem(produto, {
+    quantidade,
+    valorUnitario: (valorUnitario ?? Number(produto.valor_sugerido)) || 0,
+  });
+  return { item, produto };
+};
+
+const resolveNfeItensFromPayload = async (userId, payload) => {
+  const specs = extractNfeItemSpecsFromPayload(payload);
+  const built = [];
+  for (const spec of specs) {
+    built.push(await buildNfeItemFromCatalog(userId, payload, spec));
+  }
+  return built;
+};
+
+const formatNfePreviewItem = (item) => ({
+  produtoDescricao: item.descricao,
+  produtoCodigo: item.codigo,
+  ncm: item.ncm,
+  cfop: item.cfop,
+  quantidade: item.quantidade?.comercial,
+  valorUnitario: item.valorUnitario?.comercial,
+  valorTotal: item.valor,
+});
+
+/** Preview a partir do input já montado (vários itens + total). */
+export const buildNfePreviewFromEmitInput = (input = {}) => {
+  const previewItens = (Array.isArray(input.itens) ? input.itens : []).map(formatNfePreviewItem);
+  const valorTotal = (Array.isArray(input.itens) ? input.itens : [])
+    .reduce((acc, item) => acc + Number(item.valor || 0), 0);
+  const first = previewItens[0] || {};
+  return {
+    documentType: 'NFE',
+    destinatarioCpfCnpj: input.destinatario?.cpfCnpj,
+    destinatarioRazaoSocial: input.destinatario?.razaoSocial,
+    destinatarioUf: input.destinatario?.endereco?.estado,
+    emitenteUf: input.emitente?.endereco?.estado,
+    itens: previewItens,
+    produtoDescricao: previewItens.map((row) => row.produtoDescricao).join('; '),
+    produtoCodigo: first.produtoCodigo,
+    ncm: first.ncm,
+    cfop: first.cfop,
+    quantidade: first.quantidade,
+    valorUnitario: first.valorUnitario,
+    valorTotal,
+    emitenteCnpj: input.emitente?.cpfCnpj,
+  };
+};
+
+const matchCatalogIdForTaxItem = (itens, catalogoProdutoIds, codigo, ncm) => {
+  const ids = Array.isArray(catalogoProdutoIds) ? catalogoProdutoIds : [catalogoProdutoIds];
+  const list = Array.isArray(itens) ? itens : [];
+  const codigoNorm = String(codigo || '').trim();
+  const ncmNorm = String(ncm || '').replace(/\D/g, '').slice(0, 8);
+  const idx = list.findIndex((item) => {
+    const itemCodigo = String(item?.codigo || item?.sku || '').trim();
+    const itemNcm = String(item?.ncm || '').replace(/\D/g, '').slice(0, 8);
+    if (codigoNorm && itemCodigo === codigoNorm) return true;
+    if (ncmNorm && itemNcm === ncmNorm) return true;
+    return false;
+  });
+  if (idx >= 0 && ids[idx]) return ids[idx];
+  return ids[0] || null;
+};
+
+const recalculateOpenclawNfeTaxes = async (userId, input, catalogoProdutoIds) => {
   const businessType = await getBusinessTypeMirror(userId);
   const tenantId = await resolveFiscalTenantId(userId, input?.metadata?.empresaId);
   const payload = {
@@ -703,7 +822,8 @@ const recalculateOpenclawNfeTaxes = async (userId, input, catalogoProdutoId) => 
   const recalculated = await recalculateNfeLikePayloadTaxForEmit(payload, {
     businessType,
     tenantId,
-    resolveCatalogProductId: async () => catalogoProdutoId || null,
+    resolveCatalogProductId: async (codigo, ncm) =>
+      matchCatalogIdForTaxItem(input.itens, catalogoProdutoIds, codigo, ncm),
   });
 
   return {
@@ -716,6 +836,7 @@ const recalculateOpenclawNfeTaxes = async (userId, input, catalogoProdutoId) => 
 
 /**
  * Monta input de emissão NF-e para o bot.
+ * Aceita 1 produto no root (legado) ou vários em `itens` / `produtos` / `items`.
  */
 export const buildOpenclawNfeEmitInput = async (userId, payload = {}) => {
   await assertNfePermitida(userId);
@@ -733,17 +854,10 @@ export const buildOpenclawNfeEmitInput = async (userId, payload = {}) => {
 
   const prestador = emitenteToPrestadorInput(emitente);
   const destinatario = await resolveDestinatarioNfe(userId, payload);
-  const produto = await resolveProdutoNfe(userId, payload);
-
-  const valorUnitario = parseValorReais(
-    payload?.valorUnitario ?? payload?.valor ?? payload?.valorReais ?? payload?.valorServico,
-  );
-  const quantidade = parseQuantidade(payload?.quantidade ?? payload?.qtd);
-  const item = mapCatalogProdutoToNfeItem(produto, {
-    quantidade,
-    valorUnitario: (valorUnitario ?? Number(produto.valor_sugerido)) || 0,
-  });
-  const total = item.valor;
+  const builtItems = await resolveNfeItensFromPayload(userId, payload);
+  const itens = builtItems.map((entry) => entry.item);
+  const catalogoProdutoIds = builtItems.map((entry) => entry.produto.id);
+  const total = itens.reduce((acc, item) => acc + Number(item.valor || 0), 0);
 
   const baseInput = {
     documentType: 'NFE',
@@ -762,45 +876,30 @@ export const buildOpenclawNfeEmitInput = async (userId, payload = {}) => {
       endereco: destinatario.endereco,
     },
     consumidorFinal: destinatario.consumidorFinal,
-    itens: [item],
+    itens,
     pagamentos: [{ meio: '99', valor: total, descricaoMeio: 'Outros' }],
     config: { producao: true },
     metadata: {
       source: 'openclaw_whatsapp',
-      catalogoProdutoId: produto.id,
+      catalogoProdutoId: catalogoProdutoIds[0],
+      catalogoProdutoIds,
       catalogoClienteId: destinatario.catalogoClienteId,
     },
   };
 
-  return recalculateOpenclawNfeTaxes(userId, baseInput, produto.id);
+  return recalculateOpenclawNfeTaxes(userId, baseInput, catalogoProdutoIds);
 };
 
 export const previewOpenclawNfeEmit = async (userId, payload = {}) => {
   const input = await buildOpenclawNfeEmitInput(userId, payload);
-  const item = input.itens[0];
-  return {
-    documentType: 'NFE',
-    destinatarioCpfCnpj: input.destinatario.cpfCnpj,
-    destinatarioRazaoSocial: input.destinatario.razaoSocial,
-    produtoDescricao: item.descricao,
-    produtoCodigo: item.codigo,
-    ncm: item.ncm,
-    cfop: item.cfop,
-    destinatarioUf: input.destinatario?.endereco?.estado,
-    emitenteUf: input.emitente?.endereco?.estado,
-    quantidade: item.quantidade?.comercial,
-    valorUnitario: item.valorUnitario?.comercial,
-    valorTotal: item.valor,
-    emitenteCnpj: input.emitente.cpfCnpj,
-  };
+  return buildNfePreviewFromEmitInput(input);
 };
 
 export const emitOpenclawNfe = async (userId, payload = {}) => {
   const input = await buildOpenclawNfeEmitInput(userId, payload);
   if (!isNfEmitConfirmed(payload)) {
-    const preview = await previewOpenclawNfeEmit(userId, payload);
     return {
-      preview,
+      preview: buildNfePreviewFromEmitInput(input),
       requiresConfirm: true,
       notEmitted: true,
     };
@@ -811,18 +910,9 @@ export const emitOpenclawNfe = async (userId, payload = {}) => {
     fingerprint,
     () => emitirNota(userId, input),
   );
-  const item = input.itens[0];
-  const preview = {
-    documentType: 'NFE',
-    destinatarioCpfCnpj: input.destinatario.cpfCnpj,
-    destinatarioRazaoSocial: input.destinatario.razaoSocial,
-    produtoDescricao: item.descricao,
-    produtoCodigo: item.codigo,
-    valorTotal: item.valor,
-  };
   return {
     nota: created,
-    preview,
+    preview: buildNfePreviewFromEmitInput(input),
     requiresConfirm: false,
     notEmitted: false,
     deduplicated: deduplicated === true,

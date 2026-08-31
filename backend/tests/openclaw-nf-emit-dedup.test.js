@@ -55,3 +55,24 @@ test('buildOpenclawNfeEmitFingerprint — usa catalogoProdutoId quando disponív
   assert.match(fp, /prod-uuid-123/);
   assert.match(fp, /39\.9/);
 });
+
+test('buildOpenclawNfeEmitFingerprint — inclui todos os itens da nota', () => {
+  const fp = buildOpenclawNfeEmitFingerprint('user-1', {
+    destinatario: { cpfCnpj: '07664865751' },
+    metadata: { catalogoProdutoIds: ['camisa-id', 'agua-id'] },
+    itens: [
+      { codigo: 'CAM', descricao: 'Camisa', valor: 10, quantidade: { comercial: 2 } },
+      { codigo: 'AGUA', descricao: 'Água', valor: 12, quantidade: { comercial: 1 } },
+    ],
+  });
+  assert.match(fp, /camisa-id/);
+  assert.match(fp, /agua-id/);
+  assert.match(fp, /10/);
+  assert.match(fp, /12/);
+  const single = buildOpenclawNfeEmitFingerprint('user-1', {
+    destinatario: { cpfCnpj: '07664865751' },
+    metadata: { catalogoProdutoIds: ['camisa-id'] },
+    itens: [{ codigo: 'CAM', descricao: 'Camisa', valor: 10, quantidade: { comercial: 2 } }],
+  });
+  assert.notEqual(fp, single);
+});

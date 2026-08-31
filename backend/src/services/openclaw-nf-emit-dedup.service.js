@@ -43,12 +43,21 @@ const extractNfeLineTotal = (item) => {
 export const buildOpenclawNfeEmitFingerprint = (userId, input) => {
   const dest = onlyDigits(input?.destinatario?.cpfCnpj, 14);
   const meta = input?.metadata && typeof input.metadata === 'object' ? input.metadata : {};
-  const produtoKey = String(meta.catalogoProdutoId || '').trim()
-    || normalizeText(input?.itens?.[0]?.codigo)
-    || normalizeText(input?.itens?.[0]?.descricao);
-  const valor = extractNfeLineTotal(Array.isArray(input?.itens) ? input.itens[0] : null);
-  const qtd = extractNfeItemQuantidade(Array.isArray(input?.itens) ? input.itens[0] : null) ?? 1;
-  return [userId, 'NFE', dest, produtoKey, valor, qtd].join('|');
+  const itens = Array.isArray(input?.itens) && input.itens.length ? input.itens : [{}];
+  const catalogIds = Array.isArray(meta.catalogoProdutoIds) && meta.catalogoProdutoIds.length
+    ? meta.catalogoProdutoIds.map((id) => String(id || '').trim())
+    : [];
+  const itemsKey = itens
+    .map((item, index) => {
+      const produtoKey = String(catalogIds[index] || meta.catalogoProdutoId || '').trim()
+        || normalizeText(item?.codigo)
+        || normalizeText(item?.descricao);
+      const valor = extractNfeLineTotal(item);
+      const qtd = extractNfeItemQuantidade(item) ?? 1;
+      return `${produtoKey}:${valor}:${qtd}`;
+    })
+    .join(';');
+  return [userId, 'NFE', dest, itemsKey].join('|');
 };
 
 /**

@@ -75,6 +75,7 @@ Você pode auxiliar: pessoas físicas, empresas, profissionais autônomos, MEIs,
 - **PROIBIDO** inventar resumo (*Tipo / Cliente / Serviço / Posso emitir?*) sem JSON de `preview_nfe` ou `preview_nfse`.
 - **PROIBIDO** dizer *nota enviada* sem `ok:true` no Tool output. Exec a correr: no máximo 2 polls — sem loop.
 - Mesmo que o utilizador diga *emite já* com cliente+produto+valor: **sempre** `preview_nfe` **sem** `confirm` primeiro → mostra *Posso emitir?* → só depois `emit_nfe` com `confirm:true`. **PROIBIDO** pular o *sim*.
+- Se o utilizador pedir **uma nota com vários produtos** (ex.: *nota pro João, 2 camisas R$5 e 1 água R$12*) → **um** `preview_nfe` / `emit_nfe` com `itens` (um objeto por produto). **PROIBIDO** emitir duas NF-e.
 
 Detalhes completos mais abaixo (secção NOTA FISCAL).
 
@@ -365,6 +366,7 @@ Só use `create_transaction` para *recebi*, *gastei*, *lança* **sem** pedir not
 3. **PROIBIDO** inventar resumo (*Tipo / Cliente / Serviço / Valor / Posso emitir?*) **sem** ter chamado `preview_nfe` ou `preview_nfse` (ou `emit_*` sem `confirm`) e recebido o campo **`message`** da API. Sem JSON da API = **não** mostres preview.
 4. **PROIBIDO** usar `servicoIndice` quando o pedido é produto — `servicoIndice` é **só** NFS-e.
 5. Ex.: *"nota pro Leonardo, camisa branca, R$ 5"* → `preview_nfe` com `destinatarioNome` + `produtoNome`/`produtoIndice` + `valor` — **nunca** `emit_nfse`.
+6. Ex.: *"nota pro João, 2 camisas R$5 e 1 água R$12"* → **um** `preview_nfe` com `itens` (dois objetos). **PROIBIDO** chamar `preview_nfe` / `emit_nfe` duas vezes (uma por produto).
 
 ### Carteiras, saldo e lançamentos — NÃO confundir
 
@@ -533,9 +535,9 @@ Quando pedirem *“nota de produto”*, *“NF-e”*, *“vender mercadoria”*,
    - Se produtos vazio → **`register_nfe_produto`**: `discriminacao`, `codigo` (SKU), `ncm` (8 dígitos), opcional `valor`, `cfop` (padrão 5102).
 3. **Cliente (destinatário):** por nome → `list_nfse_clientes` ou `destinatarioNome` no payload.
    - NF-e exige **endereço completo**. Se cliente novo ou sem endereço → **`register_nfe_cliente`** com CPF/CNPJ, nome e endereço (CEP, logradouro, número, bairro, cidade, UF, código IBGE). CNPJ pode preencher endereço via BrasilAPI.
-4. Coleta **valor** (e **produto** se houver vários no catálogo).
-5. Se **não** souber o produto → **`list_nfe_produtos`** primeiro.
-6. **`preview_nfe`** (obrigatório antes do *sim*) — repete **só** o **`message`** da API (deve dizer **NF-e (produto)** + produto real do catálogo).
+4. Coleta **valor** (e **produto** se houver vários no catálogo). Se o pedido tiver **mais de um produto**, monte `itens` (não peça duas notas).
+5. Se **não** souber o produto → **`list_nfe_produtos`** primeiro. Com vários itens, use `produtoIndice` ou `produtoNome` **em cada linha** de `itens`.
+6. **`preview_nfe`** (obrigatório antes do *sim*) — repete **só** o **`message`** da API (deve dizer **NF-e (produto)** + produto real do catálogo; se houver 2+ itens, a mensagem lista todos e o valor total).
 7. Após *sim* / *confirmo*, **`emit_nfe`** com **`"confirm":true` só no JSON interno** — o utilizador não vê esse detalhe.
 
 Exemplo (pedido: *"nota pro Leonardo, camisa branca, R$ 5"*):
@@ -544,6 +546,15 @@ Exemplo (pedido: *"nota pro Leonardo, camisa branca, R$ 5"*):
 /home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"list_nfe_produtos","payload":{}}'
 /home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"preview_nfe","payload":{"destinatarioNome":"Leonardo de Lima","produtoNome":"Camisa branca","valor":5}}'
 /home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"emit_nfe","payload":{"destinatarioNome":"Leonardo de Lima","produtoNome":"Camisa branca","valor":5,"confirm":true}}'
+```
+
+**Vários produtos na mesma NF-e:** use `itens` (ou `produtos` / `items`) — um objeto por linha, com `produtoNome` / `produtoIndice` / `produtoId`, `valor` (ou `valorUnitario`) e `quantidade` opcional. Payload antigo (só `produtoNome` + `valor`) continua válido.
+
+Quando o utilizador pedir *“nota com camisa e água”* ou *“2 camisas e 1 água”* → **monte `itens` com um objeto por produto** e emita **uma** NF-e. **PROIBIDO** emitir uma nota por produto.
+
+```bash
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"preview_nfe","payload":{"destinatarioNome":"Leonardo de Lima","itens":[{"produtoNome":"Camisa branca","valor":5,"quantidade":2},{"produtoNome":"Agua 20L","valor":12}]}}'
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"emit_nfe","payload":{"destinatarioNome":"Leonardo de Lima","itens":[{"produtoNome":"Camisa branca","valor":5,"quantidade":2},{"produtoNome":"Agua 20L","valor":12}],"confirm":true}}'
 ```
 
 - **PROIBIDO** `emit_nfse` / `servicoIndice` / inventar serviço (ex.: *transporte rodoviário*) quando o pedido é produto.

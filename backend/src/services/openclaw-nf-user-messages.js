@@ -13,19 +13,37 @@ const tipoNotaLabel = (documentType) => {
   return 'NFS-e (serviço)';
 };
 
+const formatNfPreviewItensBlock = (preview = {}) => {
+  const dt = String(preview.documentType || '').toUpperCase();
+  const isProduto = dt === 'NFE' || dt === 'NFCE';
+  const itens = Array.isArray(preview.itens) ? preview.itens : [];
+  if (itens.length > 1) {
+    const lines = itens.map((row, index) => {
+      const nome = String(row.produtoDescricao || row.descricao || row.discriminacao || 'Item').trim();
+      const qtd = row.quantidade != null ? ` × ${row.quantidade}` : '';
+      const valor = formatValorBr(row.valorTotal ?? row.valor ?? row.valorUnitario);
+      return `  ${index + 1}. ${nome}${qtd} — ${valor}`;
+    });
+    return [`• ${isProduto ? 'Produtos' : 'Serviços'}:`, ...lines].join('\n');
+  }
+  const item = String(
+    preview.discriminacao || preview.produtoDescricao || preview.codigoServico || 'Item',
+  ).trim();
+  return `• ${isProduto ? 'Produto' : 'Serviço'}: ${item}`;
+};
+
 /**
  * Pedido de confirmação antes de emitir.
- * @param {{ documentType?: string, tomadorRazaoSocial?: string, destinatarioRazaoSocial?: string, discriminacao?: string, produtoDescricao?: string, valorServico?: number, valorTotal?: number }} preview
+ * @param {{ documentType?: string, tomadorRazaoSocial?: string, destinatarioRazaoSocial?: string, discriminacao?: string, produtoDescricao?: string, valorServico?: number, valorTotal?: number, itens?: object[] }} preview
  */
 export const buildNfConfirmRequestUserMessage = (preview = {}) => {
   const cliente = String(
     preview.tomadorRazaoSocial || preview.destinatarioRazaoSocial || 'Cliente',
   ).trim();
-  const item = String(
-    preview.discriminacao || preview.produtoDescricao || preview.codigoServico || 'Item',
-  ).trim();
   const valor = formatValorBr(preview.valorServico ?? preview.valorTotal);
   const tipo = tipoNotaLabel(preview.documentType);
+  const itensBlock = formatNfPreviewItensBlock(preview);
+  const multiItem = Array.isArray(preview.itens) && preview.itens.length > 1;
   const cfop = String(preview.cfop || '').trim();
   const ufLinha = preview.emitenteUf && preview.destinatarioUf
     ? `• UF: ${preview.emitenteUf} → ${preview.destinatarioUf}`
@@ -35,9 +53,9 @@ export const buildNfConfirmRequestUserMessage = (preview = {}) => {
     'Resumo da nota fiscal:',
     `• Tipo: ${tipo}`,
     `• Cliente: ${cliente}`,
-    `• ${preview.documentType === 'NFE' || preview.documentType === 'NFCE' ? 'Produto' : 'Serviço'}: ${item}`,
-    `• Valor: ${valor}`,
-    ...(cfop ? [`• CFOP: ${cfop}`] : []),
+    itensBlock,
+    `• ${multiItem ? 'Valor total' : 'Valor'}: ${valor}`,
+    ...(!multiItem && cfop ? [`• CFOP: ${cfop}`] : []),
     ...(ufLinha ? [ufLinha] : []),
     '',
     'Posso emitir? Responda *sim* ou *confirmo* que eu envio a nota.',
@@ -52,11 +70,10 @@ export const buildNfEmittedUserMessage = (preview = {}, opts = {}) => {
   const cliente = String(
     preview.tomadorRazaoSocial || preview.destinatarioRazaoSocial || 'Cliente',
   ).trim();
-  const item = String(
-    preview.discriminacao || preview.produtoDescricao || preview.codigoServico || 'Item',
-  ).trim();
   const valor = formatValorBr(preview.valorServico ?? preview.valorTotal);
   const tipo = tipoNotaLabel(preview.documentType);
+  const itensBlock = formatNfPreviewItensBlock(preview);
+  const multiItem = Array.isArray(preview.itens) && preview.itens.length > 1;
   const status = String(opts.status || 'processando').trim();
 
   let footer = '';
@@ -70,8 +87,8 @@ export const buildNfEmittedUserMessage = (preview = {}, opts = {}) => {
     'Nota fiscal enviada para emissão.',
     `• Tipo: ${tipo}`,
     `• Cliente: ${cliente}`,
-    `• ${preview.documentType === 'NFE' || preview.documentType === 'NFCE' ? 'Produto' : 'Serviço'}: ${item}`,
-    `• Valor: ${valor}`,
+    itensBlock,
+    `• ${multiItem ? 'Valor total' : 'Valor'}: ${valor}`,
     `• Situação: ${status}`,
   ];
   if (footer) lines.push('', footer);

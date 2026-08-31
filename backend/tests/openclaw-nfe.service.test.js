@@ -4,6 +4,8 @@ import {
   formatOpenclawNfeProdutosMessage,
   formatOpenclawCatalogServicosMessage,
   isCatalogProdutoUsableForNfe,
+  extractNfeItemSpecsFromPayload,
+  buildNfePreviewFromEmitInput,
 } from '../src/services/openclaw-nfe.service.js';
 import {
   pickProdutoCatalogoByIndexResult,
@@ -87,4 +89,92 @@ test('pickProdutoCatalogoByNomeResult — duplicatas idênticas no catálogo', (
   const result = pickProdutoCatalogoByNomeResult(catalog, nome);
   assert.equal(result.kind, 'ok');
   assert.equal(result.produto.id, 'a');
+});
+
+test('extractNfeItemSpecsFromPayload — payload legado de 1 produto', () => {
+  const specs = extractNfeItemSpecsFromPayload({
+    destinatarioNome: 'João',
+    produtoNome: 'Camisa branca',
+    valor: 5,
+    quantidade: 2,
+  });
+  assert.equal(specs.length, 1);
+  assert.equal(specs[0].produtoNome, 'Camisa branca');
+  assert.equal(specs[0].valor, 5);
+});
+
+test('extractNfeItemSpecsFromPayload — array itens com 2+ produtos', () => {
+  const specs = extractNfeItemSpecsFromPayload({
+    destinatarioNome: 'João',
+    itens: [
+      { produtoNome: 'Camisa branca', valor: 5, quantidade: 2 },
+      { produtoIndice: 2, valor: 12 },
+    ],
+  });
+  assert.equal(specs.length, 2);
+  assert.equal(specs[0].produtoNome, 'Camisa branca');
+  assert.equal(specs[0].quantidade, 2);
+  assert.equal(specs[1].produtoIndice, 2);
+  assert.equal(specs[1].valorUnitario, 12);
+});
+
+test('extractNfeItemSpecsFromPayload — aliases produtos e items', () => {
+  const viaProdutos = extractNfeItemSpecsFromPayload({
+    produtos: [{ produtoNome: 'A', valor: 1 }, { produtoNome: 'B', valor: 2 }],
+  });
+  const viaItems = extractNfeItemSpecsFromPayload({
+    items: [{ produtoId: 'uuid-1', valor: 10 }],
+  });
+  assert.equal(viaProdutos.length, 2);
+  assert.equal(viaItems.length, 1);
+  assert.equal(viaItems[0].produtoId, 'uuid-1');
+});
+
+test('buildNfePreviewFromEmitInput — soma valor total de todos os itens', () => {
+  const preview = buildNfePreviewFromEmitInput({
+    destinatario: { cpfCnpj: '07664865751', razaoSocial: 'João', endereco: { estado: 'RJ' } },
+    emitente: { cpfCnpj: '35774511000145', endereco: { estado: 'RJ' } },
+    itens: [
+      {
+        descricao: 'Camisa branca',
+        codigo: 'CAM',
+        ncm: '61091000',
+        cfop: '5102',
+        quantidade: { comercial: 2 },
+        valorUnitario: { comercial: 5 },
+        valor: 10,
+      },
+      {
+        descricao: 'Água 20L',
+        codigo: 'AGUA',
+        ncm: '22011000',
+        cfop: '5102',
+        quantidade: { comercial: 1 },
+        valorUnitario: { comercial: 12 },
+        valor: 12,
+      },
+    ],
+  });
+  assert.equal(preview.itens.length, 2);
+  assert.equal(preview.valorTotal, 22);
+  assert.equal(preview.produtoDescricao, 'Camisa branca; Água 20L');
+  assert.equal(preview.itens[0].produtoDescricao, 'Camisa branca');
+  assert.equal(preview.itens[1].valorTotal, 12);
+});
+
+test('buildNfePreviewFromEmitInput — 1 item continua com total da linha', () => {
+  const preview = buildNfePreviewFromEmitInput({
+    destinatario: { cpfCnpj: '07664865751', razaoSocial: 'João' },
+    emitente: { cpfCnpj: '35774511000145' },
+    itens: [{
+      descricao: 'Camisa branca',
+      codigo: 'CAM',
+      valor: 5,
+      quantidade: { comercial: 1 },
+      valorUnitario: { comercial: 5 },
+    }],
+  });
+  assert.equal(preview.itens.length, 1);
+  assert.equal(preview.valorTotal, 5);
+  assert.equal(preview.produtoDescricao, 'Camisa branca');
 });

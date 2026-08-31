@@ -29,6 +29,7 @@ Proibido: só get_das_current / base64 no chat.
 - **Produto** (camisa, mercadoria, NF-e) → `list_nfe_produtos` → `preview_nfe` → `emit_nfe`
 - **Serviço** (NFS-e) → `list_catalog_servicos` → `preview_nfse` → `emit_nfse`
 - Nunca inventar preview sem JSON da API. Nunca `servicoIndice` em pedido de produto.
+- **Vários produtos na mesma NF-e:** `payload.itens` (aliases `produtos` / `items`) — um objeto por linha (`produtoNome` | `produtoIndice` | `produtoId`, `valor`/`valorUnitario`, `quantidade` opcional). Uma nota só; não emitir uma NF-e por produto.
 
 ## Actions principais
 ping, resolve_user, list_roles, get_permissions, check_permission,

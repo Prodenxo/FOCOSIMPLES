@@ -43,6 +43,42 @@ test('buildNfConfirmRequestUserMessage — NF-e produto', () => {
   assert.match(msg, /Produto: Água 20L/);
 });
 
+test('buildNfConfirmRequestUserMessage — NF-e com vários produtos', () => {
+  const msg = buildNfConfirmRequestUserMessage({
+    documentType: 'NFE',
+    destinatarioRazaoSocial: 'João',
+    produtoDescricao: 'Camisa branca; Água 20L',
+    valorTotal: 22,
+    itens: [
+      { produtoDescricao: 'Camisa branca', quantidade: 2, valorTotal: 10 },
+      { produtoDescricao: 'Água 20L', quantidade: 1, valorTotal: 12 },
+    ],
+  });
+  assert.match(msg, /Produtos:/);
+  assert.match(msg, /1\. Camisa branca/);
+  assert.match(msg, /2\. Água 20L/);
+  assert.match(msg, /Valor total/);
+  assert.match(msg, /R\$\s*22,00/);
+});
+
+test('buildNfEmittedUserMessage — NF-e com vários produtos', () => {
+  const msg = buildNfEmittedUserMessage(
+    {
+      documentType: 'NFE',
+      destinatarioRazaoSocial: 'João',
+      valorTotal: 22,
+      itens: [
+        { produtoDescricao: 'Camisa branca', quantidade: 2, valorTotal: 10 },
+        { produtoDescricao: 'Água 20L', valorTotal: 12 },
+      ],
+    },
+    { status: 'processando', pdfSent: true },
+  );
+  assert.match(msg, /1\. Camisa branca/);
+  assert.match(msg, /2\. Água 20L/);
+  assert.match(msg, /Valor total/);
+});
+
 test('buildNfEmittedUserMessage — PDF enviado', () => {
   const msg = buildNfEmittedUserMessage(
     {
