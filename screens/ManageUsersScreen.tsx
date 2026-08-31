@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -12,22 +12,35 @@ import {
   TouchableOpacity,
   useWindowDimensions,
   View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { MfScrollView } from '../components/ui/MfScrollView';
-import { ToggleSwitch } from '../components/ToggleSwitch';
-import { useAuthStore } from '../store/authStore';
-import { useThemeStore } from '../store/themeStore';
-import { getTheme, mfSpacing, type Theme } from '../lib/theme';
-import { getTechTokens, mfTechInsetSurface } from '../lib/techDesign';
-import { cleanPhone, hasRole } from '../lib/auth-roles';
-import { getMeiUserStatusShort, getMeiUserTypeLabel, isMeiSlotUser } from '../lib/meiUserSlot';
-import { filterFocoMeiAdminEmpresas, filterFocoMeiAdminUsers, listEmpresaMembersForMeiAdmin } from '../lib/focomeiAdminFilters';
-import { resolveAppOrigin } from '../lib/appOrigin';
-import { isFocoMeiProductLine, productLineLabel, resolveEmpresaProductLine, resolveUserProductLine } from '../lib/productLine';
-import { getManagedUserActions } from '../lib/managedUserActions';
-import { formatPhoneBrCell } from '../lib/numberFormat';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { MfScrollView } from "../components/ui/MfScrollView";
+import { ToggleSwitch } from "../components/ToggleSwitch";
+import { useAuthStore } from "../store/authStore";
+import { useThemeStore } from "../store/themeStore";
+import { getTheme, mfSpacing, type Theme } from "../lib/theme";
+import { getTechTokens, mfTechInsetSurface } from "../lib/techDesign";
+import { cleanPhone, hasRole } from "../lib/auth-roles";
+import {
+  getMeiUserStatusShort,
+  getMeiUserTypeLabel,
+  isMeiSlotUser,
+} from "../lib/meiUserSlot";
+import {
+  filterFocoMeiAdminEmpresas,
+  filterFocoMeiAdminUsers,
+  listEmpresaMembersForMeiAdmin,
+} from "../lib/focomeiAdminFilters";
+import { resolveAppOrigin } from "../lib/appOrigin";
+import {
+  isFocoMeiProductLine,
+  productLineLabel,
+  resolveEmpresaProductLine,
+  resolveUserProductLine,
+} from "../lib/productLine";
+import { getManagedUserActions } from "../lib/managedUserActions";
+import { formatPhoneBrCell } from "../lib/numberFormat";
 import {
   banUser,
   createUser,
@@ -38,29 +51,29 @@ import {
   unbanUser,
   updateUser,
   type ManagedUser,
-} from '../lib/user-management';
-import { matchManagedUserSearch } from '../lib/matchManagedUserSearch';
+} from "../lib/user-management";
+import { matchManagedUserSearch } from "../lib/matchManagedUserSearch";
 import {
   deleteEmpresa,
   getEmpresaById,
   listEmpresas,
   type EmpresaFullData,
   type EmpresaOption,
-} from '../services/empresaService';
-import EmpresaModal from '../components/EmpresaModal';
-import { EmpresaStripeMeiBillingModal } from '../components/EmpresaStripeMeiBillingModal';
-import { InvitesTab } from '../components/admin/InvitesTab';
-import { ManageUsersPageChrome } from '../components/admin/ManageUsersPageChrome';
-import { ProvisionClientWizardModal } from '../components/admin/ProvisionClientWizardModal';
+} from "../services/empresaService";
+import EmpresaModal from "../components/EmpresaModal";
+import { EmpresaStripeMeiBillingModal } from "../components/EmpresaStripeMeiBillingModal";
+import { InvitesTab } from "../components/admin/InvitesTab";
+import { ManageUsersPageChrome } from "../components/admin/ManageUsersPageChrome";
+import { ProvisionClientWizardModal } from "../components/admin/ProvisionClientWizardModal";
 import {
   fetchAdminMeiCertificateStatus,
   patchAdminMeiDocumentosAtivos,
-} from '../services/adminUserDataService';
+} from "../services/adminUserDataService";
 
-type RoleOption = 'admin' | 'usuario' | 'outsider';
-type TabKey = 'users' | 'invites' | 'empresas';
-type EmpresaMeiFilter = 'all' | 'active' | 'inactive';
-type ClipboardModule = typeof import('expo-clipboard');
+type RoleOption = "admin" | "usuario" | "outsider";
+type TabKey = "users" | "invites" | "empresas";
+type EmpresaMeiFilter = "all" | "active" | "inactive";
+type ClipboardModule = typeof import("expo-clipboard");
 
 interface Props {
   onBack: () => void;
@@ -75,35 +88,35 @@ type Styles = ReturnType<typeof createStyles>;
 // =======================================================================
 
 const ROLE_LABEL: Record<string, string> = {
-  superadmin: 'Super admin',
-  admin: 'Admin',
-  usuario: 'Usuário',
-  outsider: 'Convidado',
+  superadmin: "Super admin",
+  admin: "Admin",
+  usuario: "Usuário",
+  outsider: "Convidado",
 };
 
 const ROLE_DESCRIPTION: Record<RoleOption, string> = {
-  admin: 'Acesso total ao painel administrativo da empresa.',
-  usuario: 'Acesso padrão ao Foco Simples.',
-  outsider: 'Acesso temporário ou externo, com escopo restrito.',
+  admin: "Acesso total ao painel administrativo da empresa.",
+  usuario: "Acesso padrão ao Foco Simples.",
+  outsider: "Acesso temporário ou externo, com escopo restrito.",
 };
 
 function getRoleTone(role: string, theme: Theme): { bg: string; fg: string } {
   switch (role) {
-    case 'superadmin':
+    case "superadmin":
       return { bg: theme.errorLight, fg: theme.error };
-    case 'admin':
+    case "admin":
       return { bg: theme.primaryLight, fg: theme.primary };
-    case 'outsider':
-      return { bg: '#FEF3C7', fg: theme.warning };
-    case 'usuario':
+    case "outsider":
+      return { bg: "#FEF3C7", fg: theme.warning };
+    case "usuario":
     default:
       return { bg: theme.successLight, fg: theme.success };
   }
 }
 
 function getInitials(name: string, email: string): string {
-  const base = (name || '').trim() || (email || '').trim();
-  if (!base) return '?';
+  const base = (name || "").trim() || (email || "").trim();
+  if (!base) return "?";
   const parts = base.split(/[\s@._-]+/).filter(Boolean);
   if (parts.length === 0) return base.charAt(0).toUpperCase();
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
@@ -115,10 +128,10 @@ function getAvatarColor(seed: string, theme: Theme): string {
     theme.primary,
     theme.success,
     theme.warning,
-    '#8B5CF6',
-    '#EC4899',
-    '#06B6D4',
-    '#F97316',
+    "#8B5CF6",
+    "#EC4899",
+    "#06B6D4",
+    "#F97316",
   ];
   let hash = 0;
   for (let i = 0; i < seed.length; i++) {
@@ -127,14 +140,17 @@ function getAvatarColor(seed: string, theme: Theme): string {
   return palette[hash % palette.length];
 }
 
-function formatExpiration(isoDate: string): { label: string; expired: boolean } {
+function formatExpiration(isoDate: string): {
+  label: string;
+  expired: boolean;
+} {
   const exp = new Date(isoDate);
   const expired = exp.getTime() <= Date.now();
-  const dd = exp.getDate().toString().padStart(2, '0');
-  const mm = (exp.getMonth() + 1).toString().padStart(2, '0');
+  const dd = exp.getDate().toString().padStart(2, "0");
+  const mm = (exp.getMonth() + 1).toString().padStart(2, "0");
   const yyyy = exp.getFullYear();
   return {
-    label: expired ? 'Expirado' : `Expira ${dd}/${mm}/${yyyy}`,
+    label: expired ? "Expirado" : `Expira ${dd}/${mm}/${yyyy}`,
     expired,
   };
 }
@@ -151,7 +167,13 @@ interface BadgeProps {
   styles: Styles;
 }
 
-const Badge = React.memo(function Badge({ label, bg, fg, dot, styles }: BadgeProps) {
+const Badge = React.memo(function Badge({
+  label,
+  bg,
+  fg,
+  dot,
+  styles,
+}: BadgeProps) {
   return (
     <View style={[styles.badge, { backgroundColor: bg }]}>
       {dot ? <View style={[styles.badgeDot, { backgroundColor: fg }]} /> : null}
@@ -267,12 +289,12 @@ function UserCardSkeleton({ styles, theme }: { styles: Styles; theme: Theme }) {
           <SkeletonBox width="60%" height={14} theme={theme} />
           <SkeletonBox width="80%" height={11} theme={theme} />
         </View>
-        <View style={{ gap: 4, alignItems: 'flex-end' }}>
+        <View style={{ gap: 4, alignItems: "flex-end" }}>
           <SkeletonBox width={60} height={18} radius={9} theme={theme} />
           <SkeletonBox width={70} height={18} radius={9} theme={theme} />
         </View>
       </View>
-      <View style={{ flexDirection: 'row', gap: 14 }}>
+      <View style={{ flexDirection: "row", gap: 14 }}>
         <SkeletonBox width={90} height={12} theme={theme} />
         <SkeletonBox width={120} height={12} theme={theme} />
         <SkeletonBox width={80} height={12} theme={theme} />
@@ -281,14 +303,20 @@ function UserCardSkeleton({ styles, theme }: { styles: Styles; theme: Theme }) {
   );
 }
 
-function EmpresaCardSkeleton({ styles, theme }: { styles: Styles; theme: Theme }) {
+function EmpresaCardSkeleton({
+  styles,
+  theme,
+}: {
+  styles: Styles;
+  theme: Theme;
+}) {
   return (
     <View style={styles.empresaCard}>
       <View style={styles.empresaCardLeft}>
         <SkeletonBox width={40} height={40} radius={10} theme={theme} />
         <View style={{ flex: 1, gap: 8 }}>
           <SkeletonBox width="55%" height={14} theme={theme} />
-          <View style={{ flexDirection: 'row', gap: 8 }}>
+          <View style={{ flexDirection: "row", gap: 8 }}>
             <SkeletonBox width={70} height={20} radius={8} theme={theme} />
             <SkeletonBox width={90} height={20} radius={8} theme={theme} />
           </View>
@@ -305,14 +333,14 @@ function ListSkeleton({
   theme,
 }: {
   count: number;
-  variant: 'user' | 'empresa';
+  variant: "user" | "empresa";
   styles: Styles;
   theme: Theme;
 }) {
   return (
     <View>
       {Array.from({ length: count }).map((_, i) =>
-        variant === 'user' ? (
+        variant === "user" ? (
           <UserCardSkeleton key={i} styles={styles} theme={theme} />
         ) : (
           <EmpresaCardSkeleton key={i} styles={styles} theme={theme} />
@@ -398,24 +426,44 @@ const UserCard = React.memo(function UserCard({
   onDelete,
   onCopyPassword,
 }: UserCardProps) {
-  const displayName = user.displayName || user.email || 'Sem nome';
-  const initials = getInitials(user.displayName || '', user.email || '');
-  const avatarColor = getAvatarColor(user.id || user.email || displayName || 'x', theme);
+  const displayName = user.displayName || user.email || "Sem nome";
+  const initials = getInitials(user.displayName || "", user.email || "");
+  const avatarColor = getAvatarColor(
+    user.id || user.email || displayName || "x",
+    theme,
+  );
   const roleTone = getRoleTone(user.role, theme);
-  const expiration = user.role === 'usuario' && user.expiresAt ? formatExpiration(user.expiresAt) : null;
+  const expiration =
+    user.role === "usuario" && user.expiresAt
+      ? formatExpiration(user.expiresAt)
+      : null;
   const metaLine = [
-    user.empresaName || user.empresaId || 'Sem empresa',
+    user.empresaName || user.empresaId || "Sem empresa",
     getMeiUserStatusShort(user.mei),
     expiration?.label,
   ]
     .filter(Boolean)
-    .join(' · ');
+    .join(" · ");
 
   if (isDesktop) {
     return (
       <View style={[styles.userCard, styles.userCardDesktop]}>
-        <View style={[styles.avatar, styles.avatarCompact, { backgroundColor: avatarColor + '22', borderColor: avatarColor }]}>
-          <Text style={[styles.avatarText, styles.avatarTextCompact, { color: avatarColor }]}>{initials}</Text>
+        <View
+          style={[
+            styles.avatar,
+            styles.avatarCompact,
+            { backgroundColor: avatarColor + "22", borderColor: avatarColor },
+          ]}
+        >
+          <Text
+            style={[
+              styles.avatarText,
+              styles.avatarTextCompact,
+              { color: avatarColor },
+            ]}
+          >
+            {initials}
+          </Text>
         </View>
         <View style={styles.userCardDesktopMain}>
           <Text style={styles.userName} numberOfLines={1}>
@@ -430,11 +478,28 @@ const UserCard = React.memo(function UserCard({
         </View>
         <View style={styles.userCardDesktopBadges}>
           {isBlocked ? (
-            <Badge label="Bloqueado" bg={theme.errorLight} fg={theme.error} dot styles={styles} />
+            <Badge
+              label="Bloqueado"
+              bg={theme.errorLight}
+              fg={theme.error}
+              dot
+              styles={styles}
+            />
           ) : (
-            <Badge label="Ativo" bg={theme.successLight} fg={theme.success} dot styles={styles} />
+            <Badge
+              label="Ativo"
+              bg={theme.successLight}
+              fg={theme.success}
+              dot
+              styles={styles}
+            />
           )}
-          <Badge label={ROLE_LABEL[user.role] || user.role} bg={roleTone.bg} fg={roleTone.fg} styles={styles} />
+          <Badge
+            label={ROLE_LABEL[user.role] || user.role}
+            bg={roleTone.bg}
+            fg={roleTone.fg}
+            styles={styles}
+          />
         </View>
         {canEdit || canImpersonate || canViewCompanyMembers ? (
           <View style={styles.userActionsDesktop}>
@@ -450,23 +515,71 @@ const UserCard = React.memo(function UserCard({
               />
             ) : null}
             {canImpersonate ? (
-              <IconButton icon="log-in-outline" label="Acessar" color="#B45309" bg="#FEF3C7" onPress={() => onImpersonate(user)} styles={styles} compact />
+              <IconButton
+                icon="log-in-outline"
+                label="Acessar"
+                color="#B45309"
+                bg="#FEF3C7"
+                onPress={() => onImpersonate(user)}
+                styles={styles}
+                compact
+              />
             ) : null}
             {canEdit ? (
               <>
-            <IconButton icon="create-outline" label="Editar" color={theme.primary} bg={theme.primaryLight} onPress={() => onEdit(user)} styles={styles} compact />
-            <IconButton icon="key-outline" label="Senha" color={theme.text} bg={theme.background} onPress={() => onResetPassword(user)} styles={styles} compact />
+                <IconButton
+                  icon="create-outline"
+                  label="Editar"
+                  color={theme.primary}
+                  bg={theme.primaryLight}
+                  onPress={() => onEdit(user)}
+                  styles={styles}
+                  compact
+                />
+                <IconButton
+                  icon="key-outline"
+                  label="Senha"
+                  color={theme.text}
+                  bg={theme.background}
+                  onPress={() => onResetPassword(user)}
+                  styles={styles}
+                  compact
+                />
               </>
             ) : null}
             {canBan ? (
               isBlocked ? (
-              <IconButton icon="checkmark-circle-outline" label="Liberar" color={theme.success} bg={theme.successLight} onPress={() => onUnban(user)} styles={styles} compact />
-            ) : (
-              <IconButton icon="ban-outline" label="Bloquear" color={theme.warning} bg="#FEF3C7" onPress={() => onBan(user)} styles={styles} compact />
-            )
+                <IconButton
+                  icon="checkmark-circle-outline"
+                  label="Liberar"
+                  color={theme.success}
+                  bg={theme.successLight}
+                  onPress={() => onUnban(user)}
+                  styles={styles}
+                  compact
+                />
+              ) : (
+                <IconButton
+                  icon="ban-outline"
+                  label="Bloquear"
+                  color={theme.warning}
+                  bg="#FEF3C7"
+                  onPress={() => onBan(user)}
+                  styles={styles}
+                  compact
+                />
+              )
             ) : null}
             {canDelete ? (
-            <IconButton icon="trash-outline" label="Excluir" color={theme.error} bg={theme.errorLight} onPress={() => onDelete(user)} styles={styles} compact />
+              <IconButton
+                icon="trash-outline"
+                label="Excluir"
+                color={theme.error}
+                bg={theme.errorLight}
+                onPress={() => onDelete(user)}
+                styles={styles}
+                compact
+              />
             ) : null}
           </View>
         ) : null}
@@ -477,8 +590,15 @@ const UserCard = React.memo(function UserCard({
   return (
     <View style={styles.userCard}>
       <View style={styles.userCardHeader}>
-        <View style={[styles.avatar, { backgroundColor: avatarColor + '22', borderColor: avatarColor }]}>
-          <Text style={[styles.avatarText, { color: avatarColor }]}>{initials}</Text>
+        <View
+          style={[
+            styles.avatar,
+            { backgroundColor: avatarColor + "22", borderColor: avatarColor },
+          ]}
+        >
+          <Text style={[styles.avatarText, { color: avatarColor }]}>
+            {initials}
+          </Text>
         </View>
         <View style={styles.userCardHeaderInfo}>
           <Text style={styles.userName} numberOfLines={1}>
@@ -506,9 +626,21 @@ const UserCard = React.memo(function UserCard({
               styles={styles}
             />
           )}
-          <Badge label={ROLE_LABEL[user.role] || user.role} bg={roleTone.bg} fg={roleTone.fg} styles={styles} />
-          {isFocoMeiProductLine(resolveUserProductLine(user.mei, user.productLine)) ? (
-            <Badge label="Foco Simples" bg={theme.primaryLight} fg={theme.primary} styles={styles} />
+          <Badge
+            label={ROLE_LABEL[user.role] || user.role}
+            bg={roleTone.bg}
+            fg={roleTone.fg}
+            styles={styles}
+          />
+          {isFocoMeiProductLine(
+            resolveUserProductLine(user.mei, user.productLine),
+          ) ? (
+            <Badge
+              label="Foco Simples"
+              bg={theme.primaryLight}
+              fg={theme.primary}
+              styles={styles}
+            />
           ) : null}
         </View>
       </View>
@@ -516,25 +648,39 @@ const UserCard = React.memo(function UserCard({
       <View style={styles.userMetaGrid}>
         {user.phone ? (
           <View style={styles.userMetaItem}>
-            <Ionicons name="call-outline" size={13} color={theme.textTertiary} />
+            <Ionicons
+              name="call-outline"
+              size={13}
+              color={theme.textTertiary}
+            />
             <Text style={styles.userMetaText} numberOfLines={1}>
               {user.phone}
             </Text>
           </View>
         ) : null}
         <View style={styles.userMetaItem}>
-          <Ionicons name="business-outline" size={13} color={theme.textTertiary} />
+          <Ionicons
+            name="business-outline"
+            size={13}
+            color={theme.textTertiary}
+          />
           <Text style={styles.userMetaText} numberOfLines={1}>
-            {user.empresaName || user.empresaId || 'Sem empresa'}
+            {user.empresaName || user.empresaId || "Sem empresa"}
           </Text>
         </View>
         <View style={styles.userMetaItem}>
           <Ionicons
-            name={isMeiSlotUser(user.mei) ? 'checkmark-circle-outline' : 'close-circle-outline'}
+            name={
+              isMeiSlotUser(user.mei)
+                ? "checkmark-circle-outline"
+                : "close-circle-outline"
+            }
             size={13}
             color={isMeiSlotUser(user.mei) ? theme.success : theme.textTertiary}
           />
-          <Text style={styles.userMetaText}>{getMeiUserStatusShort(user.mei)}</Text>
+          <Text style={styles.userMetaText}>
+            {getMeiUserStatusShort(user.mei)}
+          </Text>
         </View>
         {expiration ? (
           <View style={styles.userMetaItem}>
@@ -546,7 +692,7 @@ const UserCard = React.memo(function UserCard({
             <Text
               style={[
                 styles.userMetaText,
-                expiration.expired && { color: theme.error, fontWeight: '600' },
+                expiration.expired && { color: theme.error, fontWeight: "600" },
               ]}
             >
               {expiration.label}
@@ -569,71 +715,71 @@ const UserCard = React.memo(function UserCard({
             />
           ) : null}
           {canImpersonate ? (
-          <IconButton
-            icon="log-in-outline"
-            label="Acessar"
-            color="#B45309"
-            bg="#FEF3C7"
-            onPress={() => onImpersonate(user)}
-            styles={styles}
-            compact
-          />
+            <IconButton
+              icon="log-in-outline"
+              label="Acessar"
+              color="#B45309"
+              bg="#FEF3C7"
+              onPress={() => onImpersonate(user)}
+              styles={styles}
+              compact
+            />
           ) : null}
           {canEdit ? (
             <>
-          <IconButton
-            icon="create-outline"
-            label="Editar"
-            color={theme.primary}
-            bg={theme.primaryLight}
-            onPress={() => onEdit(user)}
-            styles={styles}
-            compact
-          />
-          <IconButton
-            icon="key-outline"
-            label="Senha"
-            color={theme.text}
-            bg={theme.background}
-            onPress={() => onResetPassword(user)}
-            styles={styles}
-            compact
-          />
+              <IconButton
+                icon="create-outline"
+                label="Editar"
+                color={theme.primary}
+                bg={theme.primaryLight}
+                onPress={() => onEdit(user)}
+                styles={styles}
+                compact
+              />
+              <IconButton
+                icon="key-outline"
+                label="Senha"
+                color={theme.text}
+                bg={theme.background}
+                onPress={() => onResetPassword(user)}
+                styles={styles}
+                compact
+              />
             </>
           ) : null}
           {canBan ? (
-          isBlocked ? (
-            <IconButton
-              icon="checkmark-circle-outline"
-              label="Liberar"
-              color={theme.success}
-              bg={theme.successLight}
-              onPress={() => onUnban(user)}
-              styles={styles}
-              compact
-            />
-          ) : (
-            <IconButton
-              icon="ban-outline"
-              label="Bloquear"
-              color={theme.warning}
-              bg="#FEF3C7"
-              onPress={() => onBan(user)}
-              styles={styles}
-              compact
-            />
-          )
+            isBlocked ? (
+              <IconButton
+                icon="checkmark-circle-outline"
+                label="Liberar"
+                color={theme.success}
+                bg={theme.successLight}
+                onPress={() => onUnban(user)}
+                styles={styles}
+                compact
+              />
+            ) : (
+              <IconButton
+                icon="ban-outline"
+                label="Bloquear"
+                color={theme.warning}
+                bg="#FEF3C7"
+                onPress={() => onBan(user)}
+                styles={styles}
+                compact
+              />
+            )
           ) : null}
           {canDelete ? (
-          <IconButton
-            icon="trash-outline"
-            label="Excluir"
-            color={theme.error}
-            bg={theme.errorLight}
-            onPress={() => onDelete(user)}
-            styles={styles}
-            compact
-          />
+            <IconButton
+              icon="trash-outline"
+              label="Excluir"
+              color={theme.error}
+              bg={theme.errorLight}
+              onPress={() => onDelete(user)}
+              styles={styles}
+              compact
+            />
           ) : null}
         </View>
       ) : null}
@@ -643,7 +789,8 @@ const UserCard = React.memo(function UserCard({
           <View style={styles.passwordChip}>
             <Ionicons name="key" size={14} color={theme.primary} />
             <Text style={styles.passwordLabel} numberOfLines={1}>
-              Senha gerada: <Text style={styles.passwordValue}>{lastPassword}</Text>
+              Senha gerada:{" "}
+              <Text style={styles.passwordValue}>{lastPassword}</Text>
             </Text>
           </View>
           <TouchableOpacity
@@ -681,13 +828,14 @@ const EmpresaCard = React.memo(function EmpresaCard({
   onDelete,
 }: EmpresaCardProps) {
   const renderNaoMeiLimit = (value?: number | null) =>
-    value === null || value === undefined || value === 0 ? 'Sem limite' : String(value);
+    value === null || value === undefined || value === 0
+      ? "Sem limite"
+      : String(value);
 
   const renderMeiEmpresaCap = (value?: number | null) => {
-    const lim =
-      value === null || value === undefined ? 0 : Number(value) || 0;
+    const lim = value === null || value === undefined ? 0 : Number(value) || 0;
     if (lim > 0) return String(lim);
-    return 'Desligado';
+    return "Desligado";
   };
 
   return (
@@ -699,22 +847,38 @@ const EmpresaCard = React.memo(function EmpresaCard({
         accessibilityLabel={`Editar empresa ${empresa.empresa}`}
       >
         <View style={styles.empresaCardLeft}>
-          <View style={[styles.empresaIcon, { backgroundColor: theme.primaryLight }]}>
+          <View
+            style={[
+              styles.empresaIcon,
+              { backgroundColor: theme.primaryLight },
+            ]}
+          >
             <Ionicons name="business" size={18} color={theme.primary} />
           </View>
           <View style={styles.empresaInfo}>
             <Text style={styles.empresaName} numberOfLines={1}>
               {empresa.nome_fantasia || empresa.empresa}
             </Text>
-            {isFocoMeiProductLine(resolveEmpresaProductLine(empresa.max_mei, empresa.product_line)) ? (
-              <Text style={[styles.empresaProductTag, { color: theme.primary }]}>
-                {productLineLabel(resolveEmpresaProductLine(empresa.max_mei, empresa.product_line))}
+            {isFocoMeiProductLine(
+              resolveEmpresaProductLine(empresa.max_mei, empresa.product_line),
+            ) ? (
+              <Text
+                style={[styles.empresaProductTag, { color: theme.primary }]}
+              >
+                {productLineLabel(
+                  resolveEmpresaProductLine(
+                    empresa.max_mei,
+                    empresa.product_line,
+                  ),
+                )}
               </Text>
             ) : null}
             <View style={styles.empresaLimitsRow}>
               <View style={styles.empresaLimitChip}>
                 <Text style={styles.empresaLimitChipLabel}>Fiscal</Text>
-                <Text style={styles.empresaLimitChipValue}>{renderMeiEmpresaCap(empresa.max_mei)}</Text>
+                <Text style={styles.empresaLimitChipValue}>
+                  {renderMeiEmpresaCap(empresa.max_mei)}
+                </Text>
               </View>
               <View style={styles.empresaLimitChip}>
                 <Text style={styles.empresaLimitChipLabel}>Sem emissão</Text>
@@ -729,7 +893,10 @@ const EmpresaCard = React.memo(function EmpresaCard({
       </TouchableOpacity>
       {onViewMembers ? (
         <TouchableOpacity
-          style={[styles.empresaCardActionBtn, { backgroundColor: theme.backgroundMuted }]}
+          style={[
+            styles.empresaCardActionBtn,
+            { backgroundColor: theme.backgroundMuted },
+          ]}
           onPress={() => onViewMembers(empresa)}
           accessibilityLabel={`Ver usuários de ${empresa.empresa}`}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -739,7 +906,10 @@ const EmpresaCard = React.memo(function EmpresaCard({
       ) : null}
       {onDelete ? (
         <TouchableOpacity
-          style={[styles.empresaCardActionBtn, { backgroundColor: theme.errorLight }]}
+          style={[
+            styles.empresaCardActionBtn,
+            { backgroundColor: theme.errorLight },
+          ]}
           onPress={() => onDelete(empresa)}
           accessibilityLabel={`Excluir empresa ${empresa.empresa}`}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -749,7 +919,10 @@ const EmpresaCard = React.memo(function EmpresaCard({
       ) : null}
       {onOpenBilling ? (
         <TouchableOpacity
-          style={[styles.empresaCardActionBtn, { backgroundColor: theme.primaryLight }]}
+          style={[
+            styles.empresaCardActionBtn,
+            { backgroundColor: theme.primaryLight },
+          ]}
           onPress={() => onOpenBilling(empresa)}
           accessibilityLabel={`Cobrança Stripe, ${empresa.empresa}`}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -793,16 +966,26 @@ function SidePanel({
   return (
     <Modal
       visible={open}
-      animationType={isDesktop ? 'fade' : 'slide'}
+      animationType={isDesktop ? "fade" : "slide"}
       transparent
       onRequestClose={onClose}
     >
       <View style={styles.panelOverlay}>
         <Pressable style={styles.panelBackdrop} onPress={onClose} />
-        <View style={[styles.panel, isDesktop ? styles.panelDesktop : styles.panelMobile]}>
+        <View
+          style={[
+            styles.panel,
+            isDesktop ? styles.panelDesktop : styles.panelMobile,
+          ]}
+        >
           <View style={styles.panelHeader}>
             {icon ? (
-              <View style={[styles.panelHeaderIcon, { backgroundColor: theme.primaryLight }]}>
+              <View
+                style={[
+                  styles.panelHeaderIcon,
+                  { backgroundColor: theme.primaryLight },
+                ]}
+              >
                 <Ionicons name={icon} size={20} color={theme.primary} />
               </View>
             ) : null}
@@ -864,64 +1047,82 @@ function Field({ label, required, helper, children, styles }: FieldProps) {
 // Main screen
 // =======================================================================
 
-export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Props) {
-  const { role, sessionRestored, impersonate, userId: currentUserId, refreshAccessContext } = useAuthStore();
-  const canManage = hasRole(role, ['admin']);
+export default function ManageUsersScreen({
+  onBack,
+  onImpersonateSuccess,
+}: Props) {
+  const {
+    role,
+    sessionRestored,
+    impersonate,
+    userId: currentUserId,
+    refreshAccessContext,
+  } = useAuthStore();
+  const canManage = hasRole(role, ["admin"]);
   const { isDarkMode } = useThemeStore();
   const theme = useMemo(() => getTheme(isDarkMode), [isDarkMode]);
   const { width: winWidth } = useWindowDimensions();
   const isDesktop = winWidth >= 900;
-  const styles = useMemo(() => createStyles(theme, isDesktop, isDarkMode), [theme, isDesktop, isDarkMode]);
+  const styles = useMemo(
+    () => createStyles(theme, isDesktop, isDarkMode),
+    [theme, isDesktop, isDarkMode],
+  );
 
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [empresas, setEmpresas] = useState<EmpresaOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [initialUsersLoading, setInitialUsersLoading] = useState(true);
   const [initialEmpresasLoading, setInitialEmpresasLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [lastPasswords, setLastPasswords] = useState<Record<string, string>>({});
-  const [activeTab, setActiveTab] = useState<TabKey>('users');
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [lastPasswords, setLastPasswords] = useState<Record<string, string>>(
+    {},
+  );
+  const [activeTab, setActiveTab] = useState<TabKey>("users");
 
   // Form: criar usuário
   const [createUserOpen, setCreateUserOpen] = useState(false);
   const [provisionClientOpen, setProvisionClientOpen] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [selectedRole, setSelectedRole] = useState<RoleOption>('usuario');
-  const [selectedEmpresa, setSelectedEmpresa] = useState<EmpresaOption | null>(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [selectedRole, setSelectedRole] = useState<RoleOption>("usuario");
+  const [selectedEmpresa, setSelectedEmpresa] = useState<EmpresaOption | null>(
+    null,
+  );
   const [empresaModalOpen, setEmpresaModalOpen] = useState(false);
 
   // Form: empresa (create + edit) — usa EmpresaModal completo
   const [empresaFormOpen, setEmpresaFormOpen] = useState(false);
-  const [empresaFormInitial, setEmpresaFormInitial] = useState<EmpresaFullData | null>(null);
+  const [empresaFormInitial, setEmpresaFormInitial] =
+    useState<EmpresaFullData | null>(null);
 
   // Form: editar usuário
   const [editingUser, setEditingUser] = useState<ManagedUser | null>(null);
-  const [editRole, setEditRole] = useState<RoleOption>('usuario');
+  const [editRole, setEditRole] = useState<RoleOption>("usuario");
   const [editEmpresa, setEditEmpresa] = useState<EmpresaOption | null>(null);
-  const [editDisplayName, setEditDisplayName] = useState('');
-  const [editPhone, setEditPhone] = useState('');
-  const [editEmail, setEditEmail] = useState('');
-  const [editOriginalEmail, setEditOriginalEmail] = useState('');
+  const [editDisplayName, setEditDisplayName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editOriginalEmail, setEditOriginalEmail] = useState("");
   const [editMei, setEditMei] = useState(false);
   const [editDocNfse, setEditDocNfse] = useState(true);
   const [editDocNfe, setEditDocNfe] = useState(false);
   const [editDocNfce, setEditDocNfce] = useState(false);
   const [editDocsLoading, setEditDocsLoading] = useState(false);
-  const [editExpiresAt, setEditExpiresAt] = useState('');
+  const [editExpiresAt, setEditExpiresAt] = useState("");
   const [editEmpresaModalOpen, setEditEmpresaModalOpen] = useState(false);
 
   // Reset senha
   const [resetPasswordModalOpen, setResetPasswordModalOpen] = useState(false);
   const [resettingUser, setResettingUser] = useState<ManagedUser | null>(null);
-  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [newPasswordInput, setNewPasswordInput] = useState("");
 
   // Impersonar (Alert.alert com 2 botões não funciona na web)
   const [impersonateModalOpen, setImpersonateModalOpen] = useState(false);
-  const [impersonateTarget, setImpersonateTarget] = useState<ManagedUser | null>(null);
+  const [impersonateTarget, setImpersonateTarget] =
+    useState<ManagedUser | null>(null);
 
   // Excluir (Alert.alert com 2 botões não funciona na web)
   const [deleteUserModalOpen, setDeleteUserModalOpen] = useState(false);
@@ -935,21 +1136,28 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
 
   // Excluir empresa (Alert.alert com 2 botões não funciona na web)
   const [deleteEmpresaModalOpen, setDeleteEmpresaModalOpen] = useState(false);
-  const [empresaToDelete, setEmpresaToDelete] = useState<EmpresaOption | null>(null);
+  const [empresaToDelete, setEmpresaToDelete] = useState<EmpresaOption | null>(
+    null,
+  );
 
   /** Cobrança MEI (Stripe) — superadmin, API do site (`EXPO_PUBLIC_MEI_API_URL`). */
-  const [billingEmpresa, setBillingEmpresa] = useState<EmpresaOption | null>(null);
+  const [billingEmpresa, setBillingEmpresa] = useState<EmpresaOption | null>(
+    null,
+  );
   /** Superadmin: painel com todos os usuários de uma empresa. */
-  const [membersEmpresa, setMembersEmpresa] = useState<EmpresaOption | null>(null);
+  const [membersEmpresa, setMembersEmpresa] = useState<EmpresaOption | null>(
+    null,
+  );
 
   // Listagem
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [pageSize] = useState(25);
   const [currentPage, setCurrentPage] = useState(1);
-  const [empresaSearch, setEmpresaSearch] = useState('');
-  const [empresaTabSearch, setEmpresaTabSearch] = useState('');
-  const [empresaMeiFilter, setEmpresaMeiFilter] = useState<EmpresaMeiFilter>('active');
+  const [empresaSearch, setEmpresaSearch] = useState("");
+  const [empresaTabSearch, setEmpresaTabSearch] = useState("");
+  const [empresaMeiFilter, setEmpresaMeiFilter] =
+    useState<EmpresaMeiFilter>("all");
   const [clipboardAvailable, setClipboardAvailable] = useState(true);
   const clipboardRef = useRef<ClipboardModule | null>(null);
 
@@ -959,7 +1167,7 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
 
   const fetchUsers = async (search?: string, silent = false) => {
     if (!silent) setLoading(true);
-    setError('');
+    setError("");
     try {
       const data = await listUsers(search);
       setUsers((prev) => {
@@ -973,7 +1181,7 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
         return merged;
       });
     } catch (err: any) {
-      setError(err.message || 'Erro ao listar usuários');
+      setError(err.message || "Erro ao listar usuários");
     } finally {
       if (!silent) setLoading(false);
       setInitialUsersLoading(false);
@@ -981,7 +1189,7 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
   };
 
   const fetchEmpresas = async () => {
-    if (role !== 'superadmin') {
+    if (role !== "superadmin") {
       setInitialEmpresasLoading(false);
       return;
     }
@@ -989,7 +1197,7 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
       const data = await listEmpresas();
       setEmpresas(data);
     } catch (err: any) {
-      setError(err.message || 'Erro ao listar empresas');
+      setError(err.message || "Erro ao listar empresas");
     } finally {
       setInitialEmpresasLoading(false);
     }
@@ -1020,8 +1228,8 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
   useEffect(() => {
     if (!success && !error) return;
     const timer = setTimeout(() => {
-      setSuccess('');
-      setError('');
+      setSuccess("");
+      setError("");
     }, 4000);
     return () => clearTimeout(timer);
   }, [success, error]);
@@ -1034,14 +1242,18 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
     const trimmed = value.trim();
     if (!trimmed) return null;
     const numeric = Number(trimmed);
-    if (!Number.isFinite(numeric) || !Number.isInteger(numeric) || numeric < 0) {
+    if (
+      !Number.isFinite(numeric) ||
+      !Number.isInteger(numeric) ||
+      numeric < 0
+    ) {
       throw new Error(`${fieldLabel} deve ser um inteiro maior ou igual a 0`);
     }
     return numeric;
   };
 
   const formatLimitValue = (value?: number | null) =>
-    value === null || value === undefined ? '' : String(value);
+    value === null || value === undefined ? "" : String(value);
 
   // ----------------------------------------------------------------------
   // Empresa actions
@@ -1054,7 +1266,7 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
 
   const openEditEmpresa = async (empresa: EmpresaOption) => {
     setLoading(true);
-    setError('');
+    setError("");
     try {
       const full = await getEmpresaById(empresa.id);
       setEmpresaFormInitial(
@@ -1067,7 +1279,7 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
       );
       setEmpresaFormOpen(true);
     } catch (err: any) {
-      setError(err?.message || 'Erro ao carregar dados da empresa');
+      setError(err?.message || "Erro ao carregar dados da empresa");
     } finally {
       setLoading(false);
     }
@@ -1081,7 +1293,7 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
   const handleEmpresaSaved = async (saved?: EmpresaFullData) => {
     setEmpresaFormOpen(false);
     setEmpresaFormInitial(null);
-    setSuccess('Empresa salva com sucesso.');
+    setSuccess("Empresa salva com sucesso.");
     if (saved?.id) {
       setEmpresas((prev) =>
         prev.map((e) =>
@@ -1091,7 +1303,8 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
                 empresa: saved.empresa ?? e.empresa,
                 nome_fantasia: saved.nome_fantasia ?? e.nome_fantasia,
                 max_mei: saved.max_mei ?? e.max_mei,
-                max_usuarios_nao_mei: saved.max_usuarios_nao_mei ?? e.max_usuarios_nao_mei,
+                max_usuarios_nao_mei:
+                  saved.max_usuarios_nao_mei ?? e.max_usuarios_nao_mei,
               }
             : e,
         ),
@@ -1106,23 +1319,26 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
 
   const openCreateUser = () => {
     // Foco Simples: carrossel do contador (cliente + cert + catálogo).
-    if (resolveAppOrigin() === 'focosimples' && (role === 'admin' || role === 'superadmin')) {
+    if (
+      resolveAppOrigin() === "focosimples" &&
+      (role === "admin" || role === "superadmin")
+    ) {
       setProvisionClientOpen(true);
       return;
     }
-    setEmail('');
-    setPassword('');
-    setDisplayName('');
-    setPhone('');
-    setSelectedRole('usuario');
+    setEmail("");
+    setPassword("");
+    setDisplayName("");
+    setPhone("");
+    setSelectedRole("usuario");
     setSelectedEmpresa(null);
     setCreateUserOpen(true);
   };
 
   const handleCreateUser = async () => {
     setLoading(true);
-    setError('');
-    setSuccess('');
+    setError("");
+    setSuccess("");
     try {
       const cleanedPhone = cleanPhone(phone);
       const payload = {
@@ -1130,23 +1346,26 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
         password: password || undefined,
         displayName: displayName || undefined,
         phone: cleanedPhone || undefined,
-        role: role === 'superadmin' ? selectedRole : 'usuario',
-        empresaId: role === 'superadmin' ? selectedEmpresa?.id : undefined,
+        role: role === "superadmin" ? selectedRole : "usuario",
+        empresaId: role === "superadmin" ? selectedEmpresa?.id : undefined,
         mei: false,
       };
 
       const result = await createUser(payload);
       const message = result?.generatedPassword
         ? `Usuário criado. Senha gerada: ${result.generatedPassword}`
-        : 'Usuário criado com sucesso.';
+        : "Usuário criado com sucesso.";
       setSuccess(message);
       if (result?.generatedPassword && result?.userId) {
-        setLastPasswords((prev) => ({ ...prev, [result.userId]: result.generatedPassword }));
+        setLastPasswords((prev) => ({
+          ...prev,
+          [result.userId]: result.generatedPassword,
+        }));
       }
       setCreateUserOpen(false);
       await fetchUsers();
     } catch (err: any) {
-      setError(err.message || 'Erro ao criar usuário');
+      setError(err.message || "Erro ao criar usuário");
     } finally {
       setLoading(false);
     }
@@ -1154,11 +1373,12 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
 
   const focomeiUsers = useMemo(() => {
     // Foco Simples: lista todos. FocoMEI: só vagas MEI.
-    if (resolveAppOrigin() === 'focomei') return filterFocoMeiAdminUsers(users);
+    if (resolveAppOrigin() === "focomei") return filterFocoMeiAdminUsers(users);
     return users;
   }, [users]);
   const focomeiEmpresas = useMemo(() => {
-    if (resolveAppOrigin() === 'focomei') return filterFocoMeiAdminEmpresas(empresas);
+    if (resolveAppOrigin() === "focomei")
+      return filterFocoMeiAdminEmpresas(empresas);
     return empresas;
   }, [empresas]);
 
@@ -1181,7 +1401,7 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
     return (
       focomeiEmpresas.find((item) => item.id === user.empresaId) || {
         id: user.empresaId,
-        empresa: user.empresaName || 'Empresa',
+        empresa: user.empresaName || "Empresa",
       }
     );
   };
@@ -1189,7 +1409,7 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
   const openCompanyMembersForUser = (user: ManagedUser) => {
     const empresa = resolveEmpresaForUser(user);
     if (!empresa) {
-      Alert.alert('Sem empresa', 'Este admin não tem empresa vinculada.');
+      Alert.alert("Sem empresa", "Este admin não tem empresa vinculada.");
       return;
     }
     openEmpresaMembers(empresa);
@@ -1221,34 +1441,36 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
   const startEditUser = (user: ManagedUser) => {
     setEditingUser(user);
     setEditRole(
-      user.role === 'admin' || user.role === 'usuario' || user.role === 'outsider'
+      user.role === "admin" ||
+        user.role === "usuario" ||
+        user.role === "outsider"
         ? user.role
-        : 'usuario',
+        : "usuario",
     );
     const empresa =
       focomeiEmpresas.find((item) => item.id === user.empresaId) ||
       (user.empresaId
-        ? { id: user.empresaId, empresa: user.empresaName || 'Empresa atual' }
+        ? { id: user.empresaId, empresa: user.empresaName || "Empresa atual" }
         : null);
     setEditEmpresa(empresa);
-    setEditDisplayName(user.displayName || '');
-    setEditPhone(user.phone || '');
-    setEditEmail(user.email || '');
-    setEditOriginalEmail(user.email || '');
+    setEditDisplayName(user.displayName || "");
+    setEditPhone(user.phone || "");
+    setEditEmail(user.email || "");
+    setEditOriginalEmail(user.email || "");
     setEditMei(user.mei === true);
     void loadEditMeiDocumentos(user.id);
     if (user.expiresAt) {
       try {
         const d = new Date(user.expiresAt);
         const y = d.getFullYear();
-        const m = (d.getMonth() + 1).toString().padStart(2, '0');
-        const day = d.getDate().toString().padStart(2, '0');
-        setEditExpiresAt(isNaN(d.getTime()) ? '' : `${y}-${m}-${day}`);
+        const m = (d.getMonth() + 1).toString().padStart(2, "0");
+        const day = d.getDate().toString().padStart(2, "0");
+        setEditExpiresAt(isNaN(d.getTime()) ? "" : `${y}-${m}-${day}`);
       } catch {
-        setEditExpiresAt('');
+        setEditExpiresAt("");
       }
     } else {
-      setEditExpiresAt('');
+      setEditExpiresAt("");
     }
   };
 
@@ -1260,44 +1482,55 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
   const handleUpdateUser = async () => {
     if (!editingUser) return;
     setLoading(true);
-    setError('');
-    setSuccess('');
+    setError("");
+    setSuccess("");
     try {
       const cleanedPhone = cleanPhone(editPhone);
       const trimmedEditEmail = editEmail.trim().toLowerCase();
       const emailChanged =
         !!trimmedEditEmail &&
-        trimmedEditEmail !== (editOriginalEmail || '').trim().toLowerCase();
-      if (trimmedEditEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEditEmail)) {
-        throw new Error('E-mail inválido');
+        trimmedEditEmail !== (editOriginalEmail || "").trim().toLowerCase();
+      if (
+        trimmedEditEmail &&
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEditEmail)
+      ) {
+        throw new Error("E-mail inválido");
       }
       if (editMei && !editDocNfse && !editDocNfe && !editDocNfce) {
-        throw new Error('Com emissão fiscal ativa, libere ao menos um tipo de nota (NFS-e, NF-e ou NFC-e).');
+        throw new Error(
+          "Com emissão fiscal ativa, libere ao menos um tipo de nota (NFS-e, NF-e ou NFC-e).",
+        );
       }
       const expiresAtValue =
-        editExpiresAt.trim() && editingUser.role === 'usuario'
+        editExpiresAt.trim() && editingUser.role === "usuario"
           ? (() => {
               const d = new Date(editExpiresAt.trim());
               return isNaN(d.getTime()) ? null : d.toISOString();
             })()
-          : editingUser.role === 'usuario'
+          : editingUser.role === "usuario"
             ? null
             : undefined;
       const isEditingSelf = editingUser.id === currentUserId;
       const emailField = emailChanged ? { email: trimmedEditEmail } : {};
       const payload =
-        role === 'superadmin'
+        role === "superadmin"
           ? {
-              ...(isEditingSelf ? {} : { role: editRole, empresaId: editEmpresa?.id || undefined }),
+              ...(isEditingSelf
+                ? {}
+                : { role: editRole, empresaId: editEmpresa?.id || undefined }),
               displayName: editDisplayName || undefined,
               phone: cleanedPhone || undefined,
               ...emailField,
               mei: editMei,
-              ...(editRole === 'usuario' && !isEditingSelf && { expiresAt: expiresAtValue }),
-              ...(isEditingSelf && editingUser.role === 'usuario' && { expiresAt: expiresAtValue }),
+              ...(editRole === "usuario" &&
+                !isEditingSelf && { expiresAt: expiresAtValue }),
+              ...(isEditingSelf &&
+                editingUser.role === "usuario" && {
+                  expiresAt: expiresAtValue,
+                }),
             }
           : {
-              ...(isEditingSelf ? {} : { role: 'usuario' as const }),
+              ...(isEditingSelf ? {} : { role: "usuario" as const }),
               displayName: editDisplayName || undefined,
               phone: cleanedPhone || undefined,
               ...emailField,
@@ -1320,12 +1553,14 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
       setSuccess(
         emailChanged
           ? `Usuário atualizado. Link de confirmação enviado para ${trimmedEditEmail}.`
-          : 'Usuário atualizado com sucesso.',
+          : "Usuário atualizado com sucesso.",
       );
       setEditingUser(null);
       await fetchUsers();
     } catch (err: any) {
-      setError(formatManageUserError(err.message || 'Erro ao atualizar usuário'));
+      setError(
+        formatManageUserError(err.message || "Erro ao atualizar usuário"),
+      );
     } finally {
       setLoading(false);
     }
@@ -1345,16 +1580,17 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
   const confirmBanUser = async () => {
     if (!userToBan?.id) return;
     setLoading(true);
-    setError('');
-    setSuccess('');
+    setError("");
+    setSuccess("");
     try {
       await banUser(userToBan.id);
       setBanUserModalOpen(false);
       setUserToBan(null);
-      setSuccess('Usuário bloqueado com sucesso.');
+      setSuccess("Usuário bloqueado com sucesso.");
       await fetchUsers();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Erro ao bloquear usuário';
+      const message =
+        err instanceof Error ? err.message : "Erro ao bloquear usuário";
       setError(message);
     } finally {
       setLoading(false);
@@ -1375,16 +1611,17 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
   const confirmUnbanUser = async () => {
     if (!userToUnban?.id) return;
     setLoading(true);
-    setError('');
-    setSuccess('');
+    setError("");
+    setSuccess("");
     try {
       await unbanUser(userToUnban.id);
       setUnbanUserModalOpen(false);
       setUserToUnban(null);
-      setSuccess('Usuário desbloqueado com sucesso.');
+      setSuccess("Usuário desbloqueado com sucesso.");
       await fetchUsers();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Erro ao desbloquear usuário';
+      const message =
+        err instanceof Error ? err.message : "Erro ao desbloquear usuário";
       setError(message);
     } finally {
       setLoading(false);
@@ -1405,10 +1642,12 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
   const confirmImpersonate = async () => {
     if (!impersonateTarget?.id) return;
     const label =
-      impersonateTarget.displayName || impersonateTarget.email || 'este usuário';
+      impersonateTarget.displayName ||
+      impersonateTarget.email ||
+      "este usuário";
     setLoading(true);
-    setError('');
-    setSuccess('');
+    setError("");
+    setSuccess("");
     try {
       await impersonate(impersonateTarget.id);
       setImpersonateModalOpen(false);
@@ -1417,7 +1656,8 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
       onBack();
       onImpersonateSuccess?.();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Erro ao acessar conta';
+      const message =
+        err instanceof Error ? err.message : "Erro ao acessar conta";
       setError(message);
     } finally {
       setLoading(false);
@@ -1438,16 +1678,17 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
   const confirmDeleteUser = async () => {
     if (!userToDelete?.id) return;
     setLoading(true);
-    setError('');
-    setSuccess('');
+    setError("");
+    setSuccess("");
     try {
       await deleteUser(userToDelete.id);
       setDeleteUserModalOpen(false);
       setUserToDelete(null);
-      setSuccess('Usuário excluído com sucesso.');
+      setSuccess("Usuário excluído com sucesso.");
       await fetchUsers();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Erro ao excluir usuário';
+      const message =
+        err instanceof Error ? err.message : "Erro ao excluir usuário";
       setError(message);
     } finally {
       setLoading(false);
@@ -1468,17 +1709,18 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
   const confirmDeleteEmpresa = async () => {
     if (!empresaToDelete?.id) return;
     setLoading(true);
-    setError('');
-    setSuccess('');
+    setError("");
+    setSuccess("");
     try {
       await deleteEmpresa(empresaToDelete.id);
       setDeleteEmpresaModalOpen(false);
       setEmpresaToDelete(null);
-      setSuccess('Empresa excluída com sucesso.');
+      setSuccess("Empresa excluída com sucesso.");
       await fetchEmpresas();
       await fetchUsers();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Erro ao excluir empresa';
+      const message =
+        err instanceof Error ? err.message : "Erro ao excluir empresa";
       setError(message);
     } finally {
       setLoading(false);
@@ -1487,27 +1729,30 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
 
   const handleResetPassword = (user: ManagedUser) => {
     setResettingUser(user);
-    setNewPasswordInput('');
+    setNewPasswordInput("");
     setResetPasswordModalOpen(true);
   };
 
   const confirmResetPassword = async () => {
     if (!resettingUser) return;
     setLoading(true);
-    setError('');
-    setSuccess('');
+    setError("");
+    setSuccess("");
     try {
       const result = await resetUserPassword(
         resettingUser.id,
         newPasswordInput.trim() || undefined,
       );
-      setLastPasswords((prev) => ({ ...prev, [resettingUser.id]: result.password }));
-      setSuccess('Senha redefinida com sucesso.');
+      setLastPasswords((prev) => ({
+        ...prev,
+        [resettingUser.id]: result.password,
+      }));
+      setSuccess("Senha redefinida com sucesso.");
       setResetPasswordModalOpen(false);
       setResettingUser(null);
-      setNewPasswordInput('');
+      setNewPasswordInput("");
     } catch (err: any) {
-      setError(err.message || 'Erro ao redefinir senha');
+      setError(err.message || "Erro ao redefinir senha");
     } finally {
       setLoading(false);
     }
@@ -1517,17 +1762,24 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
     const passwordValue = lastPasswords[userId];
     if (!passwordValue) return;
     if (!clipboardAvailable) {
-      Alert.alert('Indisponível', 'Recurso de copiar não está disponível neste build.');
+      Alert.alert(
+        "Indisponível",
+        "Recurso de copiar não está disponível neste build.",
+      );
       return;
     }
     try {
-      const Clipboard = clipboardRef.current ?? (await import('expo-clipboard'));
+      const Clipboard =
+        clipboardRef.current ?? (await import("expo-clipboard"));
       clipboardRef.current = Clipboard;
       await Clipboard.setStringAsync(passwordValue);
-      Alert.alert('Copiado', 'Senha copiada para a área de transferência.');
+      Alert.alert("Copiado", "Senha copiada para a área de transferência.");
     } catch {
       setClipboardAvailable(false);
-      Alert.alert('Indisponível', 'Recurso de copiar não está disponível neste build.');
+      Alert.alert(
+        "Indisponível",
+        "Recurso de copiar não está disponível neste build.",
+      );
     }
   };
 
@@ -1537,22 +1789,26 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
 
   const filteredUsers = useMemo(() => {
     const base = focomeiUsers;
-    return role === 'admin'
-      ? base.filter((user) => user.role !== 'superadmin' && user.role !== 'outsider')
+    return role === "admin"
+      ? base.filter(
+          (user) => user.role !== "superadmin" && user.role !== "outsider",
+        )
       : base;
   }, [role, focomeiUsers]);
 
   const searchedUsers = useMemo(() => {
     if (!searchTerm.trim()) return filteredUsers;
-    return filteredUsers.filter((user) => matchManagedUserSearch(user, searchTerm));
+    return filteredUsers.filter((user) =>
+      matchManagedUserSearch(user, searchTerm),
+    );
   }, [filteredUsers, searchTerm]);
 
   const sortedUsers = useMemo(() => {
     const sorted = [...searchedUsers].sort((a, b) => {
-      const aValue = (a.displayName || a.email || '').toLowerCase();
-      const bValue = (b.displayName || b.email || '').toLowerCase();
-      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
-      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+      const aValue = (a.displayName || a.email || "").toLowerCase();
+      const bValue = (b.displayName || b.email || "").toLowerCase();
+      if (aValue < bValue) return sortDirection === "asc" ? -1 : 1;
+      if (aValue > bValue) return sortDirection === "asc" ? 1 : -1;
       return 0;
     });
     return sorted;
@@ -1576,19 +1832,23 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
     const term = empresaTabSearch.trim().toLowerCase();
     const displayName = (e: EmpresaOption) => e.nome_fantasia || e.empresa;
     const sorted = [...focomeiEmpresas].sort((a, b) =>
-      displayName(a).localeCompare(displayName(b), 'pt-BR', { sensitivity: 'base' }),
+      displayName(a).localeCompare(displayName(b), "pt-BR", {
+        sensitivity: "base",
+      }),
     );
     return sorted.filter((e) => {
       const matchesName = !term || displayName(e).toLowerCase().includes(term);
       if (!matchesName) return false;
 
-      if (empresaMeiFilter === 'all') return true;
+      if (empresaMeiFilter === "all") return true;
 
       const limiteMei =
-        e.max_mei === null || e.max_mei === undefined ? 0 : Number(e.max_mei) || 0;
+        e.max_mei === null || e.max_mei === undefined
+          ? 0
+          : Number(e.max_mei) || 0;
       const meiAtivo = limiteMei > 0;
 
-      return empresaMeiFilter === 'active' ? meiAtivo : !meiAtivo;
+      return empresaMeiFilter === "active" ? meiAtivo : !meiAtivo;
     });
   }, [focomeiEmpresas, empresaTabSearch, empresaMeiFilter]);
 
@@ -1602,23 +1862,23 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
     [filteredUsers],
   );
 
-  const showEmpresasTab = role === 'superadmin';
+  const showEmpresasTab = role === "superadmin";
 
   const pageStats = useMemo(() => {
-    const isMeiProduct = resolveAppOrigin() === 'focomei';
+    const isMeiProduct = resolveAppOrigin() === "focomei";
     const activeCount = focomeiUsers.filter((u) => u.status !== false).length;
     const adminCount = focomeiUsers.filter(
-      (u) => u.role === 'admin' || u.role === 'superadmin',
+      (u) => u.role === "admin" || u.role === "superadmin",
     ).length;
     const items = [
-      { label: 'Usuários', value: focomeiUsers.length },
-      { label: 'Ativos', value: activeCount },
-      { label: 'Bloqueados', value: blockedCount },
-      { label: 'Admins', value: adminCount },
+      { label: "Usuários", value: focomeiUsers.length },
+      { label: "Ativos", value: activeCount },
+      { label: "Bloqueados", value: blockedCount },
+      { label: "Admins", value: adminCount },
     ];
     if (showEmpresasTab) {
       items.splice(1, 0, {
-        label: 'Empresas',
+        label: "Empresas",
         value: focomeiEmpresas.length,
       });
     }
@@ -1631,12 +1891,17 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
 
   if (!sessionRestored) {
     return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
         <MfScrollView
           style={styles.pageScroll}
-          contentContainerStyle={[styles.pageContent, isDesktop && styles.pageContentDesktop]}
+          contentContainerStyle={[
+            styles.pageContent,
+            isDesktop && styles.pageContentDesktop,
+          ]}
         >
-          <View style={[styles.bodyInner, isDesktop && styles.bodyInnerDesktop]}>
+          <View
+            style={[styles.bodyInner, isDesktop && styles.bodyInnerDesktop]}
+          >
             <ManageUsersPageChrome
               theme={theme}
               onBack={onBack}
@@ -1655,12 +1920,17 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
 
   if (!canManage) {
     return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
         <MfScrollView
           style={styles.pageScroll}
-          contentContainerStyle={[styles.pageContent, isDesktop && styles.pageContentDesktop]}
+          contentContainerStyle={[
+            styles.pageContent,
+            isDesktop && styles.pageContentDesktop,
+          ]}
         >
-          <View style={[styles.bodyInner, isDesktop && styles.bodyInnerDesktop]}>
+          <View
+            style={[styles.bodyInner, isDesktop && styles.bodyInnerDesktop]}
+          >
             <ManageUsersPageChrome
               theme={theme}
               onBack={onBack}
@@ -1669,8 +1939,17 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
               stats={[]}
             />
             <View style={styles.emptyState}>
-              <View style={[styles.emptyIcon, { backgroundColor: theme.errorLight }]}>
-                <Ionicons name="lock-closed-outline" size={32} color={theme.error} />
+              <View
+                style={[
+                  styles.emptyIcon,
+                  { backgroundColor: theme.errorLight },
+                ]}
+              >
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={32}
+                  color={theme.error}
+                />
               </View>
               <Text style={styles.emptyTitle}>Acesso restrito</Text>
               <Text style={styles.emptyDescription}>
@@ -1684,13 +1963,16 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <MfScrollView
-          style={styles.pageScroll}
-          contentContainerStyle={[styles.pageContent, isDesktop && styles.pageContentDesktop]}
-          keyboardShouldPersistTaps="handled"
-          nestedScrollEnabled
-        >
+    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+      <MfScrollView
+        style={styles.pageScroll}
+        contentContainerStyle={[
+          styles.pageContent,
+          isDesktop && styles.pageContentDesktop,
+        ]}
+        keyboardShouldPersistTaps="handled"
+        nestedScrollEnabled
+      >
         <View style={[styles.bodyInner, isDesktop && styles.bodyInnerDesktop]}>
           <ManageUsersPageChrome
             theme={theme}
@@ -1699,21 +1981,26 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
             role={role}
             stats={pageStats}
             subtitle={
-              resolveAppOrigin() === 'focomei'
-                ? 'Somente empresas e usuários com emissão fiscal ativa.'
-                : 'Gerencie empresas, usuários e permissões do Foco Simples.'
+              resolveAppOrigin() === "focomei"
+                ? "Somente empresas e usuários com emissão fiscal ativa."
+                : "Gerencie empresas, usuários e permissões do Foco Simples."
             }
-            loading={initialUsersLoading || (showEmpresasTab && initialEmpresasLoading)}
+            loading={
+              initialUsersLoading || (showEmpresasTab && initialEmpresasLoading)
+            }
             rightAction={
-              isDesktop && activeTab !== 'invites'
+              isDesktop && activeTab !== "invites"
                 ? {
                     label:
-                      activeTab === 'users'
-                        ? resolveAppOrigin() === 'focosimples'
-                          ? 'Criar novo usuário'
-                          : 'Novo usuário'
-                        : 'Nova empresa',
-                    onPress: activeTab === 'users' ? openCreateUser : openCreateEmpresa,
+                      activeTab === "users"
+                        ? resolveAppOrigin() === "focosimples"
+                          ? "Criar novo usuário"
+                          : "Novo usuário"
+                        : "Nova empresa",
+                    onPress:
+                      activeTab === "users"
+                        ? openCreateUser
+                        : openCreateEmpresa,
                   }
                 : null
             }
@@ -1728,45 +2015,67 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
             nestedScrollEnabled
           >
             <TouchableOpacity
-              style={[styles.tabBtn, activeTab === 'users' && styles.tabBtnActive]}
-              onPress={() => setActiveTab('users')}
+              style={[
+                styles.tabBtn,
+                activeTab === "users" && styles.tabBtnActive,
+              ]}
+              onPress={() => setActiveTab("users")}
               accessibilityRole="tab"
-              accessibilityState={{ selected: activeTab === 'users' }}
+              accessibilityState={{ selected: activeTab === "users" }}
               accessibilityLabel="Usuários"
             >
               <Ionicons
                 name="people-outline"
                 size={16}
-                color={activeTab === 'users' ? '#FFFFFF' : theme.textSecondary}
+                color={activeTab === "users" ? "#FFFFFF" : theme.textSecondary}
               />
               <Text
-                style={[styles.tabBtnText, activeTab === 'users' && styles.tabBtnTextActive]}
+                style={[
+                  styles.tabBtnText,
+                  activeTab === "users" && styles.tabBtnTextActive,
+                ]}
                 numberOfLines={1}
               >
                 Usuários
               </Text>
-              <View style={[styles.tabCount, activeTab === 'users' && styles.tabCountActive]}>
+              <View
+                style={[
+                  styles.tabCount,
+                  activeTab === "users" && styles.tabCountActive,
+                ]}
+              >
                 <Text
-                  style={[styles.tabCountText, activeTab === 'users' && styles.tabCountTextActive]}
+                  style={[
+                    styles.tabCountText,
+                    activeTab === "users" && styles.tabCountTextActive,
+                  ]}
                 >
-                  {initialUsersLoading ? '…' : filteredUsers.length}
+                  {initialUsersLoading ? "…" : filteredUsers.length}
                 </Text>
               </View>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.tabBtn, activeTab === 'invites' && styles.tabBtnActive]}
-              onPress={() => setActiveTab('invites')}
+              style={[
+                styles.tabBtn,
+                activeTab === "invites" && styles.tabBtnActive,
+              ]}
+              onPress={() => setActiveTab("invites")}
               accessibilityRole="tab"
-              accessibilityState={{ selected: activeTab === 'invites' }}
+              accessibilityState={{ selected: activeTab === "invites" }}
               accessibilityLabel="Convites"
             >
               <Ionicons
                 name="link-outline"
                 size={16}
-                color={activeTab === 'invites' ? '#FFFFFF' : theme.textSecondary}
+                color={
+                  activeTab === "invites" ? "#FFFFFF" : theme.textSecondary
+                }
               />
               <Text
-                style={[styles.tabBtnText, activeTab === 'invites' && styles.tabBtnTextActive]}
+                style={[
+                  styles.tabBtnText,
+                  activeTab === "invites" && styles.tabBtnTextActive,
+                ]}
                 numberOfLines={1}
               >
                 Convites
@@ -1774,31 +2083,44 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
             </TouchableOpacity>
             {showEmpresasTab ? (
               <TouchableOpacity
-                style={[styles.tabBtn, activeTab === 'empresas' && styles.tabBtnActive]}
-                onPress={() => setActiveTab('empresas')}
+                style={[
+                  styles.tabBtn,
+                  activeTab === "empresas" && styles.tabBtnActive,
+                ]}
+                onPress={() => setActiveTab("empresas")}
                 accessibilityRole="tab"
-                accessibilityState={{ selected: activeTab === 'empresas' }}
+                accessibilityState={{ selected: activeTab === "empresas" }}
                 accessibilityLabel="Empresas"
               >
                 <Ionicons
                   name="business-outline"
                   size={16}
-                  color={activeTab === 'empresas' ? '#FFFFFF' : theme.textSecondary}
+                  color={
+                    activeTab === "empresas" ? "#FFFFFF" : theme.textSecondary
+                  }
                 />
                 <Text
-                  style={[styles.tabBtnText, activeTab === 'empresas' && styles.tabBtnTextActive]}
+                  style={[
+                    styles.tabBtnText,
+                    activeTab === "empresas" && styles.tabBtnTextActive,
+                  ]}
                   numberOfLines={1}
                 >
                   Empresas
                 </Text>
-                <View style={[styles.tabCount, activeTab === 'empresas' && styles.tabCountActive]}>
+                <View
+                  style={[
+                    styles.tabCount,
+                    activeTab === "empresas" && styles.tabCountActive,
+                  ]}
+                >
                   <Text
                     style={[
                       styles.tabCountText,
-                      activeTab === 'empresas' && styles.tabCountTextActive,
+                      activeTab === "empresas" && styles.tabCountTextActive,
                     ]}
                   >
-                    {initialEmpresasLoading ? '…' : focomeiEmpresas.length}
+                    {initialEmpresasLoading ? "…" : focomeiEmpresas.length}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -1814,16 +2136,24 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
           ) : null}
           {success ? (
             <View style={styles.feedbackSuccess}>
-              <Ionicons name="checkmark-circle" size={18} color={theme.success} />
+              <Ionicons
+                name="checkmark-circle"
+                size={18}
+                color={theme.success}
+              />
               <Text style={styles.feedbackSuccessText}>{success}</Text>
             </View>
           ) : null}
 
-          {activeTab === 'users' ? (
+          {activeTab === "users" ? (
             <View style={styles.tabPanel}>
               <View style={styles.toolbar}>
                 <View style={styles.searchBox}>
-                  <Ionicons name="search" size={16} color={theme.textTertiary} />
+                  <Ionicons
+                    name="search"
+                    size={16}
+                    color={theme.textTertiary}
+                  />
                   <TextInput
                     style={styles.searchInput}
                     placeholder="Nome, email, telefone, empresa ou perfil"
@@ -1833,29 +2163,38 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
                     autoCapitalize="none"
                   />
                   {searchTerm ? (
-                    <TouchableOpacity onPress={() => setSearchTerm('')}>
-                      <Ionicons name="close-circle" size={16} color={theme.textTertiary} />
+                    <TouchableOpacity onPress={() => setSearchTerm("")}>
+                      <Ionicons
+                        name="close-circle"
+                        size={16}
+                        color={theme.textTertiary}
+                      />
                     </TouchableOpacity>
                   ) : null}
                 </View>
                 <TouchableOpacity
                   style={styles.sortBtn}
                   onPress={() =>
-                    setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+                    setSortDirection((prev) =>
+                      prev === "asc" ? "desc" : "asc",
+                    )
                   }
                   accessibilityLabel="Alternar ordenação"
                 >
                   <Ionicons
-                    name={sortDirection === 'asc' ? 'arrow-down' : 'arrow-up'}
+                    name={sortDirection === "asc" ? "arrow-down" : "arrow-up"}
                     size={16}
                     color={theme.text}
                   />
                   <Text style={styles.sortBtnText}>
-                    {sortDirection === 'asc' ? 'A–Z' : 'Z–A'}
+                    {sortDirection === "asc" ? "A–Z" : "Z–A"}
                   </Text>
                 </TouchableOpacity>
                 {!isDesktop ? (
-                  <TouchableOpacity style={styles.toolbarAddBtn} onPress={openCreateUser}>
+                  <TouchableOpacity
+                    style={styles.toolbarAddBtn}
+                    onPress={openCreateUser}
+                  >
                     <Ionicons name="add" size={18} color="#FFFFFF" />
                   </TouchableOpacity>
                 ) : null}
@@ -1863,7 +2202,8 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
               {sortedUsers.length > 0 ? (
                 <Text style={styles.listSummary}>
                   Mostrando {(currentPageSafe - 1) * pageSize + 1}–
-                  {Math.min(currentPageSafe * pageSize, sortedUsers.length)} de {sortedUsers.length}
+                  {Math.min(currentPageSafe * pageSize, sortedUsers.length)} de{" "}
+                  {sortedUsers.length}
                 </Text>
               ) : null}
 
@@ -1875,9 +2215,15 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
                 renderItem={(item: ManagedUser) => {
                   if (!item?.id) return null;
                   const isBlocked = item.status === false;
-                  const actions = getManagedUserActions(role, item, currentUserId);
+                  const actions = getManagedUserActions(
+                    role,
+                    item,
+                    currentUserId,
+                  );
                   const canViewCompanyMembers =
-                    role === 'superadmin' && item.role === 'admin' && !!item.empresaId;
+                    role === "superadmin" &&
+                    item.role === "admin" &&
+                    !!item.empresaId;
 
                   return (
                     <UserCard
@@ -1906,19 +2252,33 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
                 styles={styles}
                 ListEmptyComponent={
                   initialUsersLoading ? (
-                    <ListSkeleton count={5} variant="user" styles={styles} theme={theme} />
+                    <ListSkeleton
+                      count={5}
+                      variant="user"
+                      styles={styles}
+                      theme={theme}
+                    />
                   ) : sortedUsers.length === 0 ? (
                     <View style={styles.emptyState}>
-                      <View style={[styles.emptyIcon, { backgroundColor: theme.primaryLight }]}>
-                        <Ionicons name="people-outline" size={28} color={theme.primary} />
+                      <View
+                        style={[
+                          styles.emptyIcon,
+                          { backgroundColor: theme.primaryLight },
+                        ]}
+                      >
+                        <Ionicons
+                          name="people-outline"
+                          size={28}
+                          color={theme.primary}
+                        />
                       </View>
                       <Text style={styles.emptyTitle}>
-                        {searchTerm ? 'Nenhum resultado' : 'Sem usuários ainda'}
+                        {searchTerm ? "Nenhum resultado" : "Sem usuários ainda"}
                       </Text>
                       <Text style={styles.emptyDescription}>
                         {searchTerm
-                          ? 'Tente outros termos de busca.'
-                          : 'Crie o primeiro usuário pelo botão acima.'}
+                          ? "Tente outros termos de busca."
+                          : "Crie o primeiro usuário pelo botão acima."}
                       </Text>
                     </View>
                   ) : null
@@ -1931,10 +2291,16 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
                           styles.pageNavButton,
                           currentPageSafe === 1 && styles.pageNavButtonDisabled,
                         ]}
-                        onPress={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                        onPress={() =>
+                          setCurrentPage((prev) => Math.max(1, prev - 1))
+                        }
                         disabled={currentPageSafe === 1}
                       >
-                        <Ionicons name="chevron-back" size={16} color={theme.text} />
+                        <Ionicons
+                          name="chevron-back"
+                          size={16}
+                          color={theme.text}
+                        />
                         <Text style={styles.pageNavButtonText}>Anterior</Text>
                       </TouchableOpacity>
                       <Text style={styles.paginationText}>
@@ -1943,45 +2309,56 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
                       <TouchableOpacity
                         style={[
                           styles.pageNavButton,
-                          currentPageSafe === totalPages && styles.pageNavButtonDisabled,
+                          currentPageSafe === totalPages &&
+                            styles.pageNavButtonDisabled,
                         ]}
                         onPress={() =>
-                          setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+                          setCurrentPage((prev) =>
+                            Math.min(totalPages, prev + 1),
+                          )
                         }
                         disabled={currentPageSafe === totalPages}
                       >
                         <Text style={styles.pageNavButtonText}>Próxima</Text>
-                        <Ionicons name="chevron-forward" size={16} color={theme.text} />
+                        <Ionicons
+                          name="chevron-forward"
+                          size={16}
+                          color={theme.text}
+                        />
                       </TouchableOpacity>
                     </View>
                   ) : null
                 }
               />
             </View>
-          ) : activeTab === 'invites' ? (
+          ) : activeTab === "invites" ? (
             <View style={styles.tabPanel}>
-            <InvitesTab
-              role={role}
-              empresas={focomeiEmpresas}
-              users={focomeiUsers}
-              theme={theme}
-              isDesktop={isDesktop}
-              onFeedback={({ type, message }) => {
-                if (type === 'success') {
-                  setSuccess(message);
-                  setError('');
-                } else {
-                  setError(message);
-                  setSuccess('');
-                }
-              }}
-            />
+              <InvitesTab
+                role={role}
+                empresas={focomeiEmpresas}
+                users={focomeiUsers}
+                theme={theme}
+                isDesktop={isDesktop}
+                onFeedback={({ type, message }) => {
+                  if (type === "success") {
+                    setSuccess(message);
+                    setError("");
+                  } else {
+                    setError(message);
+                    setSuccess("");
+                  }
+                }}
+              />
             </View>
           ) : (
             <View style={styles.tabPanel}>
               <View style={styles.toolbar}>
                 <View style={styles.searchBox}>
-                  <Ionicons name="search" size={16} color={theme.textTertiary} />
+                  <Ionicons
+                    name="search"
+                    size={16}
+                    color={theme.textTertiary}
+                  />
                   <TextInput
                     style={styles.searchInput}
                     placeholder="Buscar empresa"
@@ -1991,13 +2368,20 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
                     autoCapitalize="none"
                   />
                   {empresaTabSearch ? (
-                    <TouchableOpacity onPress={() => setEmpresaTabSearch('')}>
-                      <Ionicons name="close-circle" size={16} color={theme.textTertiary} />
+                    <TouchableOpacity onPress={() => setEmpresaTabSearch("")}>
+                      <Ionicons
+                        name="close-circle"
+                        size={16}
+                        color={theme.textTertiary}
+                      />
                     </TouchableOpacity>
                   ) : null}
                 </View>
                 {!isDesktop ? (
-                  <TouchableOpacity style={styles.toolbarAddBtn} onPress={openCreateEmpresa}>
+                  <TouchableOpacity
+                    style={styles.toolbarAddBtn}
+                    onPress={openCreateEmpresa}
+                  >
                     <Ionicons name="add" size={18} color="#FFFFFF" />
                   </TouchableOpacity>
                 ) : null}
@@ -2005,11 +2389,21 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
 
               <View style={styles.empresaMeiFilterBlock}>
                 <Text style={styles.empresaMeiFilterHint}>
-                  Exibindo empresas com módulo fiscal ativo e usuários com emissão liberada.
+                  Exibindo todas as empresas para revisão de licença e ativação.
                 </Text>
-                <View style={[styles.meiStatBadge, { borderColor: theme.success + '55', backgroundColor: theme.successLight }]}>
-                  <Text style={[styles.meiStatBadgeText, { color: theme.success }]}>
-                    Emissão fiscal ativa: {totalEmpresasMeiAtivo}
+                <View
+                  style={[
+                    styles.meiStatBadge,
+                    {
+                      borderColor: theme.success + "55",
+                      backgroundColor: theme.successLight,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[styles.meiStatBadgeText, { color: theme.success }]}
+                  >
+                    Total de empresas: {totalEmpresasMeiAtivo}
                   </Text>
                 </View>
               </View>
@@ -2024,36 +2418,56 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
                     styles={styles}
                     onEdit={openEditEmpresa}
                     onViewMembers={
-                      role === 'superadmin' ? openEmpresaMembers : undefined
+                      role === "superadmin" ? openEmpresaMembers : undefined
                     }
-                    onOpenBilling={role === 'superadmin' ? (e) => setBillingEmpresa(e) : undefined}
-                    onDelete={role === 'superadmin' ? openDeleteEmpresaModal : undefined}
+                    onOpenBilling={
+                      role === "superadmin"
+                        ? (e) => setBillingEmpresa(e)
+                        : undefined
+                    }
+                    onDelete={
+                      role === "superadmin" ? openDeleteEmpresaModal : undefined
+                    }
                   />
                 )}
                 styles={styles}
                 ListEmptyComponent={
                   initialEmpresasLoading ? (
-                    <ListSkeleton count={4} variant="empresa" styles={styles} theme={theme} />
+                    <ListSkeleton
+                      count={4}
+                      variant="empresa"
+                      styles={styles}
+                      theme={theme}
+                    />
                   ) : (
                     <View style={styles.emptyState}>
-                      <View style={[styles.emptyIcon, { backgroundColor: theme.primaryLight }]}>
-                        <Ionicons name="business-outline" size={28} color={theme.primary} />
+                      <View
+                        style={[
+                          styles.emptyIcon,
+                          { backgroundColor: theme.primaryLight },
+                        ]}
+                      >
+                        <Ionicons
+                          name="business-outline"
+                          size={28}
+                          color={theme.primary}
+                        />
                       </View>
                       <Text style={styles.emptyTitle}>
                         {initialEmpresasLoading
-                          ? ''
+                          ? ""
                           : focomeiEmpresas.length === 0
-                            ? 'Sem empresas com emissão fiscal ainda'
-                            : 'Nenhuma empresa encontrada'}
+                            ? "Sem empresas com emissão fiscal ainda"
+                            : "Nenhuma empresa encontrada"}
                       </Text>
                       <Text style={styles.emptyDescription}>
                         {initialEmpresasLoading
-                          ? ''
+                          ? ""
                           : focomeiEmpresas.length === 0
-                            ? 'Cadastre a primeira empresa com emissão fiscal ativa para começar.'
+                            ? "Cadastre a primeira empresa com emissão fiscal ativa para começar."
                             : empresaTabSearch.trim()
-                              ? 'Ajuste a busca pelo nome da empresa.'
-                              : ''}
+                              ? "Ajuste a busca pelo nome da empresa."
+                              : ""}
                       </Text>
                     </View>
                   )
@@ -2062,7 +2476,7 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
             </View>
           )}
         </View>
-          </MfScrollView>
+      </MfScrollView>
 
       {/* ============================================================== */}
       {/* Wizard: provisionar cliente (contador / Foco Simples)             */}
@@ -2072,7 +2486,7 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
         onClose={() => setProvisionClientOpen(false)}
         onCompleted={() => {
           void fetchUsers();
-          setSuccess('Cliente provisionado com sucesso.');
+          setSuccess("Cliente provisionado com sucesso.");
         }}
       />
 
@@ -2106,7 +2520,7 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
               disabled={loading || !email}
             >
               <Text style={styles.primaryBtnText}>
-                {loading ? 'Salvando...' : 'Criar usuário'}
+                {loading ? "Salvando..." : "Criar usuário"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -2160,32 +2574,36 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
           />
         </Field>
 
-        {role === 'superadmin' ? (
+        {role === "superadmin" ? (
           <>
             <Text style={styles.formSectionTitle}>Acesso</Text>
             <Field label="Função" styles={styles}>
               <View style={styles.chipRow}>
-                {(['admin', 'usuario', 'outsider'] as RoleOption[]).map((option) => (
-                  <TouchableOpacity
-                    key={option}
-                    style={[
-                      styles.chip,
-                      selectedRole === option && styles.chipActive,
-                    ]}
-                    onPress={() => setSelectedRole(option)}
-                  >
-                    <Text
+                {(["admin", "usuario", "outsider"] as RoleOption[]).map(
+                  (option) => (
+                    <TouchableOpacity
+                      key={option}
                       style={[
-                        styles.chipText,
-                        selectedRole === option && styles.chipTextActive,
+                        styles.chip,
+                        selectedRole === option && styles.chipActive,
                       ]}
+                      onPress={() => setSelectedRole(option)}
                     >
-                      {ROLE_LABEL[option]}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                      <Text
+                        style={[
+                          styles.chipText,
+                          selectedRole === option && styles.chipTextActive,
+                        ]}
+                      >
+                        {ROLE_LABEL[option]}
+                      </Text>
+                    </TouchableOpacity>
+                  ),
+                )}
               </View>
-              <Text style={styles.fieldHelper}>{ROLE_DESCRIPTION[selectedRole]}</Text>
+              <Text style={styles.fieldHelper}>
+                {ROLE_DESCRIPTION[selectedRole]}
+              </Text>
             </Field>
             <Field label="Empresa" styles={styles}>
               <TouchableOpacity
@@ -2193,7 +2611,11 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
                 onPress={() => setEmpresaModalOpen(true)}
               >
                 <View style={styles.selectorLeft}>
-                  <Ionicons name="business-outline" size={16} color={theme.textSecondary} />
+                  <Ionicons
+                    name="business-outline"
+                    size={16}
+                    color={theme.textSecondary}
+                  />
                   <Text
                     style={[
                       styles.selectorText,
@@ -2201,10 +2623,16 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
                     ]}
                     numberOfLines={1}
                   >
-                    {selectedEmpresa ? (selectedEmpresa.nome_fantasia || selectedEmpresa.empresa) : 'Selecionar empresa'}
+                    {selectedEmpresa
+                      ? selectedEmpresa.nome_fantasia || selectedEmpresa.empresa
+                      : "Selecionar empresa"}
                   </Text>
                 </View>
-                <Ionicons name="chevron-down" size={16} color={theme.textSecondary} />
+                <Ionicons
+                  name="chevron-down"
+                  size={16}
+                  color={theme.textSecondary}
+                />
               </TouchableOpacity>
             </Field>
           </>
@@ -2245,13 +2673,15 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
             <TouchableOpacity
               style={[
                 styles.primaryBtn,
-                (loading || (role === 'superadmin' && !editEmpresa)) &&
+                (loading || (role === "superadmin" && !editEmpresa)) &&
                   styles.primaryBtnDisabled,
               ]}
               onPress={handleUpdateUser}
-              disabled={loading || (role === 'superadmin' && !editEmpresa)}
+              disabled={loading || (role === "superadmin" && !editEmpresa)}
             >
-              <Text style={styles.primaryBtnText}>{loading ? 'Salvando...' : 'Salvar'}</Text>
+              <Text style={styles.primaryBtnText}>
+                {loading ? "Salvando..." : "Salvar"}
+              </Text>
             </TouchableOpacity>
           </View>
         }
@@ -2272,15 +2702,18 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
             placeholder="(11) 99999-9999"
             placeholderTextColor={theme.placeholder}
             value={editPhone}
-            onChangeText={(value: string) => setEditPhone(formatPhoneBrCell(value))}
+            onChangeText={(value: string) =>
+              setEditPhone(formatPhoneBrCell(value))
+            }
             keyboardType="phone-pad"
           />
         </Field>
         <Field
           label="E-mail de login"
           helper={
-            editEmail.trim().toLowerCase() !== (editOriginalEmail || '').trim().toLowerCase() && editEmail.trim()
-              ? 'Ao salvar, um link de confirmação será enviado para o novo endereço. O e-mail só passa a valer quando o usuário clicar no link.'
+            editEmail.trim().toLowerCase() !==
+              (editOriginalEmail || "").trim().toLowerCase() && editEmail.trim()
+              ? "Ao salvar, um link de confirmação será enviado para o novo endereço. O e-mail só passa a valer quando o usuário clicar no link."
               : undefined
           }
           styles={styles}
@@ -2300,45 +2733,51 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
         <Text style={styles.formSectionTitle}>Acesso</Text>
         <Field label="Função" styles={styles}>
           <View style={styles.chipRow}>
-            {(['admin', 'usuario', 'outsider'] as RoleOption[]).map((option) => {
-              const disabled = role !== 'superadmin' && option !== 'usuario';
-              return (
-                <TouchableOpacity
-                  key={option}
-                  style={[
-                    styles.chip,
-                    editRole === option && styles.chipActive,
-                    disabled && styles.chipDisabled,
-                  ]}
-                  onPress={() => {
-                    if (disabled) return;
-                    setEditRole(option);
-                  }}
-                  disabled={disabled}
-                >
-                  <Text
+            {(["admin", "usuario", "outsider"] as RoleOption[]).map(
+              (option) => {
+                const disabled = role !== "superadmin" && option !== "usuario";
+                return (
+                  <TouchableOpacity
+                    key={option}
                     style={[
-                      styles.chipText,
-                      editRole === option && styles.chipTextActive,
-                      disabled && styles.chipTextDisabled,
+                      styles.chip,
+                      editRole === option && styles.chipActive,
+                      disabled && styles.chipDisabled,
                     ]}
+                    onPress={() => {
+                      if (disabled) return;
+                      setEditRole(option);
+                    }}
+                    disabled={disabled}
                   >
-                    {ROLE_LABEL[option]}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+                    <Text
+                      style={[
+                        styles.chipText,
+                        editRole === option && styles.chipTextActive,
+                        disabled && styles.chipTextDisabled,
+                      ]}
+                    >
+                      {ROLE_LABEL[option]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              },
+            )}
           </View>
         </Field>
 
-        {role === 'superadmin' ? (
+        {role === "superadmin" ? (
           <Field label="Empresa" required styles={styles}>
             <TouchableOpacity
               style={styles.selector}
               onPress={() => setEditEmpresaModalOpen(true)}
             >
               <View style={styles.selectorLeft}>
-                <Ionicons name="business-outline" size={16} color={theme.textSecondary} />
+                <Ionicons
+                  name="business-outline"
+                  size={16}
+                  color={theme.textSecondary}
+                />
                 <Text
                   style={[
                     styles.selectorText,
@@ -2346,10 +2785,16 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
                   ]}
                   numberOfLines={1}
                 >
-                  {editEmpresa ? (editEmpresa.nome_fantasia || editEmpresa.empresa) : 'Selecionar empresa'}
+                  {editEmpresa
+                    ? editEmpresa.nome_fantasia || editEmpresa.empresa
+                    : "Selecionar empresa"}
                 </Text>
               </View>
-              <Ionicons name="chevron-down" size={16} color={theme.textSecondary} />
+              <Ionicons
+                name="chevron-down"
+                size={16}
+                color={theme.textSecondary}
+              />
             </TouchableOpacity>
           </Field>
         ) : null}
@@ -2360,17 +2805,21 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
               Habilitar Notas (emissão fiscal)
             </Text>
             <Text style={styles.switchHelper}>
-              {resolveAppOrigin() === 'focosimples'
-                ? editingUser?.id === currentUserId && editingUser?.mei === true && !editMei
-                  ? 'Desligue para esconder a aba Notas da sua conta.'
+              {resolveAppOrigin() === "focosimples"
+                ? editingUser?.id === currentUserId &&
+                  editingUser?.mei === true &&
+                  !editMei
+                  ? "Desligue para esconder a aba Notas da sua conta."
                   : editingUser?.id === currentUserId && editMei
-                    ? 'Com isto ligado, a aba Notas aparece no menu.'
-                    : 'Libera a aba Notas e a emissão NFS-e / NF-e / NFC-e (Simples Nacional).'
-                : editingUser?.id === currentUserId && editingUser?.mei === true && !editMei
-                  ? 'Desligue para remover a emissão fiscal da sua conta.'
+                    ? "Com isto ligado, a aba Notas aparece no menu."
+                    : "Libera a aba Notas e a emissão NFS-e / NF-e / NFC-e (Simples Nacional)."
+                : editingUser?.id === currentUserId &&
+                    editingUser?.mei === true &&
+                    !editMei
+                  ? "Desligue para remover a emissão fiscal da sua conta."
                   : editingUser?.id === currentUserId && editMei
-                    ? 'Você pode desligar quando não precisar mais da emissão de notas.'
-                    : 'Permite uso dos recursos fiscais do Simples Nacional.'}
+                    ? "Você pode desligar quando não precisar mais da emissão de notas."
+                    : "Permite uso dos recursos fiscais do Simples Nacional."}
             </Text>
           </View>
           <ToggleSwitch
@@ -2381,11 +2830,17 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
         </View>
 
         {editMei ? (
-          <View style={[styles.switchRow, { flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
+          <View
+            style={[
+              styles.switchRow,
+              { flexDirection: "column", alignItems: "stretch", gap: 10 },
+            ]}
+          >
             <View>
               <Text style={styles.switchLabel}>Tipos de nota liberados</Text>
               <Text style={styles.switchHelper}>
-                Define o que o usuário pode cadastrar e emitir (NFS-e, NF-e, NFC-e).
+                Define o que o usuário pode cadastrar e emitir (NFS-e, NF-e,
+                NFC-e).
               </Text>
             </View>
             {editDocsLoading ? (
@@ -2394,30 +2849,42 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
               <>
                 <View style={[styles.switchRow, { marginTop: 0 }]}>
                   <Text style={styles.switchLabel}>NFS-e (serviços)</Text>
-                  <ToggleSwitch value={editDocNfse} onValueChange={setEditDocNfse} activeColor={theme.primary} />
+                  <ToggleSwitch
+                    value={editDocNfse}
+                    onValueChange={setEditDocNfse}
+                    activeColor={theme.primary}
+                  />
                 </View>
                 <View style={[styles.switchRow, { marginTop: 0 }]}>
                   <Text style={styles.switchLabel}>NF-e (produtos)</Text>
-                  <ToggleSwitch value={editDocNfe} onValueChange={setEditDocNfe} activeColor={theme.primary} />
+                  <ToggleSwitch
+                    value={editDocNfe}
+                    onValueChange={setEditDocNfe}
+                    activeColor={theme.primary}
+                  />
                 </View>
                 <View style={[styles.switchRow, { marginTop: 0 }]}>
                   <Text style={styles.switchLabel}>NFC-e (varejo)</Text>
-                  <ToggleSwitch value={editDocNfce} onValueChange={setEditDocNfce} activeColor={theme.primary} />
+                  <ToggleSwitch
+                    value={editDocNfce}
+                    onValueChange={setEditDocNfce}
+                    activeColor={theme.primary}
+                  />
                 </View>
               </>
             )}
           </View>
         ) : null}
 
-        {editingUser?.role === 'usuario' ? (
+        {editingUser?.role === "usuario" ? (
           <>
             <View style={styles.switchRow}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.switchLabel}>Data de validade</Text>
                 <Text style={styles.switchHelper}>
                   {editExpiresAt
-                    ? 'Acesso será bloqueado nesta data.'
-                    : 'Sem expiração — acesso permanente.'}
+                    ? "Acesso será bloqueado nesta data."
+                    : "Sem expiração — acesso permanente."}
                 </Text>
               </View>
               <ToggleSwitch
@@ -2427,11 +2894,11 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
                     const d = new Date();
                     d.setDate(d.getDate() + 30);
                     const y = d.getFullYear();
-                    const m = (d.getMonth() + 1).toString().padStart(2, '0');
-                    const day = d.getDate().toString().padStart(2, '0');
+                    const m = (d.getMonth() + 1).toString().padStart(2, "0");
+                    const day = d.getDate().toString().padStart(2, "0");
                     setEditExpiresAt(`${y}-${m}-${day}`);
                   } else {
-                    setEditExpiresAt('');
+                    setEditExpiresAt("");
                   }
                 }}
                 activeColor={theme.warning}
@@ -2455,8 +2922,10 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
           </>
         ) : null}
 
-        {role === 'superadmin' && !editEmpresa ? (
-          <Text style={styles.fieldHelper}>Selecione uma empresa para poder salvar.</Text>
+        {role === "superadmin" && !editEmpresa ? (
+          <Text style={styles.fieldHelper}>
+            Selecione uma empresa para poder salvar.
+          </Text>
         ) : null}
       </SidePanel>
 
@@ -2465,16 +2934,33 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
       {/* ============================================================== */}
       <Modal
         visible={empresaModalOpen}
-        animationType={isDesktop ? 'fade' : 'slide'}
+        animationType={isDesktop ? "fade" : "slide"}
         transparent
         onRequestClose={() => setEmpresaModalOpen(false)}
       >
         <View style={styles.panelOverlay}>
-          <Pressable style={styles.panelBackdrop} onPress={() => setEmpresaModalOpen(false)} />
-          <View style={[styles.panel, isDesktop ? styles.panelDesktopWide : styles.panelMobile]}>
+          <Pressable
+            style={styles.panelBackdrop}
+            onPress={() => setEmpresaModalOpen(false)}
+          />
+          <View
+            style={[
+              styles.panel,
+              isDesktop ? styles.panelDesktopWide : styles.panelMobile,
+            ]}
+          >
             <View style={styles.panelHeader}>
-              <View style={[styles.panelHeaderIcon, { backgroundColor: theme.primaryLight }]}>
-                <Ionicons name="business-outline" size={20} color={theme.primary} />
+              <View
+                style={[
+                  styles.panelHeaderIcon,
+                  { backgroundColor: theme.primaryLight },
+                ]}
+              >
+                <Ionicons
+                  name="business-outline"
+                  size={20}
+                  color={theme.primary}
+                />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.panelTitle}>Selecionar empresa</Text>
@@ -2487,7 +2973,12 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
               </TouchableOpacity>
             </View>
             <View style={[styles.panelBody, { padding: 20 }]}>
-              <View style={[styles.searchBox, { marginBottom: 12, paddingVertical: 14, flex: 0 }]}>
+              <View
+                style={[
+                  styles.searchBox,
+                  { marginBottom: 12, paddingVertical: 14, flex: 0 },
+                ]}
+              >
                 <Ionicons name="search" size={16} color={theme.textTertiary} />
                 <TextInput
                   style={styles.searchInput}
@@ -2501,22 +2992,29 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
                 {[...focomeiEmpresas]
                   .sort((a, b) =>
                     (a.nome_fantasia || a.empresa).localeCompare(
-                      b.nome_fantasia || b.empresa, 'pt-BR', { sensitivity: 'base' },
+                      b.nome_fantasia || b.empresa,
+                      "pt-BR",
+                      { sensitivity: "base" },
                     ),
                   )
                   .filter((empresa) =>
-                    (empresa.nome_fantasia || empresa.empresa).toLowerCase().includes(empresaSearch.toLowerCase()),
+                    (empresa.nome_fantasia || empresa.empresa)
+                      .toLowerCase()
+                      .includes(empresaSearch.toLowerCase()),
                   )
                   .map((empresa) => {
                     const active = selectedEmpresa?.id === empresa.id;
                     return (
                       <TouchableOpacity
                         key={empresa.id}
-                        style={[styles.pickerRow, active && styles.pickerRowActive]}
+                        style={[
+                          styles.pickerRow,
+                          active && styles.pickerRowActive,
+                        ]}
                         onPress={() => {
                           setSelectedEmpresa(empresa);
                           setEmpresaModalOpen(false);
-                          setEmpresaSearch('');
+                          setEmpresaSearch("");
                         }}
                       >
                         <Text
@@ -2528,7 +3026,11 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
                           {empresa.nome_fantasia || empresa.empresa}
                         </Text>
                         {active ? (
-                          <Ionicons name="checkmark" size={18} color={theme.primary} />
+                          <Ionicons
+                            name="checkmark"
+                            size={18}
+                            color={theme.primary}
+                          />
                         ) : null}
                       </TouchableOpacity>
                     );
@@ -2544,7 +3046,7 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
       {/* ============================================================== */}
       <Modal
         visible={editEmpresaModalOpen}
-        animationType={isDesktop ? 'fade' : 'slide'}
+        animationType={isDesktop ? "fade" : "slide"}
         transparent
         onRequestClose={() => setEditEmpresaModalOpen(false)}
       >
@@ -2553,10 +3055,24 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
             style={styles.panelBackdrop}
             onPress={() => setEditEmpresaModalOpen(false)}
           />
-          <View style={[styles.panel, isDesktop ? styles.panelDesktopWide : styles.panelMobile]}>
+          <View
+            style={[
+              styles.panel,
+              isDesktop ? styles.panelDesktopWide : styles.panelMobile,
+            ]}
+          >
             <View style={styles.panelHeader}>
-              <View style={[styles.panelHeaderIcon, { backgroundColor: theme.primaryLight }]}>
-                <Ionicons name="business-outline" size={20} color={theme.primary} />
+              <View
+                style={[
+                  styles.panelHeaderIcon,
+                  { backgroundColor: theme.primaryLight },
+                ]}
+              >
+                <Ionicons
+                  name="business-outline"
+                  size={20}
+                  color={theme.primary}
+                />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.panelTitle}>Selecionar empresa</Text>
@@ -2569,7 +3085,12 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
               </TouchableOpacity>
             </View>
             <View style={[styles.panelBody, { padding: 20 }]}>
-              <View style={[styles.searchBox, { marginBottom: 12, paddingVertical: 14, flex: 0 }]}>
+              <View
+                style={[
+                  styles.searchBox,
+                  { marginBottom: 12, paddingVertical: 14, flex: 0 },
+                ]}
+              >
                 <Ionicons name="search" size={16} color={theme.textTertiary} />
                 <TextInput
                   style={styles.searchInput}
@@ -2583,22 +3104,29 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
                 {[...focomeiEmpresas]
                   .sort((a, b) =>
                     (a.nome_fantasia || a.empresa).localeCompare(
-                      b.nome_fantasia || b.empresa, 'pt-BR', { sensitivity: 'base' },
+                      b.nome_fantasia || b.empresa,
+                      "pt-BR",
+                      { sensitivity: "base" },
                     ),
                   )
                   .filter((empresa) =>
-                    (empresa.nome_fantasia || empresa.empresa).toLowerCase().includes(empresaSearch.toLowerCase()),
+                    (empresa.nome_fantasia || empresa.empresa)
+                      .toLowerCase()
+                      .includes(empresaSearch.toLowerCase()),
                   )
                   .map((empresa) => {
                     const active = editEmpresa?.id === empresa.id;
                     return (
                       <TouchableOpacity
                         key={empresa.id}
-                        style={[styles.pickerRow, active && styles.pickerRowActive]}
+                        style={[
+                          styles.pickerRow,
+                          active && styles.pickerRowActive,
+                        ]}
                         onPress={() => {
                           setEditEmpresa(empresa);
                           setEditEmpresaModalOpen(false);
-                          setEmpresaSearch('');
+                          setEmpresaSearch("");
                         }}
                       >
                         <Text
@@ -2610,7 +3138,11 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
                           {empresa.nome_fantasia || empresa.empresa}
                         </Text>
                         {active ? (
-                          <Ionicons name="checkmark" size={18} color={theme.primary} />
+                          <Ionicons
+                            name="checkmark"
+                            size={18}
+                            color={theme.primary}
+                          />
                         ) : null}
                       </TouchableOpacity>
                     );
@@ -2628,7 +3160,11 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
         open={impersonateModalOpen}
         onClose={closeImpersonateModal}
         title="Acessar como usuário"
-        subtitle={impersonateTarget?.displayName || impersonateTarget?.email || undefined}
+        subtitle={
+          impersonateTarget?.displayName ||
+          impersonateTarget?.email ||
+          undefined
+        }
         icon="log-in-outline"
         isDesktop={isDesktop}
         theme={theme}
@@ -2648,16 +3184,18 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
               disabled={loading}
             >
               <Text style={styles.primaryBtnText}>
-                {loading ? 'Acessando...' : 'Acessar'}
+                {loading ? "Acessando..." : "Acessar"}
               </Text>
             </TouchableOpacity>
           </View>
         }
       >
         <Text style={styles.helperText}>
-          Você verá o app com os dados e permissões de{' '}
-          <Text style={{ fontWeight: '700' }}>
-            {impersonateTarget?.displayName || impersonateTarget?.email || 'este usuário'}
+          Você verá o app com os dados e permissões de{" "}
+          <Text style={{ fontWeight: "700" }}>
+            {impersonateTarget?.displayName ||
+              impersonateTarget?.email ||
+              "este usuário"}
           </Text>
           . Use o banner no topo para voltar à sua conta de administrador.
         </Text>
@@ -2671,10 +3209,12 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
         onClose={() => {
           setResetPasswordModalOpen(false);
           setResettingUser(null);
-          setNewPasswordInput('');
+          setNewPasswordInput("");
         }}
         title="Redefinir senha"
-        subtitle={resettingUser?.displayName || resettingUser?.email || undefined}
+        subtitle={
+          resettingUser?.displayName || resettingUser?.email || undefined
+        }
         icon="key-outline"
         isDesktop={isDesktop}
         theme={theme}
@@ -2686,7 +3226,7 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
               onPress={() => {
                 setResetPasswordModalOpen(false);
                 setResettingUser(null);
-                setNewPasswordInput('');
+                setNewPasswordInput("");
               }}
               disabled={loading}
             >
@@ -2698,17 +3238,22 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
               disabled={loading}
             >
               <Text style={styles.primaryBtnText}>
-                {loading ? 'Redefinindo...' : 'Confirmar'}
+                {loading ? "Redefinindo..." : "Confirmar"}
               </Text>
             </TouchableOpacity>
           </View>
         }
       >
         <Text style={styles.helperText}>
-          Digite uma nova senha ou deixe em branco para que uma seja gerada automaticamente.
-          A senha gerada aparecerá no card do usuário após confirmar.
+          Digite uma nova senha ou deixe em branco para que uma seja gerada
+          automaticamente. A senha gerada aparecerá no card do usuário após
+          confirmar.
         </Text>
-        <Field label="Nova senha" helper="Mínimo 6 caracteres (opcional)" styles={styles}>
+        <Field
+          label="Nova senha"
+          helper="Mínimo 6 caracteres (opcional)"
+          styles={styles}
+        >
           <TextInput
             style={styles.textInput}
             placeholder="••••••••"
@@ -2730,7 +3275,10 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
         animationType="fade"
         onRequestClose={closeDeleteUserModal}
       >
-        <Pressable style={styles.deleteConfirmBackdrop} onPress={closeDeleteUserModal}>
+        <Pressable
+          style={styles.deleteConfirmBackdrop}
+          onPress={closeDeleteUserModal}
+        >
           <Pressable style={styles.deleteConfirmDialog} onPress={() => {}}>
             <TouchableOpacity
               style={styles.deleteConfirmClose}
@@ -2740,17 +3288,24 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
             >
               <Ionicons name="close" size={22} color={theme.textSecondary} />
             </TouchableOpacity>
-            <View style={[styles.deleteConfirmIconBox, { backgroundColor: theme.errorLight }]}>
+            <View
+              style={[
+                styles.deleteConfirmIconBox,
+                { backgroundColor: theme.errorLight },
+              ]}
+            >
               <Ionicons name="warning-outline" size={32} color={theme.error} />
             </View>
             <Text style={styles.deleteConfirmTitle}>Excluir usuário</Text>
             <Text style={styles.deleteConfirmMessage}>
-              Você está prestes a excluir{' '}
+              Você está prestes a excluir{" "}
               <Text style={styles.deleteConfirmName}>
-                {userToDelete?.displayName || userToDelete?.email || 'este usuário'}
+                {userToDelete?.displayName ||
+                  userToDelete?.email ||
+                  "este usuário"}
               </Text>
-              . Esta ação é irreversível e todos os dados vinculados serão removidos
-              permanentemente.
+              . Esta ação é irreversível e todos os dados vinculados serão
+              removidos permanentemente.
             </Text>
             <View style={styles.deleteConfirmActions}>
               <TouchableOpacity
@@ -2785,7 +3340,10 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
         animationType="fade"
         onRequestClose={closeBanUserModal}
       >
-        <Pressable style={styles.deleteConfirmBackdrop} onPress={closeBanUserModal}>
+        <Pressable
+          style={styles.deleteConfirmBackdrop}
+          onPress={closeBanUserModal}
+        >
           <Pressable style={styles.deleteConfirmDialog} onPress={() => {}}>
             <TouchableOpacity
               style={styles.deleteConfirmClose}
@@ -2795,14 +3353,19 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
             >
               <Ionicons name="close" size={22} color={theme.textSecondary} />
             </TouchableOpacity>
-            <View style={[styles.deleteConfirmIconBox, { backgroundColor: '#FEF3C7' }]}>
+            <View
+              style={[
+                styles.deleteConfirmIconBox,
+                { backgroundColor: "#FEF3C7" },
+              ]}
+            >
               <Ionicons name="ban-outline" size={32} color={theme.warning} />
             </View>
             <Text style={styles.deleteConfirmTitle}>Bloquear usuário</Text>
             <Text style={styles.deleteConfirmMessage}>
-              Tem certeza que deseja bloquear{' '}
+              Tem certeza que deseja bloquear{" "}
               <Text style={styles.deleteConfirmName}>
-                {userToBan?.displayName || userToBan?.email || 'este usuário'}
+                {userToBan?.displayName || userToBan?.email || "este usuário"}
               </Text>
               ? Ele não poderá acessar o sistema até ser desbloqueado.
             </Text>
@@ -2839,7 +3402,10 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
         animationType="fade"
         onRequestClose={closeUnbanUserModal}
       >
-        <Pressable style={styles.deleteConfirmBackdrop} onPress={closeUnbanUserModal}>
+        <Pressable
+          style={styles.deleteConfirmBackdrop}
+          onPress={closeUnbanUserModal}
+        >
           <Pressable style={styles.deleteConfirmDialog} onPress={() => {}}>
             <TouchableOpacity
               style={styles.deleteConfirmClose}
@@ -2849,14 +3415,25 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
             >
               <Ionicons name="close" size={22} color={theme.textSecondary} />
             </TouchableOpacity>
-            <View style={[styles.deleteConfirmIconBox, { backgroundColor: theme.successLight }]}>
-              <Ionicons name="checkmark-circle-outline" size={32} color={theme.success} />
+            <View
+              style={[
+                styles.deleteConfirmIconBox,
+                { backgroundColor: theme.successLight },
+              ]}
+            >
+              <Ionicons
+                name="checkmark-circle-outline"
+                size={32}
+                color={theme.success}
+              />
             </View>
             <Text style={styles.deleteConfirmTitle}>Desbloquear usuário</Text>
             <Text style={styles.deleteConfirmMessage}>
-              Tem certeza que deseja desbloquear{' '}
+              Tem certeza que deseja desbloquear{" "}
               <Text style={styles.deleteConfirmName}>
-                {userToUnban?.displayName || userToUnban?.email || 'este usuário'}
+                {userToUnban?.displayName ||
+                  userToUnban?.email ||
+                  "este usuário"}
               </Text>
               ? O acesso ao sistema será restaurado.
             </Text>
@@ -2869,7 +3446,10 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
                 <Text style={styles.secondaryBtnText}>Cancelar</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.primaryBtn, loading && styles.primaryBtnDisabled]}
+                style={[
+                  styles.primaryBtn,
+                  loading && styles.primaryBtnDisabled,
+                ]}
                 onPress={() => void confirmUnbanUser()}
                 disabled={loading}
               >
@@ -2893,7 +3473,10 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
         animationType="fade"
         onRequestClose={closeDeleteEmpresaModal}
       >
-        <Pressable style={styles.deleteConfirmBackdrop} onPress={closeDeleteEmpresaModal}>
+        <Pressable
+          style={styles.deleteConfirmBackdrop}
+          onPress={closeDeleteEmpresaModal}
+        >
           <Pressable style={styles.deleteConfirmDialog} onPress={() => {}}>
             <TouchableOpacity
               style={styles.deleteConfirmClose}
@@ -2903,14 +3486,21 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
             >
               <Ionicons name="close" size={22} color={theme.textSecondary} />
             </TouchableOpacity>
-            <View style={[styles.deleteConfirmIconBox, { backgroundColor: theme.errorLight }]}>
+            <View
+              style={[
+                styles.deleteConfirmIconBox,
+                { backgroundColor: theme.errorLight },
+              ]}
+            >
               <Ionicons name="warning-outline" size={32} color={theme.error} />
             </View>
             <Text style={styles.deleteConfirmTitle}>Excluir empresa</Text>
             <Text style={styles.deleteConfirmMessage}>
-              Você está prestes a excluir{' '}
+              Você está prestes a excluir{" "}
               <Text style={styles.deleteConfirmName}>
-                {empresaToDelete?.nome_fantasia || empresaToDelete?.empresa || 'esta empresa'}
+                {empresaToDelete?.nome_fantasia ||
+                  empresaToDelete?.empresa ||
+                  "esta empresa"}
               </Text>
               . Esta ação é irreversível e todos os vínculos serão removidos.
             </Text>
@@ -2943,7 +3533,8 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
         empresa={billingEmpresa}
         meiUsuariosEmUso={
           billingEmpresa
-            ? focomeiUsers.filter((u) => u.empresaId === billingEmpresa.id).length
+            ? focomeiUsers.filter((u) => u.empresaId === billingEmpresa.id)
+                .length
             : null
         }
         onClose={() => setBillingEmpresa(null)}
@@ -2974,8 +3565,8 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
       >
         <Text style={styles.helperText}>
           {empresaMembersList.length === 0
-            ? 'Nenhum usuário vinculado a esta empresa.'
-            : `${empresaMembersList.length} usuário${empresaMembersList.length === 1 ? '' : 's'} vinculado${empresaMembersList.length === 1 ? '' : 's'} · ${empresaMembersMeiCount} com emissão fiscal · ${empresaMembersList.length - empresaMembersMeiCount} PF / Outros. Toque em um nome para editar.`}
+            ? "Nenhum usuário vinculado a esta empresa."
+            : `${empresaMembersList.length} usuário${empresaMembersList.length === 1 ? "" : "s"} vinculado${empresaMembersList.length === 1 ? "" : "s"} · ${empresaMembersMeiCount} com emissão fiscal · ${empresaMembersList.length - empresaMembersMeiCount} PF / Outros. Toque em um nome para editar.`}
         </Text>
         <View style={styles.membersList}>
           {empresaMembersList.map((member) => {
@@ -2991,10 +3582,10 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
               >
                 <View style={styles.memberRowMain}>
                   <Text style={styles.memberName} numberOfLines={1}>
-                    {member.displayName || member.email || 'Sem nome'}
+                    {member.displayName || member.email || "Sem nome"}
                   </Text>
                   <Text style={styles.memberEmail} numberOfLines={1}>
-                    {member.email || '—'}
+                    {member.email || "—"}
                   </Text>
                   <View style={styles.memberBadges}>
                     <Badge
@@ -3006,18 +3597,26 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
                     <Badge
                       label={getMeiUserTypeLabel(member.mei)}
                       bg={theme.backgroundMuted}
-                      fg={isMeiSlotUser(member.mei) ? theme.success : theme.textSecondary}
+                      fg={
+                        isMeiSlotUser(member.mei)
+                          ? theme.success
+                          : theme.textSecondary
+                      }
                       styles={styles}
                     />
                     <Badge
-                      label={blocked ? 'Bloqueado' : 'Ativo'}
+                      label={blocked ? "Bloqueado" : "Ativo"}
                       bg={blocked ? theme.errorLight : theme.successLight}
                       fg={blocked ? theme.error : theme.success}
                       styles={styles}
                     />
                   </View>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={theme.textTertiary}
+                />
               </TouchableOpacity>
             );
           })}
@@ -3031,7 +3630,11 @@ export default function ManageUsersScreen({ onBack, onImpersonateSuccess }: Prop
 // Styles
 // =======================================================================
 
-const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => {
+const createStyles = (
+  theme: Theme,
+  isDesktop: boolean,
+  isDarkMode: boolean,
+) => {
   const tokens = getTechTokens(isDarkMode);
   const tabWell = mfTechInsetSurface(isDarkMode, false);
 
@@ -3043,11 +3646,11 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
       paddingBottom: 32,
     },
     pageContentDesktop: {
-      alignItems: 'center',
+      alignItems: "center",
     },
 
     bodyInner: {
-      width: '100%',
+      width: "100%",
       paddingHorizontal: 16,
       paddingTop: 12,
     },
@@ -3062,23 +3665,23 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
       flexShrink: 0,
     },
     tabPanel: {
-      width: '100%',
+      width: "100%",
     },
 
     // -- Tabs (tech inset — alinhado às demais telas) --
     tabRow: {
-      flexDirection: 'row',
+      flexDirection: "row",
       borderRadius: 14,
       padding: 4,
       marginBottom: 12,
-      alignSelf: 'flex-start',
+      alignSelf: "flex-start",
       flexGrow: 0,
       ...tabWell,
     },
     tabBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
       gap: 8,
       paddingVertical: 10,
       paddingHorizontal: isDesktop ? 18 : 12,
@@ -3090,27 +3693,31 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
     tabBtnActive: { backgroundColor: tokens.accent },
     tabBtnText: {
       color: theme.textSecondary,
-      fontWeight: '600',
+      fontWeight: "600",
       fontSize: 14,
       flexShrink: 0,
     },
-    tabBtnTextActive: { color: '#FFFFFF' },
+    tabBtnTextActive: { color: "#FFFFFF" },
     tabCount: {
       minWidth: 24,
       paddingHorizontal: 8,
       paddingVertical: 2,
       borderRadius: 999,
       backgroundColor: theme.background,
-      alignItems: 'center',
+      alignItems: "center",
     },
-    tabCountActive: { backgroundColor: 'rgba(255,255,255,0.22)' },
-    tabCountText: { fontSize: 12, fontWeight: '700', color: theme.textSecondary },
-    tabCountTextActive: { color: '#FFFFFF' },
+    tabCountActive: { backgroundColor: "rgba(255,255,255,0.22)" },
+    tabCountText: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: theme.textSecondary,
+    },
+    tabCountTextActive: { color: "#FFFFFF" },
 
     // -- Feedback --
     feedbackError: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: 10,
       backgroundColor: theme.errorLight,
       borderRadius: 10,
@@ -3118,12 +3725,17 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
       paddingHorizontal: 12,
       marginBottom: 12,
       borderWidth: 1,
-      borderColor: theme.error + '40',
+      borderColor: theme.error + "40",
     },
-    feedbackErrorText: { flex: 1, color: theme.error, fontWeight: '500', fontSize: 13 },
+    feedbackErrorText: {
+      flex: 1,
+      color: theme.error,
+      fontWeight: "500",
+      fontSize: 13,
+    },
     feedbackSuccess: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: 10,
       backgroundColor: theme.successLight,
       borderRadius: 10,
@@ -3131,21 +3743,26 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
       paddingHorizontal: 12,
       marginBottom: 12,
       borderWidth: 1,
-      borderColor: theme.success + '40',
+      borderColor: theme.success + "40",
     },
-    feedbackSuccessText: { flex: 1, color: theme.success, fontWeight: '500', fontSize: 13 },
+    feedbackSuccessText: {
+      flex: 1,
+      color: theme.success,
+      fontWeight: "500",
+      fontSize: 13,
+    },
 
     // -- Toolbar --
     toolbar: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: 10,
       marginBottom: 12,
     },
     searchBox: {
       flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: 8,
       backgroundColor: theme.surface,
       borderRadius: 12,
@@ -3161,8 +3778,8 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
       paddingVertical: 4,
     },
     sortBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: 6,
       backgroundColor: theme.surface,
       borderRadius: 12,
@@ -3171,23 +3788,23 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: theme.border,
     },
-    sortBtnText: { color: theme.text, fontWeight: '600', fontSize: 13 },
+    sortBtnText: { color: theme.text, fontWeight: "600", fontSize: 13 },
     toolbarAddBtn: {
       width: 42,
       height: 42,
       borderRadius: 12,
       backgroundColor: tokens.accent,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
     },
 
     empresaMeiFilterBlock: {
       marginBottom: 12,
       gap: 8,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      flexWrap: 'wrap',
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      flexWrap: "wrap",
     },
     empresaMeiFilterHint: {
       flex: 1,
@@ -3198,15 +3815,15 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
     },
     empresaMeiFilterLabel: {
       fontSize: 12,
-      fontWeight: '600',
+      fontWeight: "600",
       color: theme.textSecondary,
-      textTransform: 'uppercase',
+      textTransform: "uppercase",
       letterSpacing: 0.4,
     },
     empresaMeiFilterChips: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      alignItems: 'center',
+      flexDirection: "row",
+      flexWrap: "wrap",
+      alignItems: "center",
       gap: 8,
     },
     meiFilterChip: {
@@ -3217,10 +3834,10 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
     },
     meiFilterChipText: {
       fontSize: 13,
-      fontWeight: '600',
+      fontWeight: "600",
     },
     meiStatBadge: {
-      alignSelf: 'flex-start',
+      alignSelf: "flex-start",
       paddingHorizontal: 12,
       paddingVertical: 6,
       borderRadius: 20,
@@ -3229,23 +3846,23 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
     },
     meiStatBadgeText: {
       fontSize: 12,
-      fontWeight: '700',
+      fontWeight: "700",
     },
 
     // -- List --
     listBlock: {
-      width: '100%',
+      width: "100%",
     },
     listItemShell: {
       flexGrow: 0,
       flexShrink: 0,
-      alignSelf: 'stretch',
+      alignSelf: "stretch",
     },
     listSummary: {
       fontSize: 12,
       color: theme.textTertiary,
       marginBottom: 8,
-      fontWeight: '500',
+      fontWeight: "500",
     },
 
     // -- User card --
@@ -3259,8 +3876,8 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
       gap: 10,
     },
     userCardDesktop: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       paddingVertical: 10,
       paddingHorizontal: 12,
       marginBottom: 6,
@@ -3272,8 +3889,8 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
       gap: 1,
     },
     userCardDesktopBadges: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: 6,
       flexShrink: 0,
     },
@@ -3283,16 +3900,16 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
       marginTop: 2,
     },
     userCardHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: 12,
     },
     avatar: {
       width: 40,
       height: 40,
       borderRadius: 20,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
       borderWidth: 1.5,
       flexShrink: 0,
     },
@@ -3301,61 +3918,61 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
       height: 36,
       borderRadius: 18,
     },
-    avatarText: { fontWeight: '800', fontSize: 14, letterSpacing: 0.3 },
+    avatarText: { fontWeight: "800", fontSize: 14, letterSpacing: 0.3 },
     avatarTextCompact: { fontSize: 13 },
     userCardHeaderInfo: { flex: 1, minWidth: 0, gap: 2 },
-    userName: { fontSize: 15, fontWeight: '700', color: theme.text },
+    userName: { fontSize: 15, fontWeight: "700", color: theme.text },
     userEmail: { fontSize: 13, color: theme.textSecondary },
     userCardHeaderBadges: {
-      flexDirection: 'column',
-      alignItems: 'flex-end',
+      flexDirection: "column",
+      alignItems: "flex-end",
       gap: 4,
     },
 
     // -- Badges --
     badge: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: 5,
       paddingVertical: 3,
       paddingHorizontal: 8,
       borderRadius: 999,
     },
     badgeDot: { width: 6, height: 6, borderRadius: 3 },
-    badgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
+    badgeText: { fontSize: 11, fontWeight: "700", letterSpacing: 0.2 },
 
     // -- User meta --
     userMetaGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
+      flexDirection: "row",
+      flexWrap: "wrap",
       gap: 12,
       rowGap: 6,
     },
     userMetaItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: 5,
     },
     userMetaText: { fontSize: 12.5, color: theme.textSecondary },
 
     // -- User actions --
     userActions: {
-      flexDirection: 'row',
-      flexWrap: 'nowrap',
+      flexDirection: "row",
+      flexWrap: "nowrap",
       gap: 6,
       paddingTop: 6,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: theme.border,
     },
     userActionsDesktop: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: 4,
       flexShrink: 0,
     },
     iconAction: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: 5,
       paddingVertical: 7,
       paddingHorizontal: 11,
@@ -3365,21 +3982,21 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
       width: 34,
       height: 34,
       borderRadius: 9,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
     },
-    iconActionLabel: { fontSize: 12.5, fontWeight: '600' },
+    iconActionLabel: { fontSize: 12.5, fontWeight: "600" },
 
     // -- Password chip --
     passwordRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: 8,
     },
     passwordChip: {
       flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: 8,
       backgroundColor: theme.primaryLight,
       paddingVertical: 8,
@@ -3387,13 +4004,17 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
       borderRadius: 10,
     },
     passwordLabel: { color: theme.text, fontSize: 12.5, flex: 1 },
-    passwordValue: { color: theme.primary, fontWeight: '700', fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }) },
+    passwordValue: {
+      color: theme.primary,
+      fontWeight: "700",
+      fontFamily: Platform.select({ ios: "Menlo", default: "monospace" }),
+    },
     passwordCopyBtn: {
       width: 34,
       height: 34,
       borderRadius: 8,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
       backgroundColor: theme.primaryLight,
     },
 
@@ -3405,16 +4026,16 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
       paddingLeft: 12,
       paddingRight: 8,
       marginBottom: 6,
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: 6,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: theme.border,
     },
     empresaCardMain: {
       flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: 10,
       minHeight: 44,
     },
@@ -3422,13 +4043,13 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
       width: 44,
       height: 44,
       borderRadius: 12,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
     },
     membersList: { gap: 8, marginTop: mfSpacing.md },
     memberRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: 10,
       padding: 12,
       borderRadius: 12,
@@ -3437,24 +4058,34 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
       backgroundColor: theme.backgroundMuted,
     },
     memberRowMain: { flex: 1, minWidth: 0, gap: 4 },
-    memberName: { fontSize: 15, fontWeight: '600', color: theme.text },
+    memberName: { fontSize: 15, fontWeight: "600", color: theme.text },
     memberEmail: { fontSize: 13, color: theme.textSecondary },
-    memberBadges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
-    empresaCardLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+    memberBadges: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 6,
+      marginTop: 4,
+    },
+    empresaCardLeft: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
     empresaIcon: {
       width: 40,
       height: 40,
       borderRadius: 10,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
     },
     empresaInfo: { flex: 1, gap: 6 },
-    empresaName: { fontSize: 15, fontWeight: '700', color: theme.text },
-    empresaProductTag: { fontSize: 11, fontWeight: '700', marginTop: 2 },
-    empresaLimitsRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+    empresaName: { fontSize: 15, fontWeight: "700", color: theme.text },
+    empresaProductTag: { fontSize: 11, fontWeight: "700", marginTop: 2 },
+    empresaLimitsRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
     empresaLimitChip: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: 5,
       backgroundColor: theme.background,
       borderRadius: 8,
@@ -3463,24 +4094,28 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
     },
     empresaLimitChipLabel: {
       fontSize: 11,
-      fontWeight: '600',
+      fontWeight: "600",
       color: theme.textTertiary,
-      textTransform: 'uppercase',
+      textTransform: "uppercase",
       letterSpacing: 0.4,
     },
-    empresaLimitChipValue: { fontSize: 12, color: theme.text, fontWeight: '700' },
+    empresaLimitChipValue: {
+      fontSize: 12,
+      color: theme.text,
+      fontWeight: "700",
+    },
 
     // -- Pagination --
     paginationRow: {
       marginTop: 12,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
       gap: 8,
     },
     pageNavButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: 4,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: theme.border,
@@ -3490,41 +4125,49 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
       backgroundColor: theme.surface,
     },
     pageNavButtonDisabled: { opacity: 0.4 },
-    pageNavButtonText: { color: theme.text, fontWeight: '600', fontSize: 13 },
-    paginationText: { color: theme.textSecondary, fontSize: 12.5, fontWeight: '500' },
+    pageNavButtonText: { color: theme.text, fontWeight: "600", fontSize: 13 },
+    paginationText: {
+      color: theme.textSecondary,
+      fontSize: 12.5,
+      fontWeight: "500",
+    },
 
     // -- Empty state --
     emptyState: {
       paddingVertical: 48,
       paddingHorizontal: 24,
-      alignItems: 'center',
+      alignItems: "center",
       gap: 10,
     },
     emptyIcon: {
       width: 60,
       height: 60,
       borderRadius: 30,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
       marginBottom: 4,
     },
-    emptyTitle: { fontSize: 16, fontWeight: '700', color: theme.text },
-    emptyDescription: { fontSize: 13.5, color: theme.textSecondary, textAlign: 'center' },
+    emptyTitle: { fontSize: 16, fontWeight: "700", color: theme.text },
+    emptyDescription: {
+      fontSize: 13.5,
+      color: theme.textSecondary,
+      textAlign: "center",
+    },
 
     // -- Loading --
-    loadingContainer: { padding: 32, alignItems: 'center' },
+    loadingContainer: { padding: 32, alignItems: "center" },
     loadingText: { color: theme.textSecondary, fontSize: 14 },
 
     // -- Side Panel (drawer/modal) --
     panelOverlay: {
       flex: 1,
-      backgroundColor: 'rgba(15,23,42,0.55)',
-      flexDirection: 'row',
-      justifyContent: 'flex-end',
-      alignItems: isDesktop ? 'stretch' : 'flex-end',
+      backgroundColor: "rgba(15,23,42,0.55)",
+      flexDirection: "row",
+      justifyContent: "flex-end",
+      alignItems: isDesktop ? "stretch" : "flex-end",
     },
     panelBackdrop: {
-      position: 'absolute',
+      position: "absolute",
       top: 0,
       left: 0,
       right: 0,
@@ -3533,39 +4176,39 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
     },
     panel: {
       backgroundColor: theme.surface,
-      flexDirection: 'column',
+      flexDirection: "column",
       zIndex: 2,
       elevation: 8,
     },
     panelDesktop: {
       width: 460,
-      height: '100%',
+      height: "100%",
       borderLeftWidth: StyleSheet.hairlineWidth,
       borderLeftColor: theme.border,
-      shadowColor: '#000',
+      shadowColor: "#000",
       shadowOffset: { width: -8, height: 0 },
       shadowOpacity: 0.12,
       shadowRadius: 16,
     },
     panelDesktopWide: {
       width: 640,
-      height: '100%',
+      height: "100%",
       borderLeftWidth: StyleSheet.hairlineWidth,
       borderLeftColor: theme.border,
-      shadowColor: '#000',
+      shadowColor: "#000",
       shadowOffset: { width: -8, height: 0 },
       shadowOpacity: 0.12,
       shadowRadius: 16,
     },
     panelMobile: {
-      width: '100%',
-      height: '92%',
+      width: "100%",
+      height: "92%",
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
     },
     panelHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: 12,
       paddingHorizontal: 20,
       paddingTop: 18,
@@ -3577,17 +4220,17 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
       width: 40,
       height: 40,
       borderRadius: 12,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
     },
-    panelTitle: { fontSize: 17, fontWeight: '700', color: theme.text },
+    panelTitle: { fontSize: 17, fontWeight: "700", color: theme.text },
     panelSubtitle: { fontSize: 12.5, color: theme.textSecondary, marginTop: 2 },
     panelCloseBtn: {
       width: 36,
       height: 36,
       borderRadius: 18,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
       backgroundColor: theme.background,
     },
     panelBody: { flex: 1 },
@@ -3599,22 +4242,22 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
       borderTopColor: theme.border,
       backgroundColor: theme.surface,
     },
-    panelFooterRow: { flexDirection: 'row', gap: 10 },
+    panelFooterRow: { flexDirection: "row", gap: 10 },
 
     // -- Form --
     formSectionTitle: {
       fontSize: 11,
-      fontWeight: '700',
+      fontWeight: "700",
       color: theme.textTertiary,
       letterSpacing: 0.6,
-      textTransform: 'uppercase',
+      textTransform: "uppercase",
       marginTop: 14,
       marginBottom: 8,
     },
     field: { marginBottom: 12 },
     fieldLabel: {
       fontSize: 13,
-      fontWeight: '600',
+      fontWeight: "600",
       color: theme.text,
       marginBottom: 6,
     },
@@ -3625,7 +4268,12 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
       marginTop: 4,
       lineHeight: 16,
     },
-    helperText: { fontSize: 13.5, color: theme.textSecondary, lineHeight: 19, marginBottom: 10 },
+    helperText: {
+      fontSize: 13.5,
+      color: theme.textSecondary,
+      lineHeight: 19,
+      marginBottom: 10,
+    },
     textInput: {
       borderWidth: 1,
       borderColor: theme.inputBorder,
@@ -3638,7 +4286,7 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
     },
 
     // -- Chips --
-    chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
     chip: {
       paddingVertical: 8,
       paddingHorizontal: 14,
@@ -3652,15 +4300,15 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
       borderColor: theme.primary,
     },
     chipDisabled: { opacity: 0.5 },
-    chipText: { fontSize: 13, color: theme.text, fontWeight: '600' },
-    chipTextActive: { color: '#FFFFFF' },
+    chipText: { fontSize: 13, color: theme.text, fontWeight: "600" },
+    chipTextActive: { color: "#FFFFFF" },
     chipTextDisabled: { color: theme.textTertiary },
 
     // -- Selector --
     selector: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
       gap: 8,
       borderWidth: 1,
       borderColor: theme.inputBorder,
@@ -3669,13 +4317,23 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
       paddingHorizontal: 12,
       backgroundColor: theme.inputBackground,
     },
-    selectorLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
-    selectorText: { color: theme.text, fontSize: 14, fontWeight: '500', flex: 1 },
+    selectorLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      flex: 1,
+    },
+    selectorText: {
+      color: theme.text,
+      fontSize: 14,
+      fontWeight: "500",
+      flex: 1,
+    },
 
     // -- Switch row --
     switchRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: "row",
+      alignItems: "center",
       gap: 12,
       paddingVertical: 10,
       paddingHorizontal: 12,
@@ -3685,7 +4343,7 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
       borderColor: theme.border,
       marginBottom: 12,
     },
-    switchLabel: { fontSize: 14, fontWeight: '600', color: theme.text },
+    switchLabel: { fontSize: 14, fontWeight: "600", color: theme.text },
     switchHelper: { fontSize: 12, color: theme.textSecondary, marginTop: 2 },
 
     // -- Picker rows (modais de seleção) --
@@ -3693,17 +4351,17 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
       maxHeight: 320,
     },
     pickerRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
       paddingVertical: 12,
       paddingHorizontal: 12,
       borderRadius: 10,
       marginBottom: 4,
     },
     pickerRowActive: { backgroundColor: theme.primaryLight },
-    pickerRowText: { fontSize: 14, color: theme.text, fontWeight: '500' },
-    pickerRowTextActive: { color: theme.primary, fontWeight: '700' },
+    pickerRowText: { fontSize: 14, color: theme.text, fontWeight: "500" },
+    pickerRowTextActive: { color: theme.primary, fontWeight: "700" },
 
     // -- Buttons --
     primaryBtn: {
@@ -3711,81 +4369,81 @@ const createStyles = (theme: Theme, isDesktop: boolean, isDarkMode: boolean) => 
       backgroundColor: theme.primary,
       paddingVertical: 12,
       borderRadius: 12,
-      alignItems: 'center',
+      alignItems: "center",
     },
     primaryBtnDisabled: { opacity: 0.5 },
-    primaryBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
+    primaryBtnText: { color: "#FFFFFF", fontWeight: "700", fontSize: 14 },
     secondaryBtn: {
       flex: 1,
       paddingVertical: 12,
       borderRadius: 12,
-      alignItems: 'center',
+      alignItems: "center",
       backgroundColor: theme.background,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: theme.border,
     },
-    secondaryBtnText: { color: theme.text, fontWeight: '600', fontSize: 14 },
+    secondaryBtnText: { color: theme.text, fontWeight: "600", fontSize: 14 },
     dangerBtn: {
       flex: 1.5,
       backgroundColor: theme.error,
       paddingVertical: 12,
       borderRadius: 12,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
       minHeight: 44,
     },
-    dangerBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
+    dangerBtnText: { color: "#FFFFFF", fontWeight: "700", fontSize: 14 },
 
     deleteConfirmBackdrop: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.65)',
-      justifyContent: 'center',
-      alignItems: 'center',
+      backgroundColor: "rgba(0,0,0,0.65)",
+      justifyContent: "center",
+      alignItems: "center",
       padding: 20,
     },
     deleteConfirmDialog: {
-      width: '100%',
+      width: "100%",
       maxWidth: 420,
       backgroundColor: theme.surface,
       borderRadius: 16,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: theme.border,
       padding: 24,
-      alignItems: 'center',
+      alignItems: "center",
     },
     deleteConfirmClose: {
-      position: 'absolute',
+      position: "absolute",
       top: 12,
       right: 12,
       width: 36,
       height: 36,
       borderRadius: 18,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
     },
     deleteConfirmIconBox: {
       width: 64,
       height: 64,
       borderRadius: 32,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: "center",
+      justifyContent: "center",
       marginBottom: 12,
     },
     deleteConfirmTitle: {
       fontSize: 20,
-      fontWeight: '700',
+      fontWeight: "700",
       color: theme.text,
-      textAlign: 'center',
+      textAlign: "center",
       marginBottom: 8,
     },
     deleteConfirmMessage: {
       fontSize: 14,
       color: theme.textSecondary,
-      textAlign: 'center',
+      textAlign: "center",
       lineHeight: 20,
       marginBottom: 20,
     },
-    deleteConfirmName: { fontWeight: '700', color: theme.text },
-    deleteConfirmActions: { flexDirection: 'row', gap: 10, width: '100%' },
+    deleteConfirmName: { fontWeight: "700", color: theme.text },
+    deleteConfirmActions: { flexDirection: "row", gap: 10, width: "100%" },
   });
 };
