@@ -69,6 +69,13 @@ export function humanizeFiscalEmitError(
 
   const lower = raw.toLowerCase()
 
+  if (/emissor\s+n[aã]o\s+habilitado\s+para\s+emiss[aã]o\s+da\s+nf-?e/i.test(lower)) {
+    return (
+      'A Receita recusou: esta empresa ainda não está credenciada para emitir NF-e (modelo 55) neste estado. '
+      + 'O XML está ok. O contador precisa habilitar a NF-e no portal da SEFAZ com o certificado A1.'
+    )
+  }
+
   if (
     (lower.includes('localizamos') && lower.includes('empresa'))
     || lower.includes('não há cadastro desta empresa no emissor')

@@ -75,6 +75,14 @@ test('formatNfseEmitErrorForUser traduz timeout PlugNotas', () => {
   assert.doesNotMatch(msg, /aborted/i);
 });
 
+test('formatNfeEmitErrorForUser explica emissor não habilitado para NF-e', () => {
+  const msg = formatNfeEmitErrorForUser(
+    'Rejeicao: Emissor nao habilitado para emissao da NF-e',
+  );
+  assert.match(msg, /credenciada/i);
+  assert.match(msg, /SEFAZ/i);
+});
+
 test('formatNfeEmitErrorForUser expande erro interno genérico da Plugnotas', () => {
   const msg = formatNfeEmitErrorForUser(
     'Ocorreu um erro interno, nossa equipe já foi notificado do problema.',

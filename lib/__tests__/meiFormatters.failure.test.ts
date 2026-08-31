@@ -28,6 +28,15 @@ describe('extractNfseFailureMessage', () => {
     expect(message).toBe('Nota já cancelada');
   });
 
+  it('humaniza emissor não habilitado para NF-e', () => {
+    const message = extractNfseFailureMessage({
+      mensagemRetorno: 'Rejeicao: Emissor nao habilitado para emissao da NF-e',
+    });
+
+    expect(message).toMatch(/ainda não está credenciada/i);
+    expect(message).toMatch(/SEFAZ/i);
+  });
+
   it('humaniza E0014 (série/número RPS duplicado)', () => {
     const message = extractNfseFailureMessage({
       mensagemRetorno:

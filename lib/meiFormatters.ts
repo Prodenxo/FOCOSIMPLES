@@ -153,6 +153,14 @@ const NFSE_REJECTION_RPS_DUPLICATE_RE =
 export function humanizeNfseRejectionMessage(raw: string | null | undefined): string | null {
   const text = normalizeFailureText(raw);
   if (!text) return null;
+  if (/emissor\s+n[aã]o\s+habilitado\s+para\s+emiss[aã]o\s+da\s+nf-?e/i.test(text)) {
+    return (
+      'A Receita recusou: esta empresa ainda não está credenciada para emitir NF-e (modelo 55) neste estado. '
+      + 'Não é erro de produto, valor nem XML. O contador precisa habilitar a NF-e no portal da SEFAZ '
+      + 'com o certificado A1 da empresa. Loja de balcão às vezes usa NFC-e, não NF-e. '
+      + `Detalhe: ${text}`
+    );
+  }
   if (!NFSE_REJECTION_RPS_DUPLICATE_RE.test(text)) return text;
 
   return (

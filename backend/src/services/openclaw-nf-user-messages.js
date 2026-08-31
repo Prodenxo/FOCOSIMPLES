@@ -134,6 +134,14 @@ export const formatNfeEmitErrorForUser = (rawMessage = '', context = {}) => {
   const msg = String(rawMessage || '').trim();
   const lower = msg.toLowerCase();
 
+  if (/emissor\s+n[aã]o\s+habilitado\s+para\s+emiss[aã]o\s+da\s+nf-?e/i.test(lower)) {
+    return (
+      'A Receita recusou: a empresa ainda não está credenciada para emitir NF-e neste estado. '
+      + 'Peça ao contador habilitar a NF-e no portal da SEFAZ com o certificado A1. '
+      + 'Isso não é erro de produto nem de valor.'
+    );
+  }
+
   if (/nfe.*n[aã]o est[aá] activ|nfe_plugnotas_inactive|nfe_plugnotas_activate/i.test(lower)) {
     return (
       'A NF-e (produto) não está activa no emissor fiscal. '
