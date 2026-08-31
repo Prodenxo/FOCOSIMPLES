@@ -25,6 +25,7 @@ import {
   buildInboundDedupKeys,
   claimInboundMessage,
 } from '../services/openclaw-reply-dedup.service.js';
+import { startZapiTypingSoon } from '../services/zapi-outbound.service.js';
 
 export const getZapiMonitor = (_req, res) => {
   return res.json({
@@ -68,6 +69,8 @@ export const postInbound = async (req, res, next) => {
         'ignorado',
       );
     }
+
+    startZapiTypingSoon(parsed.phone);
 
     let transcriptionSource = null;
     if (!parsed.text && parsed.hasAudio) {

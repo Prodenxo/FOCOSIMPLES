@@ -60,8 +60,8 @@ const assertZapiOk = async (response, actionLabel) => {
 /** Segundos de "Digitando..." antes de entregar o texto (1–15, limite da Z-API). */
 export const resolveZapiDelayTyping = (message) => {
   const len = String(message || '').trim().length;
-  if (!len) return 2;
-  return Math.min(15, Math.max(2, Math.ceil(len / 40)));
+  if (!len) return 1;
+  return Math.min(4, Math.max(1, Math.ceil(len / 80)));
 };
 
 const postZapiSilent = async (pathSuffix, payload) => {
@@ -93,13 +93,18 @@ export const sendZapiReadChat = async (phone) => {
 export const sendZapiTyping = async (phone) => {
   const target = normalizeZapiPhone(phone);
   if (!target) return false;
-  if (await postZapiSilent('send-chat-presence', { phone: target, status: 'COMPOSING' })) {
-    return true;
-  }
-  if (await postZapiSilent('send-chat-state', { phone: target, chatState: 'composing' })) {
-    return true;
-  }
-  return postZapiSilent('send-typing', { phone: target });
+  const hits = await Promise.all([
+    postZapiSilent('send-chat-presence', { phone: target, status: 'COMPOSING' }),
+    postZapiSilent('send-chat-state', { phone: target, chatState: 'composing' }),
+    postZapiSilent('send-typing', { phone: target }),
+  ]);
+  return hits.some(Boolean);
+};
+
+/** Dispara o balão na hora — não espera resposta da Z-API. */
+export const startZapiTypingSoon = (phone) => {
+  sendZapiReadChat(phone).catch(() => {});
+  sendZapiTyping(phone).catch(() => {});
 };
 
 /**
@@ -112,8 +117,6 @@ export const startZapiTypingPulse = (phone) => {
     if (stopped) return;
     sendZapiTyping(phone).catch(() => {});
   };
-  sendZapiReadChat(phone).catch(() => {});
-  pulse();
   const timer = setInterval(pulse, 7_000);
   return () => {
     stopped = true;

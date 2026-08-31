@@ -9,9 +9,9 @@ process.env.ZAPI_CLIENT_TOKEN = process.env.ZAPI_CLIENT_TOKEN || 'client-test';
 
 test('resolveZapiDelayTyping escala com o tamanho do texto', async () => {
   const { resolveZapiDelayTyping } = await import('../src/services/zapi-outbound.service.js');
-  assert.equal(resolveZapiDelayTyping('Oi'), 2);
-  assert.ok(resolveZapiDelayTyping('x'.repeat(200)) >= 5);
-  assert.equal(resolveZapiDelayTyping('x'.repeat(2000)), 15);
+  assert.equal(resolveZapiDelayTyping('Oi'), 1);
+  assert.ok(resolveZapiDelayTyping('x'.repeat(200)) >= 2);
+  assert.equal(resolveZapiDelayTyping('x'.repeat(2000)), 4);
 });
 
 test('normalizeZapiPhone adiciona 55 em número local', async () => {
@@ -48,7 +48,7 @@ test('sendZapiText chama send-text com Client-Token', async () => {
     assert.match(capturedUrl, /send-text$/);
     assert.equal(capturedBody.phone, '5511987654321');
     assert.equal(capturedBody.message, 'Olá');
-    assert.equal(capturedBody.delayTyping, 2);
+    assert.equal(capturedBody.delayTyping, 1);
     assert.equal(capturedHeaders['Client-Token'], 'client-test');
   } finally {
     if (originalFetch) global.fetch = originalFetch;
