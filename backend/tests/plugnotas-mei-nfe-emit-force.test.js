@@ -13,27 +13,28 @@ import {
   resolvePlugnotasNfeCrt,
 } from '../src/services/plugnotas/plugnotas-mei-nfe-emit-force.js';
 
-test('resolvePlugnotasNfeCrt usa CRT 4 para MEI e CRT 1 com IE real', () => {
+test('resolvePlugnotasNfeCrt no Foco Simples é sempre CRT 1', () => {
   assert.equal(resolvePlugnotasNfeCrt({
     empresa: { regimeTributarioEspecial: 5 },
-  }), 4);
+  }), 1);
   assert.equal(resolvePlugnotasNfeCrt({
     empresa: { inscricaoEstadual: 'ISENTO' },
-  }), 4);
+  }), 1);
   assert.equal(resolvePlugnotasNfeCrt({
     empresa: { inscricaoEstadual: '123456789' },
-    emitente: { crt: 1 },
+    emitente: { crt: 4 },
   }), 1);
 });
 
-test('applyNfeCrtAndSchemaForEmit preenche CRT e esquema MEI', () => {
+test('applyNfeCrtAndSchemaForEmit no Foco Simples força CRT 1 sem esquema MEI', () => {
   const out = applyNfeCrtAndSchemaForEmit(
     { emitente: { cpfCnpj: '35774511000145' }, config: { producao: true } },
     { regimeTributarioEspecial: 5 },
   );
-  assert.equal(out.crt, 4);
-  assert.equal(out.emitente.crt, 4);
-  assert.equal(out.config.versaoEsquema, 'pl_010c');
+  assert.equal(out.crt, 1);
+  assert.equal(out.emitente.crt, 1);
+  assert.equal(out.emitente.regimeTributarioEspecial, undefined);
+  assert.equal(out.config.versaoEsquema, undefined);
   assert.equal(out.config.producao, true);
 });
 
@@ -124,30 +125,32 @@ test('ensureMeiNfePlugnotasCadastroBeforeEmit activa NF-e quando cadastro só ti
   }
 });
 
-test('ensureMeiNfePlugnotasCadastroBeforeEmit no Foco Simples aplica pl_010c se for MEI', async () => {
+test('ensureMeiNfePlugnotasCadastroBeforeEmit no Foco Simples tira regime MEI', async () => {
   const prevProduct = process.env.APP_PRODUCT;
   process.env.APP_PRODUCT = 'focosimples';
 
-  let schemaPatch = null;
+  let regimePatch = null;
   configurePlugnotasNfeEmitPrepDeps({
     consultarEmpresaPlugNotas: async () => ({
       regimeTributarioEspecial: 5,
-      inscricaoEstadual: 'ISENTO',
+      inscricaoEstadual: '123456789',
       certificado: 'cert-abc',
       nfe: { ativo: true, config: { versaoEsquema: 'pl_009' } },
     }),
     resolverCertificadoIdPorCnpj: async () => 'cert-abc',
     vincularCertificadoEmpresaPlugNotas: async () => ({}),
     atualizarEmpresaPlugNotas: async (payload) => {
-      schemaPatch = payload;
+      regimePatch = payload;
       return { cnpj: payload.cpfCnpj };
     },
   });
 
   try {
     await ensureMeiNfePlugnotasCadastroBeforeEmit('35774511000145');
-    assert.equal(schemaPatch?.nfe?.config?.versaoEsquema, 'pl_010c');
-    assert.equal(schemaPatch?.regimeTributarioEspecial, undefined);
+    assert.equal(regimePatch?.regimeTributario, 1);
+    assert.equal(regimePatch?.regimeTributarioEspecial, 0);
+    assert.equal(regimePatch?.nfe?.config?.versaoEsquema, undefined);
+    assert.equal(regimePatch?.inscricaoEstadual, '123456789');
   } finally {
     resetPlugnotasNfeEmitPrepDeps();
     if (prevProduct === undefined) delete process.env.APP_PRODUCT;

@@ -96,8 +96,8 @@ export const normalizeMeiEmpresaPayload = (payload) => {
     payload.simplesNacional = true;
     if (!isFocoSimplesProduct()) {
       payload.regimeTributarioEspecial = PLUGNOTAS_REGIME_ESPECIAL_MEI;
-    } else if (!Number.isFinite(especial) || especial === 0) {
-      delete payload.regimeTributarioEspecial;
+    } else {
+      payload.regimeTributarioEspecial = 0;
     }
     return payload;
   }
@@ -121,12 +121,13 @@ export const normalizeMeiEmpresaPayload = (payload) => {
 
   payload.simplesNacional = true;
 
+  if (isFocoSimplesProduct()) {
+    payload.regimeTributarioEspecial = 0;
+    return payload;
+  }
+
   if (regime === 1 && (Number.isNaN(especial) || especial === 0)) {
-    if (isFocoSimplesProduct()) {
-      delete payload.regimeTributarioEspecial;
-    } else {
-      payload.regimeTributarioEspecial = PLUGNOTAS_REGIME_ESPECIAL_MEI;
-    }
+    payload.regimeTributarioEspecial = PLUGNOTAS_REGIME_ESPECIAL_MEI;
   }
 
   return payload;

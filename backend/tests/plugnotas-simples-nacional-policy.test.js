@@ -15,7 +15,7 @@ test('normalizeMeiEmpresaPayload no focosimples exige Simples e não força MEI 
   })
   assert.equal(payload.regimeTributario, 1)
   assert.equal(payload.simplesNacional, true)
-  assert.equal(payload.regimeTributarioEspecial, undefined)
+  assert.equal(payload.regimeTributarioEspecial, 0)
 
   assert.throws(
     () => normalizeMeiEmpresaPayload({ regimeTributario: 3, simplesNacional: true }),
@@ -23,11 +23,11 @@ test('normalizeMeiEmpresaPayload no focosimples exige Simples e não força MEI 
   )
 })
 
-test('buildMeiRegimePatchPayload no focosimples omite especial MEI por padrão', async () => {
+test('buildMeiRegimePatchPayload no focosimples envia especial 0 (Simples)', async () => {
   const { buildMeiRegimePatchPayload } = await import(
     '../src/services/plugnotas/plugnotas-mei-empresa-policy.js'
   )
   const payload = buildMeiRegimePatchPayload('12345678000199')
   assert.equal(payload.simplesNacional, true)
-  assert.equal(payload.regimeTributarioEspecial, undefined)
+  assert.equal(payload.regimeTributarioEspecial, 0)
 })

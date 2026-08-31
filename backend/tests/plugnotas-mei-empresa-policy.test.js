@@ -3,49 +3,39 @@ import assert from 'node:assert/strict';
 import {
   buildMeiRegimePatchPayload,
   normalizeMeiEmpresaPayload,
-  PLUGNOTAS_REGIME_ESPECIAL_MEI,
 } from '../src/services/plugnotas/plugnotas-mei-empresa-policy.js';
 
-test('normalizeMeiEmpresaPayload: regime ausente assume Simples + MEI', () => {
+test('normalizeMeiEmpresaPayload no Foco Simples assume Simples sem MEI', () => {
   const payload = { cpfCnpj: '17422651000172' };
   normalizeMeiEmpresaPayload(payload);
   assert.equal(payload.regimeTributario, 1);
   assert.equal(payload.simplesNacional, true);
-  assert.equal(payload.regimeTributarioEspecial, PLUGNOTAS_REGIME_ESPECIAL_MEI);
+  assert.equal(payload.regimeTributarioEspecial, 0);
 });
 
-test('normalizeMeiEmpresaPayload: Simples sem especial preenche MEI (5)', () => {
+test('normalizeMeiEmpresaPayload no Foco Simples zera especial MEI', () => {
   const payload = {
     regimeTributario: 1,
     simplesNacional: true,
+    regimeTributarioEspecial: 5,
   };
   normalizeMeiEmpresaPayload(payload);
-  assert.equal(payload.regimeTributarioEspecial, PLUGNOTAS_REGIME_ESPECIAL_MEI);
+  assert.equal(payload.regimeTributarioEspecial, 0);
 });
 
-test('normalizeMeiEmpresaPayload: regime 4 converte para 1 + especial 5', () => {
+test('normalizeMeiEmpresaPayload: regime 4 vira Simples sem MEI', () => {
   const payload = { regimeTributario: 4 };
   normalizeMeiEmpresaPayload(payload);
   assert.equal(payload.regimeTributario, 1);
-  assert.equal(payload.regimeTributarioEspecial, PLUGNOTAS_REGIME_ESPECIAL_MEI);
+  assert.equal(payload.regimeTributarioEspecial, 0);
   assert.equal(payload.simplesNacional, true);
 });
 
-test('normalizeMeiEmpresaPayload: não sobrescreve especial já definido', () => {
-  const payload = {
-    regimeTributario: 1,
-    simplesNacional: true,
-    regimeTributarioEspecial: 3,
-  };
-  normalizeMeiEmpresaPayload(payload);
-  assert.equal(payload.regimeTributarioEspecial, 3);
-});
-
-test('buildMeiRegimePatchPayload inclui certificado quando informado', () => {
+test('buildMeiRegimePatchPayload no Foco Simples não marca MEI', () => {
   const payload = buildMeiRegimePatchPayload('17422651000172', 'cert-abc');
   assert.equal(payload.cpfCnpj, '17422651000172');
   assert.equal(payload.certificado, 'cert-abc');
   assert.equal(payload.regimeTributario, 1);
-  assert.equal(payload.regimeTributarioEspecial, PLUGNOTAS_REGIME_ESPECIAL_MEI);
+  assert.equal(payload.regimeTributarioEspecial, 0);
   assert.equal(payload.inscricaoEstadual, 'ISENTO');
 });
