@@ -87,6 +87,7 @@ import { AUTHORITY_ENGINE } from '../fiscal-engine/rollout/rollout-constants.js'
 import { getBusinessTypeMirror } from './empresa-business-type.service.js';
 import {
   applyMeiNfeEmitForcePolicy,
+  applyNfeCrtAndSchemaForEmit,
   ensureMeiNfePlugnotasCadastroBeforeEmit,
   hydrateMeiNfeEmitenteIeFromEmpresa,
 } from './plugnotas/plugnotas-mei-nfe-emit-force.js';
@@ -2172,7 +2173,8 @@ export const emitirNota = async (userId, input) => {
         if (cnpjEmitente.length === 14 && empresaPlugnotas) {
           result = hydrateMeiNfeEmitenteIeFromEmpresa(result, empresaPlugnotas);
         }
-        return applyMeiNfeEmitForcePolicy(result);
+        result = applyMeiNfeEmitForcePolicy(result);
+        return applyNfeCrtAndSchemaForEmit(result, empresaPlugnotas);
       };
 
       const resolved = await resolveNfeEmitPayloadForPlugnotas({

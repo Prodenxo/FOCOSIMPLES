@@ -69,6 +69,60 @@ const empresaPrecisaVersaoEsquemaMei = (empresa) => {
   return versao !== PLUGNOTAS_NFE_VERSAO_ESQUEMA_MEI;
 };
 
+const readInscricaoEstadual = (...values) => {
+  for (const value of values) {
+    const text = String(value ?? '').trim();
+    if (text) return text;
+  }
+  return '';
+};
+
+/**
+ * CRT da NF-e: MEI = 4; Simples com IE = 1.
+ * Sem CRT válido a SEFAZ rejeita o XML em emit/CRT.
+ * @param {{ empresa?: Record<string, unknown>|null, emitente?: Record<string, unknown>|null }} [input]
+ * @returns {1|2|3|4}
+ */
+export const resolvePlugnotasNfeCrt = (input = {}) => {
+  const empresa = toObject(input.empresa);
+  const emitente = toObject(input.emitente);
+  const especial = Number(empresa.regimeTributarioEspecial);
+  if (especial === PLUGNOTAS_REGIME_ESPECIAL_MEI) return PLUGNOTAS_CRT_MEI;
+
+  const ie = readInscricaoEstadual(emitente.inscricaoEstadual, empresa.inscricaoEstadual);
+  if (!ie || ie.toUpperCase() === 'ISENTO') return PLUGNOTAS_CRT_MEI;
+
+  const existing = Number(emitente.crt ?? emitente.CRT ?? empresa.crt);
+  if (existing === 1 || existing === 2 || existing === 3 || existing === 4) {
+    return /** @type {1|2|3|4} */ (existing);
+  }
+  return 1;
+};
+
+/**
+ * Garante CRT 1–4 e, se MEI, o esquema pl_010c (aceita CRT 4).
+ * Não mexe em IE — só o código do regime no XML.
+ * @param {Record<string, unknown>} payload
+ * @param {Record<string, unknown>|null|undefined} empresa
+ */
+export const applyNfeCrtAndSchemaForEmit = (payload, empresa = null) => {
+  if (!payload || typeof payload !== 'object') return payload;
+  const emitente = toObject(payload.emitente);
+  const crt = resolvePlugnotasNfeCrt({ empresa, emitente });
+  const config = toObject(payload.config);
+  return {
+    ...payload,
+    crt,
+    emitente: { ...emitente, crt },
+    config: crt === PLUGNOTAS_CRT_MEI
+      ? {
+        ...config,
+        versaoEsquema: String(config.versaoEsquema || '').trim() || PLUGNOTAS_NFE_VERSAO_ESQUEMA_MEI,
+      }
+      : config,
+  };
+};
+
 const isNfeBlockAtivo = (empresa) => toObject(empresa?.nfe).ativo === true;
 
 /**
@@ -215,8 +269,9 @@ export const ensureMeiNfePlugnotasCadastroBeforeEmit = async (cnpjInput) => {
   empresa = await ensureCertificadoVinculadoAntesNfe(cnpj, empresa);
   empresa = await ensureEmpresaPlugnotasNfeAtivoForEmit(cnpj, empresa);
 
-  // Versão de esquema MEI (CRT 4) só no produto MEI.
-  if (isFocoSimplesProduct() || !empresaPrecisaVersaoEsquemaMei(empresa)) {
+  // CRT 4 no XML exige esquema pl_010c. Sem isso a SEFAZ recusa emit/CRT.
+  const crt = resolvePlugnotasNfeCrt({ empresa });
+  if (crt !== PLUGNOTAS_CRT_MEI || !empresaPrecisaVersaoEsquemaMei(empresa)) {
     return empresa;
   }
 
@@ -225,13 +280,9 @@ export const ensureMeiNfePlugnotasCadastroBeforeEmit = async (cnpjInput) => {
     const config = toObject(nfe.config);
     const certId = readCertificadoIdFromEmpresa(empresa)
       || await plugnotasNfeEmitPrepDeps.resolverCertificadoIdPorCnpj(cnpj);
-    await plugnotasNfeEmitPrepDeps.atualizarEmpresaPlugNotas({
+    const patch = {
       cpfCnpj: cnpj,
       ...(certId ? { certificado: certId } : {}),
-      regimeTributario: 1,
-      regimeTributarioEspecial: PLUGNOTAS_REGIME_ESPECIAL_MEI,
-      simplesNacional: true,
-      nfse: empresa.nfse,
       nfe: {
         ...nfe,
         ativo: nfe.ativo !== false,
@@ -240,8 +291,15 @@ export const ensureMeiNfePlugnotasCadastroBeforeEmit = async (cnpjInput) => {
           versaoEsquema: PLUGNOTAS_NFE_VERSAO_ESQUEMA_MEI,
         },
       },
-      nfce: empresa.nfce,
-    });
+    };
+    if (!isFocoSimplesProduct()) {
+      patch.regimeTributario = 1;
+      patch.regimeTributarioEspecial = PLUGNOTAS_REGIME_ESPECIAL_MEI;
+      patch.simplesNacional = true;
+      patch.nfse = empresa.nfse;
+      patch.nfce = empresa.nfce;
+    }
+    await plugnotasNfeEmitPrepDeps.atualizarEmpresaPlugNotas(patch);
     return unwrapPlugnotasEmpresaRecord(
       await plugnotasNfeEmitPrepDeps.consultarEmpresaPlugNotas(cnpj),
     ) || empresa;

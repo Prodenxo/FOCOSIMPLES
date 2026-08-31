@@ -4,12 +4,38 @@ import assert from 'node:assert/strict';
 import {
   PLUGNOTAS_CRT_MEI,
   applyMeiNfeEmitForcePolicy,
+  applyNfeCrtAndSchemaForEmit,
   hydrateMeiNfeEmitenteIeFromEmpresa,
   ensureMeiNfePlugnotasCadastroBeforeEmit,
   configurePlugnotasNfeEmitPrepDeps,
   resetPlugnotasNfeEmitPrepDeps,
   isMeiNfeEmitForceEnabled,
+  resolvePlugnotasNfeCrt,
 } from '../src/services/plugnotas/plugnotas-mei-nfe-emit-force.js';
+
+test('resolvePlugnotasNfeCrt usa CRT 4 para MEI e CRT 1 com IE real', () => {
+  assert.equal(resolvePlugnotasNfeCrt({
+    empresa: { regimeTributarioEspecial: 5 },
+  }), 4);
+  assert.equal(resolvePlugnotasNfeCrt({
+    empresa: { inscricaoEstadual: 'ISENTO' },
+  }), 4);
+  assert.equal(resolvePlugnotasNfeCrt({
+    empresa: { inscricaoEstadual: '123456789' },
+    emitente: { crt: 1 },
+  }), 1);
+});
+
+test('applyNfeCrtAndSchemaForEmit preenche CRT e esquema MEI', () => {
+  const out = applyNfeCrtAndSchemaForEmit(
+    { emitente: { cpfCnpj: '35774511000145' }, config: { producao: true } },
+    { regimeTributarioEspecial: 5 },
+  );
+  assert.equal(out.crt, 4);
+  assert.equal(out.emitente.crt, 4);
+  assert.equal(out.config.versaoEsquema, 'pl_010c');
+  assert.equal(out.config.producao, true);
+});
 
 test('applyMeiNfeEmitForcePolicy força CRT 4 e regime MEI no emitente', () => {
   const prev = process.env.MEI_NFE_FORCE_CRT_EMIT;
@@ -82,8 +108,7 @@ test('ensureMeiNfePlugnotasCadastroBeforeEmit activa NF-e quando cadastro só ti
     resolverCertificadoIdPorCnpj: async () => 'cert-abc',
     vincularCertificadoEmpresaPlugNotas: async () => ({}),
     atualizarEmpresaPlugNotas: async (payload) => {
-      assert.equal(payload.documentosAtivos?.nfe, true);
-      patched = true;
+      if (payload.documentosAtivos?.nfe === true) patched = true;
       return { cnpj: payload.cpfCnpj };
     },
   });
@@ -92,6 +117,37 @@ test('ensureMeiNfePlugnotasCadastroBeforeEmit activa NF-e quando cadastro só ti
     const out = await ensureMeiNfePlugnotasCadastroBeforeEmit(cnpj);
     assert.equal(patched, true);
     assert.equal(out?.nfe?.ativo, true);
+  } finally {
+    resetPlugnotasNfeEmitPrepDeps();
+    if (prevProduct === undefined) delete process.env.APP_PRODUCT;
+    else process.env.APP_PRODUCT = prevProduct;
+  }
+});
+
+test('ensureMeiNfePlugnotasCadastroBeforeEmit no Foco Simples aplica pl_010c se for MEI', async () => {
+  const prevProduct = process.env.APP_PRODUCT;
+  process.env.APP_PRODUCT = 'focosimples';
+
+  let schemaPatch = null;
+  configurePlugnotasNfeEmitPrepDeps({
+    consultarEmpresaPlugNotas: async () => ({
+      regimeTributarioEspecial: 5,
+      inscricaoEstadual: 'ISENTO',
+      certificado: 'cert-abc',
+      nfe: { ativo: true, config: { versaoEsquema: 'pl_009' } },
+    }),
+    resolverCertificadoIdPorCnpj: async () => 'cert-abc',
+    vincularCertificadoEmpresaPlugNotas: async () => ({}),
+    atualizarEmpresaPlugNotas: async (payload) => {
+      schemaPatch = payload;
+      return { cnpj: payload.cpfCnpj };
+    },
+  });
+
+  try {
+    await ensureMeiNfePlugnotasCadastroBeforeEmit('35774511000145');
+    assert.equal(schemaPatch?.nfe?.config?.versaoEsquema, 'pl_010c');
+    assert.equal(schemaPatch?.regimeTributarioEspecial, undefined);
   } finally {
     resetPlugnotasNfeEmitPrepDeps();
     if (prevProduct === undefined) delete process.env.APP_PRODUCT;
