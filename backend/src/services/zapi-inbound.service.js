@@ -5,7 +5,7 @@ import {
   isOpenclawZapiRelaySyncEnabled,
 } from './openclaw-hook-relay.service.js';
 import { isWhatsappOutboundConfigured, sendWhatsappMessage } from './whatsapp-outbound.service.js';
-import { consumeReplyPushed } from './openclaw-reply-dedup.service.js';
+import { claimInboundMessage, consumeReplyPushed } from './openclaw-reply-dedup.service.js';
 
 /**
  * Extrai telefone e texto do callback Z-API "Ao receber" (ReceivedCallback).
@@ -179,6 +179,18 @@ export const relayZapiInboundToOpenclaw = async (normalized) => {
   }
 
   if (isOpenclawZapiRelaySyncEnabled() && isWhatsappOutboundConfigured()) {
+    if (!claimInboundMessage(normalized.messageId)) {
+      // eslint-disable-next-line no-console
+      console.info('[ZAPI] webhook repetido — ignorado:', normalized.messageId);
+      return {
+        relayed: true,
+        mode: 'sync',
+        replySent: false,
+        openclaw: null,
+        whatsappError: null,
+      };
+    }
+
     const openclaw = await callOpenclawHookAgentSync(normalized);
 
     if (!openclaw.ok && openclaw.httpStatus == null) {

@@ -40,8 +40,9 @@ const FINANCE_HINTS = [
   /\b(valor|quanto|total|quanto gastei|quanto recebi)\b/,
 ];
 
+/** Só cumprimento. NÃO incluir sim/não/ok/pode — o Midas pede isso para confirmar nota. */
 const GREETING_ONLY =
-  /^(oi|ola|olá|bom dia|boa tarde|boa noite|e ai|e aí|tudo bem|tudo bom|blz|beleza|fala|opa|salve|obrigad|valeu|thanks|ok+|sim|nao|não|pode|podes|quero|preciso)[\s!.?]*$/i;
+  /^(oi+|ola|olá|bom dia|boa tarde|boa noite|e ai|e aí|tudo bem(\?)?|tudo bom(\?)?|blz|beleza|fala|opa|salve|obrigad[oa]?|valeu|thanks|hey|hi)[\s!.?]*$/i;
 
 /**
  * Saudação curta (sem pedido concreto) — usada para boas-vindas WhatsApp no inbound.

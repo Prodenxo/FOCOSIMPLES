@@ -13,6 +13,11 @@ const DEFAULT_WINDOW_MS = 120_000;
 /** @type {Map<string, number>} */
 const pushedAt = new Map();
 
+/** @type {Map<string, number>} */
+const inboundSeenAt = new Map();
+
+const INBOUND_WINDOW_MS = 180_000;
+
 const purgeExpired = (windowMs) => {
   const limit = Date.now() - windowMs;
   for (const [key, at] of pushedAt) {
@@ -32,6 +37,24 @@ export const markReplyPushed = (phone) => {
  * Consome o registro: devolve `true` uma única vez se o agente entregou a resposta
  * dentro da janela.
  */
+/**
+ * A Z-API reenvia o webhook se a primeira chamada demora (o OpenClaw pode levar
+ * dezenas de segundos). Marca o messageId na hora: a segunda cópia é ignorada.
+ * @returns {boolean} true se esta é a primeira vez que vemos o id
+ */
+export const claimInboundMessage = (messageId, windowMs = INBOUND_WINDOW_MS) => {
+  const key = String(messageId || '').trim();
+  if (!key) return true;
+  const now = Date.now();
+  const limit = now - windowMs;
+  for (const [id, at] of inboundSeenAt) {
+    if (at < limit) inboundSeenAt.delete(id);
+  }
+  if (inboundSeenAt.has(key)) return false;
+  inboundSeenAt.set(key, now);
+  return true;
+};
+
 export const consumeReplyPushed = (phone, windowMs = DEFAULT_WINDOW_MS) => {
   const key = normalizeWhatsappPhoneDigits(phone || '');
   if (!key) return false;

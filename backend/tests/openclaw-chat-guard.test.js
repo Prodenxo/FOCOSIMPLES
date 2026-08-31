@@ -4,6 +4,7 @@ import {
   CHAT_GUARD_REPLY,
   evaluateChatGuard,
   hasFinanceHint,
+  isGreetingOnlyMessage,
 } from '../src/services/openclaw-chat-guard.service.js';
 
 test('evaluateChatGuard bloqueia perguntas sobre pornografia', () => {
@@ -43,6 +44,16 @@ test('evaluateChatGuard permite cumprimentos e pedidos curtos', () => {
   assert.equal(evaluateChatGuard('tudo bom?').block, false);
   assert.equal(evaluateChatGuard('preciso').block, false);
   assert.equal(evaluateChatGuard('quero').block, false);
+});
+
+test('isGreetingOnlyMessage nao trata confirmacao de nota como saudacao', () => {
+  assert.equal(isGreetingOnlyMessage('sim'), false);
+  assert.equal(isGreetingOnlyMessage('confirmo'), false);
+  assert.equal(isGreetingOnlyMessage('ok'), false);
+  assert.equal(isGreetingOnlyMessage('pode'), false);
+  assert.equal(isGreetingOnlyMessage('nao'), false);
+  assert.equal(isGreetingOnlyMessage('oi'), true);
+  assert.equal(isGreetingOnlyMessage('bom dia'), true);
 });
 
 test('evaluateChatGuard bloqueia recomendações de entretenimento', () => {
