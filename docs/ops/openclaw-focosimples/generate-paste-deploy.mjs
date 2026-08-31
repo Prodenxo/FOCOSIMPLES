@@ -4,10 +4,13 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const soulPath = path.join(__dirname, 'SOUL.md')
+const apiPath = path.join(__dirname, 'MF-API.md')
 const outPath = path.join(__dirname, 'paste-in-easypanel-console.sh')
 
 const soul = fs.readFileSync(soulPath)
 const b64 = soul.toString('base64')
+const api = fs.readFileSync(apiPath)
+const apiB64 = api.toString('base64')
 
 const script = `#!/bin/sh
 # Cole ESTE ficheiro inteiro no Console EasyPanel (OpenClaw) e execute: sh /tmp/paste-soul.sh
@@ -17,8 +20,9 @@ mkdir -p "\$WS"
 echo "[focosimples] a gravar SOUL.md (\${#} bytes b64)..."
 printf '%s' '${b64}' | base64 -d > "\$WS/SOUL.md"
 BYTES=\$(wc -c < "\$WS/SOUL.md")
-echo "[focosimples] SOUL.md = \$BYTES bytes (esperado ~61676)"
+echo "[focosimples] SOUL.md = \$BYTES bytes (esperado ~${soul.length})"
 test "\$BYTES" -gt 50000 || { echo "ERRO: SOUL pequeno demais"; exit 1; }
+grep -q 'send_text_whatsapp' "\$WS/SOUL.md" || { echo "ERRO: SOUL sem send_text_whatsapp"; exit 1; }
 cat > "\$WS/IDENTITY.md" << 'IDEOF'
 # IDENTITY
 Nome: Midas
@@ -31,13 +35,8 @@ Timezone: America/Sao_Paulo
 Produto: Foco Simples
 Missão: Lançamentos, DAS, NFS-e/NF-e, agenda
 UDEOF
-cat > "\$WS/MF-API.md" << 'APIEOF'
-# Foco Simples — API Bot
-SEMPRE: /home/node/.openclaw/workspace/mf-curl.sh TELEFONE55 '{"action":"..."}'
-DAS PDF: /home/node/.openclaw/workspace/mf-das-send.sh TELEFONE MM/YYYY
-NFSe PDF: /home/node/.openclaw/workspace/mf-nfse-send.sh TELEFONE UUID
-Só confirme envio com "whatsapp":"sent".
-APIEOF
+printf '%s' '${apiB64}' | base64 -d > "\$WS/MF-API.md"
+grep -q 'send_text_whatsapp' "\$WS/MF-API.md" || { echo "ERRO: MF-API sem send_text_whatsapp"; exit 1; }
 echo "[focosimples] OK — Restart OpenClaw e /new no WhatsApp"
 `
 

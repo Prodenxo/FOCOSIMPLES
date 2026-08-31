@@ -5,6 +5,14 @@
 - **NUNCA:** curl com `$MF_API_URL` / `$OPENCLAW_WEBHOOK_SECRET` (exec não herda env)
 - `phone` = dígitos com DDI **55** do remetente do WhatsApp
 
+## Entregar a resposta (obrigatório no WhatsApp)
+```bash
+/home/node/.openclaw/workspace/mf-curl.sh 5521996185328 '{"action":"send_text_whatsapp","payload":{"message":"Seu saldo hoje é R$ 1.240,00."}}'
+```
+Último passo de todo turno vindo do WhatsApp — sem isto o utilizador não recebe nada.
+Uma chamada por turno. Destino = remetente do 1º argumento; número no payload é ignorado.
+Confirmar só com `whatsappStatus: "sent"`.
+
 ## DAS (PDF no WhatsApp)
 ```bash
 /home/node/.openclaw/workspace/mf-das-send.sh 5521996185328 03/2026
@@ -34,4 +42,5 @@ get_das_current, get_das_payment_status, send_das_whatsapp, refresh_das_pdf,
 get_nfse_setup_status, sync_nfse_emitente,
 list_nfse_clientes, register_nfse_cliente, list_nfse_produtos, register_nfse_produto,
 list_catalog_servicos, preview_nfse, emit_nfse, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp,
-list_nfe_produtos, register_nfe_cliente, register_nfe_produto, preview_nfe, emit_nfe
+list_nfe_produtos, register_nfe_cliente, register_nfe_produto, preview_nfe, emit_nfe,
+send_text_whatsapp

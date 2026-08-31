@@ -87,9 +87,21 @@ ZAPI_WEBHOOK_TOKEN=...
 OPENCLAW_PUBLIC_ORIGIN=https://auto-openclaw-focosimples.4tnf3f.easypanel.host
 OPENCLAW_ZAPI_RELAY_URL=https://auto-openclaw-focosimples.4tnf3f.easypanel.host/hooks/agent
 OPENCLAW_ZAPI_RELAY_SECRET=token-hooks-openclaw
+OPENCLAW_GATEWAY_TOKEN=<gateway.auth.token do openclaw.json>
 OPENCLAW_ZAPI_RELAY_SYNC=true
 OPENCLAW_ZAPI_RELAY_TIMEOUT_MS=120000
 ```
+
+São **dois tokens diferentes**, não se confundem:
+
+| Variável | Endpoint | Valor no `openclaw.json` |
+|----------|----------|--------------------------|
+| `OPENCLAW_ZAPI_RELAY_SECRET` | `POST /hooks/agent` | `hooks.token` |
+| `OPENCLAW_GATEWAY_TOKEN` | `GET /sessions/.../history` | `gateway.auth.token` |
+
+Usar o token de hooks no history devolve **401**. Token certo em versão antiga devolve **403**
+(escopo `operator.read` — corrigido a partir da **2026.4.23**). O backend loga os dois casos
+com a dica correspondente.
 
 Webhook Z-API:
 
