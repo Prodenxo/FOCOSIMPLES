@@ -36,6 +36,7 @@ test('applyNfeCrtAndSchemaForEmit no Foco Simples força CRT 1 sem esquema MEI',
   assert.equal(out.emitente.regimeTributarioEspecial, undefined);
   assert.equal(out.config.versaoEsquema, undefined);
   assert.equal(out.config.producao, true);
+  assert.equal(out.emitente.inscricaoEstadual, 'ISENTO');
 });
 
 test('applyMeiNfeEmitForcePolicy força CRT 4 e regime MEI no emitente', () => {
@@ -84,12 +85,20 @@ test('hydrateMeiNfeEmitenteIeFromEmpresa usa IE do cadastro quando payload vazio
   assert.equal(out.emitente.inscricaoEstadual, '987654321');
 });
 
-test('hydrateMeiNfeEmitenteIeFromEmpresa ignora ISENTO', () => {
+test('hydrateMeiNfeEmitenteIeFromEmpresa usa ISENTO se não houver IE', () => {
   const out = hydrateMeiNfeEmitenteIeFromEmpresa(
     { emitente: { cpfCnpj: '67146579000176' } },
     { inscricaoEstadual: 'ISENTO' },
   );
-  assert.equal(out.emitente.inscricaoEstadual, undefined);
+  assert.equal(out.emitente.inscricaoEstadual, 'ISENTO');
+});
+
+test('hydrateMeiNfeEmitenteIeFromEmpresa preenche ISENTO sem cadastro', () => {
+  const out = hydrateMeiNfeEmitenteIeFromEmpresa(
+    { emitente: { cpfCnpj: '67146579000176' } },
+    {},
+  );
+  assert.equal(out.emitente.inscricaoEstadual, 'ISENTO');
 });
 
 test('ensureMeiNfePlugnotasCadastroBeforeEmit activa NF-e quando cadastro só tinha NFS-e', async () => {

@@ -110,7 +110,9 @@ export const applyNfeCrtAndSchemaForEmit = (payload, empresa = null) => {
   const emitente = toObject(payload.emitente);
   const crt = resolvePlugnotasNfeCrt({ empresa, emitente });
   const config = toObject(payload.config);
-  const nextEmitente = { ...emitente, crt };
+  const ie = readInscricaoEstadual(emitente.inscricaoEstadual, empresa?.inscricaoEstadual)
+    || 'ISENTO';
+  const nextEmitente = { ...emitente, crt, inscricaoEstadual: ie };
   if (isFocoSimplesProduct()) {
     delete nextEmitente.regimeTributarioEspecial;
     nextEmitente.regimeTributario = 1;
@@ -365,8 +367,7 @@ export const hydrateMeiNfeEmitenteIeFromEmpresa = (payload, empresa) => {
   const existingIe = String(emitente.inscricaoEstadual || '').trim();
   if (existingIe) return payload;
 
-  const empresaIe = String(empresa?.inscricaoEstadual || '').trim();
-  if (!empresaIe || empresaIe.toUpperCase() === 'ISENTO') return payload;
+  const empresaIe = String(empresa?.inscricaoEstadual || '').trim() || 'ISENTO';
 
   return {
     ...payload,
