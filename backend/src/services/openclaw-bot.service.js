@@ -33,6 +33,7 @@ import {
   isWhatsappOutboundConfigured,
   sendWhatsappMessage,
 } from './whatsapp-outbound.service.js';
+import { markReplyPushed } from './openclaw-reply-dedup.service.js';
 import {
   buildDasPaymentStatusMessage,
   getDasPaymentStatusForUser,
@@ -680,6 +681,13 @@ export const runOpenclawAction = async (input) => {
     marcar_concluido: 'complete_calendar_event',
     conclui_compromisso: 'complete_calendar_event',
     complete_calendar_event: 'complete_calendar_event',
+    send_text_whatsapp: 'send_text_whatsapp',
+    send_whatsapp_reply: 'send_text_whatsapp',
+    send_whatsapp_text: 'send_text_whatsapp',
+    responder_whatsapp: 'send_text_whatsapp',
+    responder: 'send_text_whatsapp',
+    enviar_mensagem: 'send_text_whatsapp',
+    enviar_texto_whatsapp: 'send_text_whatsapp',
   };
   let action = String(input?.action || '').trim();
   const rawAction = action;
@@ -737,6 +745,50 @@ export const runOpenclawAction = async (input) => {
       message: 'OpenClaw online',
       data: { pong: true, buildId: BACKEND_BUILD_ID },
     };
+  }
+
+  if (action === 'send_text_whatsapp') {
+    const text = String(payload?.message ?? payload?.texto ?? payload?.text ?? '').trim();
+    if (!text) throw badRequest('message é obrigatório para send_text_whatsapp');
+
+    // Sempre responde a quem falou: telefone vem do caller, nunca do payload.
+    const destinationPhone = resolveOpenclawWhatsappPhone(phone, '');
+    if (!destinationPhone) throw badRequest('Telefone do interlocutor não resolvido');
+
+    if (!isWhatsappOutboundConfigured()) {
+      return {
+        ok: false,
+        message: 'WhatsApp outbound não configurado no backend.',
+        data: { whatsappStatus: 'skipped_no_whatsapp' },
+      };
+    }
+
+    try {
+      const result = await sendWhatsappMessage({
+        phone: destinationPhone,
+        message: text,
+        source: 'openclaw_reply',
+      });
+      markReplyPushed(destinationPhone);
+      return {
+        ok: true,
+        message: 'Resposta entregue no WhatsApp.',
+        data: {
+          whatsappStatus: 'sent',
+          channel: result?.channel ?? null,
+          phone: destinationPhone,
+          agentInstructions:
+            'Mensagem já entregue ao usuário. Não repita o texto e não chame send_text_whatsapp de novo neste turno.',
+        },
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        ok: false,
+        message: `Falha ao enviar no WhatsApp: ${msg}`,
+        data: { whatsappStatus: 'failed', whatsappError: msg },
+      };
+    }
   }
 
   if (action === 'list_roles') {

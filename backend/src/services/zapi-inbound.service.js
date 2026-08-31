@@ -5,6 +5,7 @@ import {
   isOpenclawZapiRelaySyncEnabled,
 } from './openclaw-hook-relay.service.js';
 import { isWhatsappOutboundConfigured, sendWhatsappMessage } from './whatsapp-outbound.service.js';
+import { consumeReplyPushed } from './openclaw-reply-dedup.service.js';
 
 /**
  * Extrai telefone e texto do callback Z-API "Ao receber" (ReceivedCallback).
@@ -188,11 +189,18 @@ export const relayZapiInboundToOpenclaw = async (normalized) => {
       console.warn('[ZAPI] relay sync HTTP', openclaw.httpStatus, openclaw.error || '');
     }
 
-    let replySent = false;
     let whatsappError = null;
 
     const replyText = String(openclaw.replyText || '').trim();
-    if (replyText) {
+    const alreadyPushed = consumeReplyPushed(normalized.phone);
+    let replySent = alreadyPushed;
+
+    if (alreadyPushed) {
+      // eslint-disable-next-line no-console
+      console.info('[ZAPI] resposta já entregue pelo agente — relay não reenvia:', normalized.phone);
+    }
+
+    if (replyText && !alreadyPushed) {
       try {
         await sendWhatsappMessage({
           phone: normalized.phone,

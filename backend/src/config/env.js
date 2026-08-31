@@ -302,6 +302,11 @@ export const env = {
   OPENCLAW_ZAPI_RELAY_SESSION_KEY: process.env.OPENCLAW_ZAPI_RELAY_SESSION_KEY || "true",
   /** Poll GET /sessions/.../history quando waitForResult devolve só runId. */
   OPENCLAW_ZAPI_RELAY_POLL_HISTORY: process.env.OPENCLAW_ZAPI_RELAY_POLL_HISTORY || "true",
+  /**
+   * Bearer para GET /sessions/.../history — é o `gateway.auth.token` do OpenClaw,
+   * diferente do token de hooks. Vazio = reusa OPENCLAW_ZAPI_RELAY_SECRET (legado).
+   */
+  OPENCLAW_GATEWAY_TOKEN: (process.env.OPENCLAW_GATEWAY_TOKEN || "").trim(),
   /** Timeout ms do relay sync (5000–300000). Padrão 120000 para mf-curl. */
   OPENCLAW_ZAPI_RELAY_TIMEOUT_MS:
     process.env.OPENCLAW_ZAPI_RELAY_TIMEOUT_MS || "120000",

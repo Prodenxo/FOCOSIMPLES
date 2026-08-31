@@ -196,6 +196,7 @@ export const pollOpenclawSessionHistoryReply = async ({
   ];
 
   const deadline = Date.now() + Math.max(timeoutMs, 10_000);
+  const loggedStatuses = new Set();
 
   while (Date.now() < deadline) {
     await sleep(pollIntervalMs);
@@ -203,7 +204,20 @@ export const pollOpenclawSessionHistoryReply = async ({
     for (const path of paths) {
       try {
         const res = await fetch(`${origin}${path}`, { headers });
-        if (!res.ok) continue;
+        if (!res.ok) {
+          const seen = `${path}:${res.status}`;
+          if (!loggedStatuses.has(seen)) {
+            loggedStatuses.add(seen);
+            const hint = res.status === 401
+              ? ' — token recusado: OPENCLAW_GATEWAY_TOKEN deve ser o gateway.auth.token (não o de hooks).'
+              : res.status === 403
+                ? ' — token aceito mas sem escopo operator.read: atualize o OpenClaw (corrigido a partir da 2026.4.23).'
+                : ' — resposta não será lida por aqui.';
+            // eslint-disable-next-line no-console
+            console.warn(`[ZAPI] OpenClaw history HTTP ${res.status} em ${path}${hint}`);
+          }
+          continue;
+        }
         const body = await res.json();
         const text = extractAssistantTextFromSessionHistory(body, runId);
         if (text) return text;
@@ -336,7 +350,7 @@ export const callOpenclawHookAgentSync = async (normalized) => {
       replyText = await pollOpenclawSessionHistoryReply({
         sessionKey,
         runId,
-        secret,
+        secret: String(env.OPENCLAW_GATEWAY_TOKEN || '').trim() || secret,
         timeoutMs: pollMs,
       });
     }
