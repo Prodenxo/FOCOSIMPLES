@@ -101,11 +101,16 @@ São **dois tokens diferentes**, não se confundem:
 
 Usar o token de hooks no history devolve **401**.
 
-O **403** (`missing scope: operator.read`) não é token errado: até a 2026.4.23 o endpoint
-`/sessions/.../history` trata Bearer sem o header `x-openclaw-scopes` como "nenhum escopo
-pedido". Por isso o backend envia `x-openclaw-scopes: operator.read` no poll. Versões
-posteriores voltaram a conceder escopo padrão para bearer puro, mas o header continua
-válido e é mais restrito.
+O **403** em `/sessions/.../history` na série 2026.4.x **não se resolve com header**:
+o gateway descarta escopos declarados em bearer e devolve lista vazia. O backend então
+usa `POST /v1/chat/completions` (mesmo token do gateway), que já devolve o texto
+do agente. Esse endpoint vem **desligado** — ligue no OpenClaw:
+
+```
+openclaw config set gateway.http.endpoints.chatCompletions.enabled true
+```
+
+e reinicie o serviço. Sem isso o log avisa ` /v1/chat/completions desligado`.
 
 O backend loga os dois casos com a dica correspondente.
 

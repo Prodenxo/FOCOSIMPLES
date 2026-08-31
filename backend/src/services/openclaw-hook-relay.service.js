@@ -74,6 +74,25 @@ export const buildOpenclawHookAgentPayload = (normalized) => {
  * @param {unknown} body
  * @returns {string | null}
  */
+/**
+ * Texto da resposta OpenAI-compatível (`POST /v1/chat/completions`).
+ * @param {unknown} body
+ * @returns {string | null}
+ */
+export const extractOpenclawChatCompletionReply = (body) => {
+  if (!body || typeof body !== 'object') return null;
+  const record = /** @type {Record<string, unknown>} */ (body);
+  const choices = Array.isArray(record.choices) ? record.choices : [];
+  const first = choices[0] && typeof choices[0] === 'object'
+    ? /** @type {Record<string, unknown>} */ (choices[0])
+    : null;
+  const message = first?.message && typeof first.message === 'object'
+    ? /** @type {Record<string, unknown>} */ (first.message)
+    : null;
+  const content = flattenMessageContent(message?.content ?? first?.text ?? record.content);
+  return content || null;
+};
+
 export const extractOpenclawHookAgentReply = (body) => {
   if (!body || typeof body !== 'object') return null;
 
@@ -253,6 +272,98 @@ const tryParseJson = async (raw) => {
 };
 
 /**
+ * Na 2026.4.x o GET /sessions/.../history recusa bearer (403) de propósito.
+ * POST /v1/chat/completions nessa mesma série já devolve o texto do agente.
+ * @param {{ phone: string, text: string, messageId?: string | null, hasAudio?: boolean }} normalized
+ */
+export const callOpenclawChatCompletions = async (normalized) => {
+  const origin = String(env.OPENCLAW_PUBLIC_ORIGIN || '').trim().replace(/\/$/, '');
+  const secret = String(env.OPENCLAW_GATEWAY_TOKEN || '').trim();
+  const phone = String(normalized.phone || '').replace(/\D/g, '');
+  const sessionKey = phone ? `hook:zapi:${phone}` : null;
+
+  if (!origin || !secret) {
+    return {
+      ok: false,
+      mode: 'sync',
+      status: null,
+      runId: null,
+      sessionKey,
+      replyText: null,
+      httpStatus: null,
+      error: 'OPENCLAW_PUBLIC_ORIGIN ou OPENCLAW_GATEWAY_TOKEN ausente',
+    };
+  }
+
+  const timeoutMs = getOpenclawRelayTimeoutMs();
+  const payload = buildOpenclawHookAgentPayload(normalized);
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(`${origin}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json; charset=utf-8',
+        Authorization: `Bearer ${secret}`,
+        ...(sessionKey ? { 'x-openclaw-session-key': sessionKey } : {}),
+      },
+      body: JSON.stringify({
+        model: 'openclaw/default',
+        user: phone ? `zapi:${phone}` : undefined,
+        messages: [{ role: 'user', content: payload.message }],
+      }),
+      signal: ac.signal,
+    });
+
+    const rawBody = await res.text().catch(() => '');
+    const body = await tryParseJson(rawBody);
+
+    if (!res.ok) {
+      return {
+        ok: false,
+        mode: 'sync',
+        status: null,
+        runId: null,
+        sessionKey,
+        replyText: null,
+        httpStatus: res.status,
+        error: rawBody.slice(0, 500) || `HTTP ${res.status}`,
+      };
+    }
+
+    const replyText = extractOpenclawChatCompletionReply(body);
+    return {
+      ok: Boolean(replyText),
+      mode: 'sync',
+      status: replyText ? 'completed' : 'empty',
+      runId: body && typeof body === 'object' && /** @type {Record<string, unknown>} */ (body).id != null
+        ? String(/** @type {Record<string, unknown>} */ (body).id)
+        : null,
+      sessionKey,
+      replyText,
+      httpStatus: res.status,
+      error: replyText ? null : 'chat/completions sem texto de assistente',
+    };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      ok: false,
+      mode: 'sync',
+      status: null,
+      runId: null,
+      sessionKey,
+      replyText: null,
+      httpStatus: null,
+      error: msg,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+/**
  * Relay síncrono: Z-API → OpenClaw /hooks/agent → texto de resposta.
  * @param {{ phone: string, text: string, messageId?: string | null, instanceId?: string | null, hasAudio?: boolean }} normalized
  * @returns {Promise<{
@@ -267,6 +378,26 @@ const tryParseJson = async (raw) => {
  * }>}
  */
 export const callOpenclawHookAgentSync = async (normalized) => {
+  const gatewayToken = String(env.OPENCLAW_GATEWAY_TOKEN || '').trim();
+  const publicOrigin = String(env.OPENCLAW_PUBLIC_ORIGIN || '').trim();
+  if (gatewayToken && publicOrigin) {
+    const viaChat = await callOpenclawChatCompletions(normalized);
+    if (viaChat.replyText) {
+      // eslint-disable-next-line no-console
+      console.info('[ZAPI] resposta OpenClaw via /v1/chat/completions');
+      return viaChat;
+    }
+    if (viaChat.httpStatus === 404) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[ZAPI] /v1/chat/completions desligado — no OpenClaw rode: openclaw config set gateway.http.endpoints.chatCompletions.enabled true',
+      );
+    } else if (viaChat.error) {
+      // eslint-disable-next-line no-console
+      console.warn('[ZAPI] /v1/chat/completions falhou:', viaChat.httpStatus, viaChat.error);
+    }
+  }
+
   const url = resolveOpenclawHooksAgentUrl();
   if (!url) {
     return {

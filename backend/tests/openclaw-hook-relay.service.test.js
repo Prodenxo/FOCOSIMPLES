@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildOpenclawHookAgentPayload,
+  extractOpenclawChatCompletionReply,
   extractOpenclawHookAgentReply,
   resolveOpenclawHooksAgentUrlFrom,
 } from '../src/services/openclaw-hook-relay.service.js';
@@ -36,6 +37,16 @@ test('buildOpenclawHookAgentPayload inclui telefone e waitForResult', () => {
   assert.equal(payload.sessionKey, 'hook:zapi:5521996185328');
   assert.equal(payload.resultMode, 'assistant_text');
   assert.match(payload.agentHint, /mandatorySenderPhone=5521996185328/);
+});
+
+test('extractOpenclawChatCompletionReply lê choices[0].message.content', () => {
+  assert.equal(
+    extractOpenclawChatCompletionReply({
+      choices: [{ message: { role: 'assistant', content: 'Seu saldo é R$ 10,00.' } }],
+    }),
+    'Seu saldo é R$ 10,00.',
+  );
+  assert.equal(extractOpenclawChatCompletionReply({ choices: [] }), null);
 });
 
 test('extractOpenclawHookAgentReply lê result e outputText', () => {
