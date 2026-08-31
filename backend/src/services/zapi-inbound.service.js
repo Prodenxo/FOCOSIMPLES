@@ -5,6 +5,7 @@ import {
   isOpenclawZapiRelaySyncEnabled,
 } from './openclaw-hook-relay.service.js';
 import { isWhatsappOutboundConfigured, sendWhatsappMessage } from './whatsapp-outbound.service.js';
+import { startZapiTypingPulse } from './zapi-outbound.service.js';
 import { consumeReplyPushed } from './openclaw-reply-dedup.service.js';
 
 /**
@@ -189,7 +190,13 @@ export const relayZapiInboundToOpenclaw = async (normalized) => {
   }
 
   if (isOpenclawZapiRelaySyncEnabled() && isWhatsappOutboundConfigured()) {
-    const openclaw = await callOpenclawHookAgentSync(normalized);
+    const stopTyping = startZapiTypingPulse(normalized.phone);
+    let openclaw;
+    try {
+      openclaw = await callOpenclawHookAgentSync(normalized);
+    } finally {
+      stopTyping();
+    }
 
     if (!openclaw.ok && openclaw.httpStatus == null) {
       // eslint-disable-next-line no-console

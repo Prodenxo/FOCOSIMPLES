@@ -3,6 +3,16 @@ import assert from 'node:assert/strict';
 
 process.env.SUPABASE_URL = process.env.SUPABASE_URL || 'https://example.supabase.co';
 process.env.SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || 'anon-key';
+process.env.ZAPI_INSTANCE_ID = process.env.ZAPI_INSTANCE_ID || 'inst-test';
+process.env.ZAPI_TOKEN = process.env.ZAPI_TOKEN || 'tok-test';
+process.env.ZAPI_CLIENT_TOKEN = process.env.ZAPI_CLIENT_TOKEN || 'client-test';
+
+test('resolveZapiDelayTyping escala com o tamanho do texto', async () => {
+  const { resolveZapiDelayTyping } = await import('../src/services/zapi-outbound.service.js');
+  assert.equal(resolveZapiDelayTyping('Oi'), 2);
+  assert.ok(resolveZapiDelayTyping('x'.repeat(200)) >= 5);
+  assert.equal(resolveZapiDelayTyping('x'.repeat(2000)), 15);
+});
 
 test('normalizeZapiPhone adiciona 55 em número local', async () => {
   const { normalizeZapiPhone } = await import('../src/services/zapi-outbound.service.js');
@@ -11,10 +21,6 @@ test('normalizeZapiPhone adiciona 55 em número local', async () => {
 });
 
 test('sendZapiText chama send-text com Client-Token', async () => {
-  process.env.ZAPI_INSTANCE_ID = 'inst-test';
-  process.env.ZAPI_TOKEN = 'tok-test';
-  process.env.ZAPI_CLIENT_TOKEN = 'client-test';
-
   const originalFetch = global.fetch;
   let capturedUrl = '';
   let capturedBody = null;
@@ -42,6 +48,7 @@ test('sendZapiText chama send-text com Client-Token', async () => {
     assert.match(capturedUrl, /send-text$/);
     assert.equal(capturedBody.phone, '5511987654321');
     assert.equal(capturedBody.message, 'Olá');
+    assert.equal(capturedBody.delayTyping, 2);
     assert.equal(capturedHeaders['Client-Token'], 'client-test');
   } finally {
     if (originalFetch) global.fetch = originalFetch;

@@ -57,8 +57,72 @@ const assertZapiOk = async (response, actionLabel) => {
   throw serviceUnavailable(String(msg));
 };
 
+/** Segundos de "Digitando..." antes de entregar o texto (1–15, limite da Z-API). */
+export const resolveZapiDelayTyping = (message) => {
+  const len = String(message || '').trim().length;
+  if (!len) return 2;
+  return Math.min(15, Math.max(2, Math.ceil(len / 40)));
+};
+
+const postZapiSilent = async (pathSuffix, payload) => {
+  if (!isZapiOutboundConfigured()) return false;
+  try {
+    const response = await fetch(buildZapiUrl(pathSuffix), {
+      method: 'POST',
+      headers: zapiHeaders(),
+      body: JSON.stringify(payload),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+};
+
+/** Marca o chat como lido (dois ticks). Não lança. */
+export const sendZapiReadChat = async (phone) => {
+  const target = normalizeZapiPhone(phone);
+  if (!target) return false;
+  return postZapiSilent('read-chat', { phone: target, action: 'read' });
+};
+
+/**
+ * Liga o balão "Digitando..." no WhatsApp. A Z-API oficial só documenta
+ * delayTyping no send-text; algumas instâncias ainda aceitam presença.
+ * Não lança: se o endpoint não existir, o delayTyping do envio cobre.
+ */
+export const sendZapiTyping = async (phone) => {
+  const target = normalizeZapiPhone(phone);
+  if (!target) return false;
+  if (await postZapiSilent('send-chat-presence', { phone: target, status: 'COMPOSING' })) {
+    return true;
+  }
+  if (await postZapiSilent('send-chat-state', { phone: target, chatState: 'composing' })) {
+    return true;
+  }
+  return postZapiSilent('send-typing', { phone: target });
+};
+
+/**
+ * Mantém o "Digitando..." enquanto o OpenClaw processa (~7s por pulso).
+ * @returns {() => void} para parar
+ */
+export const startZapiTypingPulse = (phone) => {
+  let stopped = false;
+  const pulse = () => {
+    if (stopped) return;
+    sendZapiTyping(phone).catch(() => {});
+  };
+  sendZapiReadChat(phone).catch(() => {});
+  pulse();
+  const timer = setInterval(pulse, 7_000);
+  return () => {
+    stopped = true;
+    clearInterval(timer);
+  };
+};
+
 /** Texto simples (lembretes de agenda, mensagem antes do PDF). */
-export const sendZapiText = async ({ phone, message }) => {
+export const sendZapiText = async ({ phone, message, delayTyping }) => {
   if (!isZapiOutboundConfigured()) {
     throw badRequest(
       'Z-API não configurada: defina ZAPI_INSTANCE_ID, ZAPI_TOKEN e ZAPI_CLIENT_TOKEN no backend.',
@@ -69,10 +133,18 @@ export const sendZapiText = async ({ phone, message }) => {
   if (!target) throw badRequest('Telefone inválido para Z-API');
   if (!text) throw badRequest('Mensagem vazia');
 
+  const typingSeconds = Number.isFinite(Number(delayTyping))
+    ? Math.min(15, Math.max(1, Math.round(Number(delayTyping))))
+    : resolveZapiDelayTyping(text);
+
   const response = await fetch(buildZapiUrl('send-text'), {
     method: 'POST',
     headers: zapiHeaders(),
-    body: JSON.stringify({ phone: target, message: text }),
+    body: JSON.stringify({
+      phone: target,
+      message: text,
+      delayTyping: typingSeconds,
+    }),
   });
   return assertZapiOk(response, 'send-text');
 };
