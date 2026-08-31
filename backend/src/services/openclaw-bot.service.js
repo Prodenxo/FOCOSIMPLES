@@ -95,6 +95,7 @@ import {
   assertPayloadNoImpersonation,
   resolveOpenclawCallerPhone,
 } from './openclaw-sender-guard.service.js';
+import { rerouteOpenclawNfseProductToNfe } from './openclaw-nf-document-type.service.js';
 
 const MAX_LIST = 40;
 
@@ -693,6 +694,16 @@ export const runOpenclawAction = async (input) => {
   const rawAction = action;
   action = actionAliases[action] || action;
   let payload = input?.payload && typeof input.payload === 'object' ? { ...input.payload } : {};
+  const nfRoute = rerouteOpenclawNfseProductToNfe(action, payload);
+  if (nfRoute.reroutedFrom) {
+    console.info('[OpenClaw] NFS-e redirecionada para NF-e', {
+      from: nfRoute.reroutedFrom,
+      to: nfRoute.action,
+      item: nfRoute.payload?.produtoNome || nfRoute.payload?.discriminacao,
+    });
+    action = nfRoute.action;
+    payload = nfRoute.payload;
+  }
   if (
     action === 'list_calendar_events'
     && ['minha_agenda', 'compromissos_agenda', 'agenda_compromissos'].includes(rawAction)

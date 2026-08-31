@@ -51,7 +51,9 @@ export const buildOpenclawHookAgentPayload = (normalized) => {
     + `PROIBIDO inglês. PROIBIDO dizer que acabou de ligar, "I just came online", `
     + `"setting up my identity" ou se apresentar de novo. Você é o Midas do Foco Simples — vá direto ao pedido.\n`
     + `REMETENTE_WHATSAPP=${phone}. O 1º argumento de mf-curl.sh DEVE ser exatamente ${phone}. `
-    + 'Nunca uses número de outro chat nem exemplos do SOUL.\n\n';
+    + 'Nunca uses número de outro chat nem exemplos do SOUL.\n'
+    + 'Camiseta, camisa, mercadoria, produto físico = NF-e (preview_nfe / emit_nfe). '
+    + 'Serviço / NFS-e = preview_nfse / emit_nfse. PROIBIDO emit_nfse para camiseta.\n\n';
 
   const timeoutSeconds = Math.max(5, Math.ceil(getOpenclawRelayTimeoutMs() / 1000));
 
