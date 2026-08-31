@@ -10,6 +10,7 @@ import {
   isNfseE0014FromPlugnotasResponse,
   isNfseRejectedPlugnotasResponse,
   isNfseRpsDuplicateRejectionLoose,
+  buildNfsePeriodoWindows,
   queryMaxRpsNumeroFromPlugnotasPeriodo,
   readPlugnotasNfseNextRpsFromEmpresa,
   readRpsFromNfseEmitPayload,
@@ -443,6 +444,26 @@ test('ensureEmpresaPlugnotasRpsForNfseEmit faz PATCH só quando rps ausente', as
   }
 });
 
+const daysBetweenYmd = (inicial, final) => {
+  const start = Date.parse(`${inicial}T00:00:00Z`);
+  const end = Date.parse(`${final}T00:00:00Z`);
+  return Math.round((end - start) / 86400000);
+};
+
+test('buildNfsePeriodoWindows respeita o limite de 31 dias da PlugNotas', () => {
+  const windows = buildNfsePeriodoWindows({
+    end: new Date('2026-08-31T18:00:00Z'),
+    lookbackDays: 365,
+    windowDays: 31,
+  });
+  assert.ok(windows.length >= 12);
+  assert.equal(windows[0].dataFinal, '2026-08-31');
+  assert.equal(windows[0].dataInicial, '2026-08-01');
+  for (const window of windows) {
+    assert.ok(daysBetweenYmd(window.dataInicial, window.dataFinal) <= 30);
+  }
+});
+
 test('queryMaxRpsNumeroFromPlugnotasPeriodo pagina até hashProximaPagina null', async () => {
   const originalFetch = global.fetch;
   let page = 0;
@@ -467,6 +488,65 @@ test('queryMaxRpsNumeroFromPlugnotasPeriodo pagina até hashProximaPagina null',
   try {
     const max = await queryMaxRpsNumeroFromPlugnotasPeriodo('65.805.583/0001-73');
     assert.equal(max, 88);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('queryMaxRpsNumeroFromPlugnotasPeriodo nunca pede mais de 31 dias', async () => {
+  const originalFetch = global.fetch;
+  const spans = [];
+
+  global.fetch = async (url) => {
+    const parsed = new URL(String(url), 'https://api.plugnotas.com.br');
+    const inicial = parsed.searchParams.get('dataInicial');
+    const final = parsed.searchParams.get('dataFinal');
+    assert.ok(inicial);
+    assert.ok(final);
+    const span = daysBetweenYmd(inicial, final);
+    spans.push(span);
+    assert.ok(span <= 30, `janela ${inicial}–${final} tem ${span + 1} dias`);
+    return new Response(JSON.stringify({
+      notas: [{ numero: 9 }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+
+  try {
+    const max = await queryMaxRpsNumeroFromPlugnotasPeriodo('65.805.583/0001-73', {
+      end: new Date('2026-08-31T18:00:00Z'),
+    });
+    assert.equal(max, 9);
+    assert.equal(spans.length, 1);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('queryMaxRpsNumeroFromPlugnotasPeriodo busca janela anterior se a recente estiver vazia', async () => {
+  const originalFetch = global.fetch;
+  let calls = 0;
+
+  global.fetch = async (url) => {
+    calls += 1;
+    const parsed = new URL(String(url), 'https://api.plugnotas.com.br');
+    const inicial = parsed.searchParams.get('dataInicial');
+    if (inicial === '2026-08-01') {
+      return new Response(JSON.stringify({ notas: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify({
+      notas: [{ numero: 22 }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+
+  try {
+    const max = await queryMaxRpsNumeroFromPlugnotasPeriodo('65.805.583/0001-73', {
+      end: new Date('2026-08-31T18:00:00Z'),
+    });
+    assert.equal(max, 22);
+    assert.ok(calls >= 2);
   } finally {
     global.fetch = originalFetch;
   }

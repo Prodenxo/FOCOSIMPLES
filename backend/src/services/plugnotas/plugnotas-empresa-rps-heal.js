@@ -194,12 +194,101 @@ const normalizeRejectedStatusToken = (value) => {
 
 const PLUGNOTAS_NFSE_PERIODO_MAX_PAGES = 40;
 const PLUGNOTAS_NFSE_PERIODO_FAST_PAGES = 5;
+/** PlugNotas: "O período máximo entre datas é de 31 dias". */
+export const PLUGNOTAS_NFSE_PERIODO_MAX_DAYS = 31;
+const PLUGNOTAS_NFSE_PERIODO_LOOKBACK_DAYS = 365;
+
+const toUtcYmd = (date) => {
+  const d = date instanceof Date ? date : new Date(date);
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
+    .toISOString()
+    .slice(0, 10);
+};
+
+const addUtcDays = (date, days) => {
+  const d = new Date(date);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d;
+};
+
+/**
+ * Janelas inclusivas de no máximo 31 dias, da mais recente para a mais antiga.
+ * @param {{ end?: Date, lookbackDays?: number, windowDays?: number }} [opts]
+ * @returns {{ dataInicial: string, dataFinal: string }[]}
+ */
+export function buildNfsePeriodoWindows(opts = {}) {
+  const windowDays = Math.min(
+    PLUGNOTAS_NFSE_PERIODO_MAX_DAYS,
+    Math.max(1, Number.isFinite(opts.windowDays)
+      ? Math.trunc(opts.windowDays)
+      : PLUGNOTAS_NFSE_PERIODO_MAX_DAYS),
+  );
+  const lookbackDays = Math.max(1, Number.isFinite(opts.lookbackDays)
+    ? Math.trunc(opts.lookbackDays)
+    : PLUGNOTAS_NFSE_PERIODO_LOOKBACK_DAYS);
+  const end = opts.end instanceof Date ? opts.end : new Date();
+  const endUtc = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()));
+
+  const windows = [];
+  let remaining = lookbackDays;
+  let windowEnd = endUtc;
+
+  while (remaining > 0) {
+    const span = Math.min(windowDays, remaining);
+    const windowStart = addUtcDays(windowEnd, -(span - 1));
+    windows.push({
+      dataInicial: toUtcYmd(windowStart),
+      dataFinal: toUtcYmd(windowEnd),
+    });
+    remaining -= span;
+    windowEnd = addUtcDays(windowStart, -1);
+  }
+
+  return windows;
+}
+
+const readMaxRpsNumeroFromPeriodoBody = (body) => {
+  let maxKnown = 0;
+  const notas = collectPeriodoNotas(body);
+  for (const nota of notas) {
+    const numero = readRpsNumeroFromNfsePlugnotasBody(nota)
+      ?? parsePositiveInt(nota?.numero)
+      ?? parseDpsIdNumero(nota?.dps?.id)
+      ?? parseDpsIdNumero(nota?.id);
+    if (numero > maxKnown) maxKnown = numero;
+  }
+  return maxKnown;
+};
+
+const queryMaxRpsNumeroFromPlugnotasWindow = async (cnpj, dataInicial, dataFinal, maxPages) => {
+  let hashProximaPagina;
+  let maxKnown = 0;
+
+  for (let page = 0; page < maxPages; page += 1) {
+    const body = await consultarNfsePorPeriodo({
+      cpfCnpj: cnpj,
+      dataInicial,
+      dataFinal,
+      ...(hashProximaPagina ? { hashProximaPagina } : {}),
+    });
+    const pageMax = readMaxRpsNumeroFromPeriodoBody(body);
+    if (pageMax > maxKnown) maxKnown = pageMax;
+
+    const nextHash = body?.hashProximaPagina;
+    if (!nextHash || typeof nextHash !== 'string') break;
+    hashProximaPagina = nextHash;
+  }
+
+  return maxKnown;
+};
 
 /**
  * Maior número RPS/DPS já enviado ao PlugNotas para o CNPJ (todas as situações).
  * Fonte autoritativa quando o contador da empresa está desatualizado.
+ * Consulta em janelas de 31 dias (limite da API). Para se a janela mais recente
+ * já tiver nota — numeração RPS é crescente.
  * @param {string} cnpjInput
- * @param {{ maxPages?: number }} [opts]
+ * @param {{ maxPages?: number, lookbackDays?: number, windowDays?: number, end?: Date }} [opts]
  * @returns {Promise<number|null>}
  */
 export async function queryMaxRpsNumeroFromPlugnotasPeriodo(cnpjInput, opts = {}) {
@@ -210,46 +299,32 @@ export async function queryMaxRpsNumeroFromPlugnotasPeriodo(cnpjInput, opts = {}
     ? Math.max(1, Math.trunc(opts.maxPages))
     : PLUGNOTAS_NFSE_PERIODO_MAX_PAGES;
 
-  let hashProximaPagina;
-  let maxKnown = 0;
-  const end = new Date();
-  const start = new Date(end);
-  start.setDate(start.getDate() - 365);
-  const dataInicial = start.toISOString().slice(0, 10);
-  const dataFinal = end.toISOString().slice(0, 10);
+  const windows = buildNfsePeriodoWindows({
+    end: opts.end,
+    lookbackDays: opts.lookbackDays,
+    windowDays: opts.windowDays,
+  });
 
-  for (let page = 0; page < maxPages; page += 1) {
-    let body;
+  for (const window of windows) {
     try {
-      body = await consultarNfsePorPeriodo({
-        cpfCnpj: cnpj,
-        dataInicial,
-        dataFinal,
-        ...(hashProximaPagina ? { hashProximaPagina } : {})
-      });
+      const windowMax = await queryMaxRpsNumeroFromPlugnotasWindow(
+        cnpj,
+        window.dataInicial,
+        window.dataFinal,
+        maxPages,
+      );
+      if (windowMax > 0) return windowMax;
     } catch (error) {
       console.warn(
         '[plugnotas-rps] falha ao consultar histórico NFS-e por período',
-        error instanceof Error ? error.message : error
+        window.dataInicial,
+        window.dataFinal,
+        error instanceof Error ? error.message : error,
       );
-      break;
     }
-
-    const notas = collectPeriodoNotas(body);
-    for (const nota of notas) {
-      const numero = readRpsNumeroFromNfsePlugnotasBody(nota)
-        ?? parsePositiveInt(nota?.numero)
-        ?? parseDpsIdNumero(nota?.dps?.id)
-        ?? parseDpsIdNumero(nota?.id);
-      if (numero > maxKnown) maxKnown = numero;
-    }
-
-    const nextHash = body?.hashProximaPagina;
-    if (!nextHash || typeof nextHash !== 'string') break;
-    hashProximaPagina = nextHash;
   }
 
-  return maxKnown > 0 ? maxKnown : null;
+  return null;
 }
 
 /**
