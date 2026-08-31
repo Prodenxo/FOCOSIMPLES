@@ -184,7 +184,14 @@ export const pollOpenclawSessionHistoryReply = async ({
   const origin = String(env.OPENCLAW_PUBLIC_ORIGIN || '').trim().replace(/\/$/, '');
   if (!origin || !sessionKey) return null;
 
-  const headers = /** @type {Record<string, string>} */ ({ Accept: 'application/json' });
+  /**
+   * Sem `x-openclaw-scopes` o gateway resolve "nenhum escopo pedido" e recusa a leitura
+   * com 403 (`missing scope: operator.read`). Declaramos só a leitura.
+   */
+  const headers = /** @type {Record<string, string>} */ ({
+    Accept: 'application/json',
+    'x-openclaw-scopes': 'operator.read',
+  });
   if (secret) {
     headers.Authorization = `Bearer ${secret}`;
     headers['x-openclaw-token'] = secret;
@@ -211,7 +218,7 @@ export const pollOpenclawSessionHistoryReply = async ({
             const hint = res.status === 401
               ? ' — token recusado: OPENCLAW_GATEWAY_TOKEN deve ser o gateway.auth.token (não o de hooks).'
               : res.status === 403
-                ? ' — token aceito mas sem escopo operator.read: atualize o OpenClaw (corrigido a partir da 2026.4.23).'
+                ? ' — token aceito mas escopo recusado: confira o header x-openclaw-scopes: operator.read.'
                 : ' — resposta não será lida por aqui.';
             // eslint-disable-next-line no-console
             console.warn(`[ZAPI] OpenClaw history HTTP ${res.status} em ${path}${hint}`);

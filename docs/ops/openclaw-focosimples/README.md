@@ -99,9 +99,15 @@ São **dois tokens diferentes**, não se confundem:
 | `OPENCLAW_ZAPI_RELAY_SECRET` | `POST /hooks/agent` | `hooks.token` |
 | `OPENCLAW_GATEWAY_TOKEN` | `GET /sessions/.../history` | `gateway.auth.token` |
 
-Usar o token de hooks no history devolve **401**. Token certo em versão antiga devolve **403**
-(escopo `operator.read` — corrigido a partir da **2026.4.23**). O backend loga os dois casos
-com a dica correspondente.
+Usar o token de hooks no history devolve **401**.
+
+O **403** (`missing scope: operator.read`) não é token errado: até a 2026.4.23 o endpoint
+`/sessions/.../history` trata Bearer sem o header `x-openclaw-scopes` como "nenhum escopo
+pedido". Por isso o backend envia `x-openclaw-scopes: operator.read` no poll. Versões
+posteriores voltaram a conceder escopo padrão para bearer puro, mas o header continua
+válido e é mais restrito.
+
+O backend loga os dois casos com a dica correspondente.
 
 Webhook Z-API:
 
