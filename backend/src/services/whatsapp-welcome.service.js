@@ -29,6 +29,13 @@ export const getWhatsappWelcomeMessage = () =>
  * @returns {Promise<{ sent: boolean, skipRelay: boolean, reason: string | null }>}
  */
 export const maybeSendWhatsappWelcome = async ({ phone, text }) => {
+  const openclawHandlesChat =
+    String(env.OPENCLAW_ZAPI_RELAY_SYNC || 'true').toLowerCase() !== 'false'
+    && Boolean(String(env.OPENCLAW_ZAPI_RELAY_URL || '').trim());
+  if (openclawHandlesChat) {
+    return { sent: false, skipRelay: false, reason: 'openclaw_handles_greeting' };
+  }
+
   if (!isWhatsappWelcomeEnabled() || !isWhatsappOutboundConfigured()) {
     return { sent: false, skipRelay: false, reason: 'disabled_or_no_outbound' };
   }

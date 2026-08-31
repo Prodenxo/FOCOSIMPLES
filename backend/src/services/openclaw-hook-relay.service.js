@@ -47,7 +47,10 @@ export const buildOpenclawHookAgentPayload = (normalized) => {
   const sessionKey = `hook:zapi:${phone}`;
 
   const hint =
-    `REMETENTE_WHATSAPP=${phone}. O 1º argumento de mf-curl.sh DEVE ser exatamente ${phone}. `
+    `Conversa WhatsApp já em andamento. Responda SEMPRE em português do Brasil. `
+    + `PROIBIDO inglês. PROIBIDO dizer que acabou de ligar, "I just came online", `
+    + `"setting up my identity" ou se apresentar de novo. Você é o Midas do Foco Simples — vá direto ao pedido.\n`
+    + `REMETENTE_WHATSAPP=${phone}. O 1º argumento de mf-curl.sh DEVE ser exatamente ${phone}. `
     + 'Nunca uses número de outro chat nem exemplos do SOUL.\n\n';
 
   const timeoutSeconds = Math.max(5, Math.ceil(getOpenclawRelayTimeoutMs() / 1000));
