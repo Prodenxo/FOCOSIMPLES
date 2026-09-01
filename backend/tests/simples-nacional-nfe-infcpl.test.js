@@ -9,7 +9,8 @@ test('aplica as duas frases do Simples quando o campo está vazio', () => {
   const out = applySimplesNacionalInformacoesComplementares({ emitente: { crt: 1 } });
   assert.match(out.informacoesComplementares, /DOCUMENTO EMITIDO POR ME OU EPP OPTANTE PELO SIMPLES NACIONAL/);
   assert.match(out.informacoesComplementares, /NÃO GERA DIREITO A CRÉDITO FISCAL DE IPI/);
-  assert.equal(out.informacoesComplementares, SIMPLES_NACIONAL_NFE_INF_CPL_LINES.join('\n'));
+  assert.equal(out.informacoesComplementares, SIMPLES_NACIONAL_NFE_INF_CPL_LINES.join('|'));
+  assert.doesNotMatch(out.informacoesComplementares, /\n/);
 });
 
 test('mantém texto IBPT e não duplica as frases', () => {
@@ -22,4 +23,15 @@ test('mantém texto IBPT e não duplica as frases', () => {
   assert.equal(countMe, 1);
   assert.equal(countIpi, 1);
   assert.match(second.informacoesComplementares, /Fonte: IBPT/);
+  assert.doesNotMatch(second.informacoesComplementares, /\n/);
+});
+
+test('troca quebra de linha comum por pipe da PlugNotas', () => {
+  const out = applySimplesNacionalInformacoesComplementares({
+    informacoesComplementares: 'DOCUMENTO EMITIDO POR ME OU EPP OPTANTE PELO SIMPLES NACIONAL\nNÃO GERA DIREITO A CRÉDITO FISCAL DE IPI',
+  });
+  assert.equal(
+    out.informacoesComplementares,
+    SIMPLES_NACIONAL_NFE_INF_CPL_LINES.join('|'),
+  );
 });
