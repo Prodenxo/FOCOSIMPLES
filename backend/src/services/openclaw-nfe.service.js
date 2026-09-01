@@ -866,7 +866,9 @@ export const buildOpenclawNfeEmitInput = async (userId, payload = {}) => {
       razaoSocial: prestador.prestadorRazaoSocial,
       endereco: prestador.prestadorEndereco,
       crt: 1,
-      inscricaoEstadual: String(emitente.inscricaoEstadual || '').trim() || 'ISENTO',
+      ...(String(emitente.inscricaoEstadual || '').trim()
+        ? { inscricaoEstadual: String(emitente.inscricaoEstadual).trim() }
+        : {}),
     },
     destinatario: {
       cpfCnpj: destinatario.cpfCnpj,

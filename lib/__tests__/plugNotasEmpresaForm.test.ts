@@ -37,6 +37,28 @@ describe('buildPlugNotasEmpresaPayload', () => {
     });
   });
 
+  it('envia inscrição estadual só com dígitos', () => {
+    const form = {
+      ...getDefaultPlugNotasCompanyForm(),
+      razaoSocial: 'Empresa Teste LTDA',
+      logradouro: 'Rua A',
+      numero: '1',
+      bairro: 'Centro',
+      cep: '01310100',
+      codigoCidade: '3550308',
+      descricaoCidade: 'São Paulo',
+      estado: 'SP',
+      email: 'contato@empresa.com.br',
+      inscricaoEstadual: '11.662.28-5',
+    };
+    const payload = buildPlugNotasEmpresaPayload({
+      cnpj: '12345678000199',
+      certificadoId: '',
+      form,
+    });
+    expect(payload.inscricaoEstadual).toBe('11662285');
+  });
+
   it('exige e-mail válido antes de cadastrar no emissor fiscal', () => {
     const form = {
       ...getDefaultPlugNotasCompanyForm(),

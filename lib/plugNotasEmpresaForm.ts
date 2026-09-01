@@ -280,8 +280,9 @@ export function buildPlugNotasEmpresaPayload({
   }
   if (email) payload.email = email;
   if (im) payload.inscricaoMunicipal = im;
-  // PlugNotas exige IE com NF-e/NFC-e; vazio → ISENTO (alinhado ao helper da UI)
-  payload.inscricaoEstadual = ie || 'ISENTO';
+  // PlugNotas/SEFAZ exigem IE só com dígitos (ou ISENTO). 11.662.28-5 → 11662285
+  const ieDigits = ie.replace(/\D/g, '');
+  payload.inscricaoEstadual = ie.toUpperCase() === 'ISENTO' ? 'ISENTO' : (ieDigits || 'ISENTO');
 
   return payload;
 }

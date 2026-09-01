@@ -69,12 +69,27 @@ const empresaPrecisaVersaoEsquemaMei = (empresa) => {
   return versao !== PLUGNOTAS_NFE_VERSAO_ESQUEMA_MEI;
 };
 
+const normalizeEmitenteIe = (value) => {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  if (text.toUpperCase() === 'ISENTO') return 'ISENTO';
+  const digits = text.replace(/\D/g, '');
+  return digits || text;
+};
+
+/** Prefere IE com dígitos (ex.: 11.662.28-5) e ignora ISENTO/vazio se houver cadastro real. */
 const readInscricaoEstadual = (...values) => {
+  let fallback = '';
   for (const value of values) {
-    const text = String(value ?? '').trim();
-    if (text) return text;
+    const normalized = normalizeEmitenteIe(value);
+    if (!normalized) continue;
+    if (normalized.toUpperCase() === 'ISENTO') {
+      if (!fallback) fallback = 'ISENTO';
+      continue;
+    }
+    return normalized;
   }
-  return '';
+  return fallback;
 };
 
 /**
@@ -364,16 +379,14 @@ export const ensureMeiNfePlugnotasCadastroBeforeEmit = async (cnpjInput) => {
 export const hydrateMeiNfeEmitenteIeFromEmpresa = (payload, empresa) => {
   if (!payload || typeof payload !== 'object') return payload;
   const emitente = toObject(payload.emitente);
-  const existingIe = String(emitente.inscricaoEstadual || '').trim();
-  if (existingIe) return payload;
-
-  const empresaIe = String(empresa?.inscricaoEstadual || '').trim() || 'ISENTO';
+  const ie = readInscricaoEstadual(emitente.inscricaoEstadual, empresa?.inscricaoEstadual)
+    || 'ISENTO';
 
   return {
     ...payload,
     emitente: {
       ...emitente,
-      inscricaoEstadual: empresaIe,
+      inscricaoEstadual: ie,
     },
   };
 };
