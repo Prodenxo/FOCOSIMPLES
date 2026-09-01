@@ -631,6 +631,7 @@ function MeiScreenContent() {
   const [emitirNotaError, setEmitirNotaError] = useState<string | null>(null);
   /** Barreira síncrona contra duplo toque antes do re-render de `emitirNotaLoading`. */
   const emitirNotaInFlightRef = useRef(false);
+  const lastEmitSucceededRef = useRef(true);
   const [catalogClientes, setCatalogClientes] = useState<NfseCatalogCliente[]>([]);
   const [catalogProdutos, setCatalogProdutos] = useState<NfseCatalogProduto[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
@@ -1588,8 +1589,7 @@ function MeiScreenContent() {
         }
         return next;
       } catch {
-        setNotas([]);
-        return [] as NfseRecord[];
+        return notasRef.current;
       } finally {
         if (!options?.silent) setNotasLoading(false);
       }
@@ -2738,8 +2738,18 @@ function MeiScreenContent() {
     setCatalogProdutoVisible(false);
   };
 
+  const resetEmitirNfeForm = () => {
+    resetFiscalEmitentePrefillState();
+    nfeDestinatarioIeUserEditedRef.current = false;
+    lastNfeDestinatarioLookupDocRef.current = '';
+    setNfeLikeForm(getDefaultNfeLikeForm());
+  };
+
   const handleEmitirNotaSubmit = async () => {
-    if (emitirNotaInFlightRef.current || emitirNotaLoading) return;
+    if (emitirNotaInFlightRef.current || emitirNotaLoading) {
+      showToast('Aguarde, já tem uma nota sendo enviada.', 'info');
+      return;
+    }
 
     const reportEmitError = (message: string) => {
       setEmitirNotaError(message);
@@ -2805,12 +2815,15 @@ function MeiScreenContent() {
         try {
           const created = await emitirNfse(formToEmit);
           const statusKey = getNfseStatusKey(created?.status);
+          lastEmitSucceededRef.current = statusKey !== 'rejeitado';
           await loadNotas({ syncPending: true });
           void loadMeiLimiteServidor();
           if (statusKey === 'rejeitado') {
             const detail = extractNfseFailureMessage(created?.response_json, created?.metadata_json)
               || 'A nota foi rejeitada. Veja o motivo na lista — em breve vai para Arquivadas.';
             showToast(detail, 'error');
+            setEmitirNotaError(detail);
+            setEmitirNotaVisible(true);
           } else if (statusKey === 'processando') {
             showToast(
               'Nota enviada. A prefeitura está processando — acompanhe em Documentos emitidos.',
@@ -2820,8 +2833,12 @@ function MeiScreenContent() {
             showToast('NFSe emitida.', 'success');
           }
         } catch (e: unknown) {
+          lastEmitSucceededRef.current = false;
           const raw = e instanceof Error ? e.message : 'Falha ao emitir NFSe';
-          showToast(humanizeFiscalEmitError(raw, { documentType: 'NFSE' }), 'error');
+          const friendly = humanizeFiscalEmitError(raw, { documentType: 'NFSE' });
+          showToast(friendly, 'error');
+          setEmitirNotaError(friendly);
+          setEmitirNotaVisible(true);
           void loadNotas({ syncPending: true });
         } finally {
           emitirNotaInFlightRef.current = false;
@@ -2889,27 +2906,30 @@ function MeiScreenContent() {
       try {
         const created = docType === 'NFE' ? await emitirNfe(payload) : await emitirNfce(payload);
         const statusKey = getNfseStatusKey(created?.status);
+        lastEmitSucceededRef.current = statusKey !== 'rejeitado';
         await loadNotas({ syncPending: true });
         if (statusKey === 'rejeitado') {
-          showToast(
-            extractNfseFailureMessage(created?.response_json, created?.metadata_json)
-              || `${docType === 'NFE' ? 'NF-e' : 'NFC-e'} rejeitada. Veja o motivo na lista.`,
-            'error',
-          );
+          const detail = extractNfseFailureMessage(created?.response_json, created?.metadata_json)
+            || `${docType === 'NFE' ? 'NF-e' : 'NFC-e'} rejeitada. Veja o motivo na lista.`;
+          showToast(detail, 'error');
+          setEmitirNotaError(detail);
+          setEmitirNotaVisible(true);
         } else {
           showToast(docType === 'NFE' ? 'NF-e emitida.' : 'NFC-e emitida.', 'success');
+          resetEmitirNfeForm();
         }
         void loadNotas({ syncPending: true });
       } catch (e: unknown) {
+        lastEmitSucceededRef.current = false;
         const raw = e instanceof Error ? e.message : 'Falha ao emitir nota';
-        showToast(
-          humanizeFiscalEmitError(raw, {
-            documentType: docType,
-            nfeAtivo: empresaFiscal?.nfe?.ativo,
-            nfceAtivo: empresaFiscal?.nfce?.ativo,
-          }),
-          'error',
-        );
+        const friendly = humanizeFiscalEmitError(raw, {
+          documentType: docType,
+          nfeAtivo: empresaFiscal?.nfe?.ativo,
+          nfceAtivo: empresaFiscal?.nfce?.ativo,
+        });
+        showToast(friendly, 'error');
+        setEmitirNotaError(friendly);
+        setEmitirNotaVisible(true);
         void loadNotas({ syncPending: true });
       } finally {
         emitirNotaInFlightRef.current = false;
@@ -2919,11 +2939,14 @@ function MeiScreenContent() {
   };
 
   const openEmitirNotaModal = () => {
+    if (emitirNotaInFlightRef.current) {
+      showToast('Aguarde, já tem uma nota sendo enviada. Ela aparece em Documentos emitidos.', 'info');
+      return;
+    }
     setEmitirNotaError(null);
-    resetFiscalEmitentePrefillState();
-    nfeDestinatarioIeUserEditedRef.current = false;
-    lastNfeDestinatarioLookupDocRef.current = '';
-    setNfeLikeForm(getDefaultNfeLikeForm());
+    if (lastEmitSucceededRef.current) {
+      resetEmitirNfeForm();
+    }
     setEmitirNotaVisible(true);
   };
 
@@ -3841,7 +3864,7 @@ function MeiScreenContent() {
                   >
                     <Ionicons name="archive-outline" size={13} color={nfseIncludeArchived ? '#FFF' : theme.textSecondary} />
                     <Text style={[styles.dasFilterTabText, nfseIncludeArchived && styles.dasFilterTabTextActive]}>
-                      {nfseIncludeArchived ? 'Só arquivadas' : 'Arquivadas'}
+                      {nfseIncludeArchived ? 'Com arquivadas' : 'Arquivadas'}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -3940,7 +3963,7 @@ function MeiScreenContent() {
                   onPress={() => setNfseIncludeArchived((prev) => !prev)}
                 >
                   <Text style={[styles.filterText, nfseIncludeArchived && styles.filterTextActive]}>
-                    {nfseIncludeArchived ? '✓ Arquivadas' : 'Arquivadas'}
+                    {nfseIncludeArchived ? '✓ Com arquivadas' : 'Arquivadas'}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
