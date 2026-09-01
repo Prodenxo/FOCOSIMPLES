@@ -58,6 +58,7 @@ import {
   normalizePlugnotasNfePayload,
 } from './plugnotas/plugnotas-nfe-payload.js';
 import { applyIbptTransparenciaToNfePayload, logIbptTransparenciaEmit } from '../lib/ibpt-transparencia-nfe.js';
+import { applySimplesNacionalInformacoesComplementares } from '../lib/simples-nacional-nfe-infcpl.js';
 import {
   validateNfeCatalogProdutoMetadata,
 } from '../lib/nfe-cest.js';
@@ -2168,7 +2169,7 @@ export const emitirNota = async (userId, input) => {
           cnpjEmitente,
           documentType,
         });
-        let result = ibptResult.payload;
+        let result = applySimplesNacionalInformacoesComplementares(ibptResult.payload);
         result = normalizePlugnotasNfePayload(result);
         if (cnpjEmitente.length === 14 && empresaPlugnotas) {
           result = hydrateMeiNfeEmitenteIeFromEmpresa(result, empresaPlugnotas);
