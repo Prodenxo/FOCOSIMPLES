@@ -14,6 +14,7 @@ import {
 
 export interface MeiCatalogClienteFiscalMeta {
   indIEDest?: DestinatarioIndIeDest | string;
+  inscricaoEstadual?: string;
   endereco?: Partial<NfeDestinatarioEnderecoForm>;
 }
 
@@ -112,10 +113,12 @@ export function parseCatalogClienteFiscalMeta(
       ? (metadata.endereco as Record<string, unknown>)
       : {};
   const base = getDefaultNfeDestinatarioEndereco();
+  const ieDigits = normalizeDoc(String(metadata.inscricaoEstadual ?? ''));
   return {
     ...(metadata.indIEDest != null
       ? { indIEDest: normalizeDestinatarioIndIeDest(metadata.indIEDest) }
       : {}),
+    ...(ieDigits ? { inscricaoEstadual: ieDigits } : {}),
     endereco: {
       cep: normalizeDoc(String(rawEndereco.cep ?? '')).slice(0, 8),
       logradouro: String(rawEndereco.logradouro ?? base.logradouro).trim(),
@@ -134,10 +137,17 @@ export function parseCatalogClienteFiscalMeta(
 
 export function buildCatalogClienteMetadataJson(input: {
   indIEDest?: DestinatarioIndIeDest;
+  inscricaoEstadual?: string;
   endereco?: NfeDestinatarioEnderecoForm;
 }): Record<string, unknown> | undefined {
   const meta: Record<string, unknown> = {};
   if (input.indIEDest) meta.indIEDest = input.indIEDest;
+  const ieDigits = normalizeDoc(String(input.inscricaoEstadual ?? ''));
+  if (input.indIEDest === '1' && ieDigits) {
+    meta.inscricaoEstadual = ieDigits;
+  } else if (input.indIEDest === '2' || input.indIEDest === '9') {
+    meta.inscricaoEstadual = '';
+  }
   const e = input.endereco;
   if (e) {
     const endereco = {
@@ -176,15 +186,18 @@ export function applyCatalogClienteToNfeForm(
   destinatarioRazaoSocial: string;
   destinatarioEmail: string;
   destinatarioIndIEDest: DestinatarioIndIeDest;
+  destinatarioInscricaoEstadual: string;
   destinatarioEndereco: NfeDestinatarioEnderecoForm;
 } {
   const meta = parseCatalogClienteFiscalMeta(item.metadata_json ?? undefined);
   const docDigits = normalizeDoc(item.documento ?? '');
+  const destInd = resolveIndIeDestForDestinatario(docDigits, meta.indIEDest);
   return {
     destinatarioCpfCnpj: docDigits,
     destinatarioRazaoSocial: String(item.nome ?? '').trim(),
     destinatarioEmail: String(item.email ?? '').trim(),
-    destinatarioIndIEDest: resolveIndIeDestForDestinatario(docDigits, meta.indIEDest),
+    destinatarioIndIEDest: destInd,
+    destinatarioInscricaoEstadual: destInd === '1' ? String(meta.inscricaoEstadual || '').trim() : '',
     destinatarioEndereco: meta.endereco ?? getDefaultNfeDestinatarioEndereco(),
   };
 }

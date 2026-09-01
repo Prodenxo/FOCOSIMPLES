@@ -2574,6 +2574,7 @@ function MeiScreenContent() {
         destinatarioRazaoSocial: f.destinatarioRazaoSocial?.trim() || prefill.destinatarioRazaoSocial,
         destinatarioEmail: f.destinatarioEmail?.trim() || prefill.destinatarioEmail,
         destinatarioIndIEDest: prefill.destinatarioIndIEDest,
+        destinatarioInscricaoEstadual: prefill.destinatarioInscricaoEstadual,
         destinatarioEndereco: prefill.destinatarioEndereco,
       }));
       lastNfeDestinatarioLookupDocRef.current = digits;
@@ -2584,6 +2585,7 @@ function MeiScreenContent() {
     try {
       const prefill = await resolveNfseTomadorByCnpj(cnpjMasked, catalogClientes, lookupCnpj);
       if (!prefill) return;
+      const catalogFiscal = fromCatalog ? applyCatalogClienteToNfeForm(fromCatalog) : null;
       setNfeLikeForm((f) => ({
         ...f,
         destinatarioCpfCnpj: formatDocument(digits),
@@ -2591,7 +2593,10 @@ function MeiScreenContent() {
         destinatarioEmail: f.destinatarioEmail?.trim() || prefill.tomadorEmail,
         destinatarioIndIEDest: nfeDestinatarioIeUserEditedRef.current
           ? f.destinatarioIndIEDest
-          : '1',
+          : (catalogFiscal?.destinatarioIndIEDest || '1'),
+        destinatarioInscricaoEstadual: nfeDestinatarioIeUserEditedRef.current
+          ? f.destinatarioInscricaoEstadual
+          : (catalogFiscal?.destinatarioInscricaoEstadual || f.destinatarioInscricaoEstadual),
         destinatarioEndereco: prefill.tomadorEndereco,
       }));
       lastNfeDestinatarioLookupDocRef.current = digits;
@@ -2655,6 +2660,7 @@ function MeiScreenContent() {
         destinatarioRazaoSocial: prefill.destinatarioRazaoSocial,
         destinatarioEmail: prefill.destinatarioEmail,
         destinatarioIndIEDest: prefill.destinatarioIndIEDest,
+        destinatarioInscricaoEstadual: prefill.destinatarioInscricaoEstadual,
         destinatarioEndereco: prefill.destinatarioEndereco,
       }));
       if (emitirNotaType === 'NFE' && !catalogClienteHasNfeEndereco(item)) {

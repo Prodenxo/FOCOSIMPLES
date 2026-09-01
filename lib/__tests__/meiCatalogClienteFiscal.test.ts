@@ -32,7 +32,8 @@ describe('meiCatalogClienteFiscal', () => {
       nome: 'Condomínio Enseada',
       email: 'mardonortec@gmail.com',
       metadata_json: buildCatalogClienteMetadataJson({
-        indIEDest: '9',
+        indIEDest: '1',
+        inscricaoEstadual: '0027884210045',
         endereco: {
           ...getDefaultNfeDestinatarioEndereco(),
           cep: '59082000',
@@ -47,9 +48,11 @@ describe('meiCatalogClienteFiscal', () => {
     }
     expect(catalogClienteHasNfeEndereco(item)).toBe(true)
     const prefill = applyCatalogClienteToNfeForm(item)
-    expect(prefill.destinatarioIndIEDest).toBe('9')
+    expect(prefill.destinatarioIndIEDest).toBe('1')
+    expect(prefill.destinatarioInscricaoEstadual).toBe('0027884210045')
     expect(prefill.destinatarioEndereco.codigoCidade).toBe('2408102')
-    expect(parseCatalogClienteFiscalMeta(item.metadata_json).indIEDest).toBe('9')
+    expect(parseCatalogClienteFiscalMeta(item.metadata_json).indIEDest).toBe('1')
+    expect(parseCatalogClienteFiscalMeta(item.metadata_json).inscricaoEstadual).toBe('0027884210045')
   })
 
   it('exige endereço ao cadastrar cliente NF-e', () => {

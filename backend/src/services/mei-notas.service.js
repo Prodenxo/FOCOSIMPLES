@@ -983,9 +983,15 @@ const buildClienteCatalogMetadataFromPayload = (payload, documentType) => {
     : toObject(payload?.destinatario);
   const endereco = prune(toObject(dest.endereco));
   const indIEDest = String(dest.indIEDest || '').trim();
+  const ieDigits = String(dest.inscricaoEstadual || '').replace(/\D/g, '');
   const meta = {};
   if (indIEDest === '1' || indIEDest === '2' || indIEDest === '9') {
     meta.indIEDest = indIEDest;
+  }
+  if (indIEDest === '1' && ieDigits) {
+    meta.inscricaoEstadual = ieDigits;
+  } else if (indIEDest === '2' || indIEDest === '9') {
+    meta.inscricaoEstadual = '';
   }
   if (endereco && Object.keys(endereco).length) {
     meta.endereco = endereco;

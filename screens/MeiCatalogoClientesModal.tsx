@@ -10,6 +10,15 @@ import { Ionicons } from '@expo/vector-icons'
 import { Pressable } from 'react-native'
 import type { NfeDestinatarioEnderecoForm } from '../lib/meiNfseForms'
 import type { DestinatarioIndIeDest } from '../lib/meiNfeDestinatarioIe'
+import {
+  DESTINATARIO_IE_OPTIONS,
+  DESTINATARIO_IE_SECTION_HINT,
+  getDestinatarioIeValidationMessage,
+} from '../lib/meiNfeDestinatarioIe'
+import {
+  shouldShowDestinatarioIeOptions,
+  shouldShowDestinatarioInscricaoEstadual,
+} from '../lib/nfeEmissaoLeigo'
 import { buildClienteCatalogLabel } from '../lib/meiFormatters'
 import {
   buildCatalogClienteMetadataJson,
@@ -99,6 +108,7 @@ type FormState = {
   email: string
   documentTypes: Array<'NFSE' | 'NFE' | 'NFCE'>
   indIEDest: DestinatarioIndIeDest
+  inscricaoEstadual: string
   endereco: NfeDestinatarioEnderecoForm
 }
 
@@ -108,6 +118,7 @@ const emptyForm = (): FormState => ({
   email: '',
   documentTypes: ['NFSE'],
   indIEDest: DEFAULT_DESTINATARIO_IND_IE_DEST,
+  inscricaoEstadual: '',
   endereco: getDefaultNfeDestinatarioEndereco(),
 })
 
@@ -238,6 +249,7 @@ export default function MeiCatalogoClientesModal ({
         (t): t is 'NFSE' | 'NFE' | 'NFCE' => t === 'NFSE' || t === 'NFE' || t === 'NFCE',
       ),
       indIEDest: fiscal.indIEDest ?? DEFAULT_DESTINATARIO_IND_IE_DEST,
+      inscricaoEstadual: fiscal.inscricaoEstadual ?? '',
       endereco: fiscal.endereco ?? getDefaultNfeDestinatarioEndereco(),
     })
     lastCepLookupRef.current = ''
@@ -268,6 +280,7 @@ export default function MeiCatalogoClientesModal ({
         setForm((f) => ({
           ...f,
           indIEDest: meta.indIEDest ?? f.indIEDest,
+          inscricaoEstadual: meta.inscricaoEstadual ?? f.inscricaoEstadual,
           endereco: meta.endereco ?? f.endereco,
         }))
       }
@@ -345,6 +358,11 @@ export default function MeiCatalogoClientesModal ({
         alertDialog('Validação NF-e / NFC-e', nfeErr)
         return
       }
+      const ieErr = getDestinatarioIeValidationMessage(form.indIEDest, form.inscricaoEstadual)
+      if (ieErr && shouldShowDestinatarioIeOptions(form.documento)) {
+        alertDialog('Validação NF-e / NFC-e', ieErr)
+        return
+      }
     }
     if (wantsNfse) {
       const nfseErr = validateCatalogClienteNfseTomadorFields(form.documento, form.endereco)
@@ -357,7 +375,9 @@ export default function MeiCatalogoClientesModal ({
     setSaving(true)
     try {
       const metadata_json = buildCatalogClienteMetadataJson({
-        ...(wantsNfeLike ? { indIEDest: form.indIEDest } : {}),
+        ...(wantsNfeLike
+          ? { indIEDest: form.indIEDest, inscricaoEstadual: form.inscricaoEstadual }
+          : {}),
         endereco: form.endereco,
       })
       await syncCatalogoClienteDocumentTypes({
@@ -554,6 +574,61 @@ export default function MeiCatalogoClientesModal ({
         <Text style={[flow.hint, { marginBottom: 8 }]}>
           NFSE = serviço · NFE = produto · NFCE = cupom. Desmarcar oculta só esse tipo; marcar de novo reativa.
         </Text>
+        {wantsNfeLike && shouldShowDestinatarioIeOptions(form.documento) ? (
+          <>
+            <MeiFormSectionLabel>Tipo de cliente (CNPJ)</MeiFormSectionLabel>
+            <Text style={[flow.hint, { marginBottom: 8 }]}>{DESTINATARIO_IE_SECTION_HINT}</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+              {DESTINATARIO_IE_OPTIONS.map((opt) => {
+                const selected = form.indIEDest === opt.value
+                return (
+                  <Pressable
+                    key={opt.value}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    onPress={() =>
+                      setForm((f) => ({
+                        ...f,
+                        indIEDest: opt.value,
+                        ...(opt.value !== '1' ? { inscricaoEstadual: '' } : {}),
+                      }))
+                    }
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: selected ? theme.primary : theme.border,
+                      backgroundColor: selected ? `${theme.primary}18` : theme.surface,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: selected ? '700' : '500',
+                        color: selected ? theme.primary : theme.text,
+                      }}
+                    >
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                )
+              })}
+            </View>
+            {shouldShowDestinatarioInscricaoEstadual(form.indIEDest, form.documento) ? (
+              <MeiFormField
+                label="Inscrição Estadual do cliente"
+                required
+                placeholder="Somente números — IE do cliente"
+                value={form.inscricaoEstadual}
+                onChangeText={(t) =>
+                  setForm((f) => ({ ...f, inscricaoEstadual: t.replace(/\D/g, '') }))
+                }
+                keyboardType="numeric"
+              />
+            ) : null}
+          </>
+        ) : null}
         {showTomadorEndereco ? (
           <>
             <MeiFormSectionLabel>{enderecoSectionTitle}</MeiFormSectionLabel>
