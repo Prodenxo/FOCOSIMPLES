@@ -2,7 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   formatOpenclawNfeProdutosMessage,
+  formatOpenclawNfeClientesMessage,
+  formatOpenclawNfeCatalogoMessage,
   formatOpenclawCatalogServicosMessage,
+  formatNfeAskItemDetailsMessage,
+  pickExplicitNfeQuantidade,
+  pickExplicitNfeValorUnitario,
+  catalogHasNfeValorSugerido,
   isCatalogProdutoUsableForNfe,
   extractNfeItemSpecsFromPayload,
   buildNfePreviewFromEmitInput,
@@ -45,6 +51,48 @@ test('formatOpenclawNfeProdutosMessage — lista numerada', () => {
   ]);
   assert.match(msg, /1\. Água 20L/);
   assert.match(msg, /NCM 22011000/);
+  assert.match(msg, /preço R\$ 12/);
+});
+
+test('formatOpenclawNfeClientesMessage — lista numerada', () => {
+  const msg = formatOpenclawNfeClientesMessage([
+    { nome: 'Marli Vasconcelos', documento: '25120730000195' },
+  ]);
+  assert.match(msg, /1\. Marli Vasconcelos/);
+  assert.match(msg, /CNPJ 25120730000195/);
+});
+
+test('formatOpenclawNfeCatalogoMessage — clientes e produtos juntos', () => {
+  const msg = formatOpenclawNfeCatalogoMessage(
+    [{ nome: 'Marli', documento: '12345678901' }],
+    [{
+      discriminacao: 'Anel de aço',
+      codigo: 'ANEL',
+      metadata_json: { ncm: '71131900', cfop: '5102' },
+    }],
+  );
+  assert.match(msg, /Marli/);
+  assert.match(msg, /Anel de aço/);
+  assert.match(msg, /sem preço/);
+  assert.match(msg, /Qual cliente e quais produtos/);
+});
+
+test('formatNfeAskItemDetailsMessage pede quantidade e preço unitário', () => {
+  const msg = formatNfeAskItemDetailsMessage([
+    { nome: 'Anel de aço', missingQuantidade: true, missingValor: true },
+  ]);
+  assert.match(msg, /Anel de aço: falta quantidade e preço unitário/);
+  assert.match(msg, /10 itens/);
+  assert.match(msg, /Preço: 10 reais/);
+});
+
+test('pickExplicitNfeQuantidade e valor — não assume 1 nem preço do catálogo', () => {
+  assert.equal(pickExplicitNfeQuantidade({}, {}), undefined);
+  assert.equal(pickExplicitNfeQuantidade({ quantidade: 10 }, {}), 10);
+  assert.equal(pickExplicitNfeValorUnitario({}, { valor: 10 }), 10);
+  assert.equal(pickExplicitNfeValorUnitario({}, {}, { singleItem: false }), undefined);
+  assert.equal(catalogHasNfeValorSugerido({ valor_sugerido: 0 }), false);
+  assert.equal(catalogHasNfeValorSugerido({ valor_sugerido: 12 }), true);
 });
 
 test('formatOpenclawCatalogServicosMessage — serviços NFS-e', () => {

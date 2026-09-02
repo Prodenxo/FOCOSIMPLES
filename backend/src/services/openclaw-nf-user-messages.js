@@ -13,10 +13,45 @@ const tipoNotaLabel = (documentType) => {
   return 'NFS-e (serviço)';
 };
 
+const quantidadeItensLabel = (quantidade) => {
+  const n = Number(quantidade);
+  const qtd = Number.isFinite(n) && n > 0 ? n : 1;
+  return qtd === 1 ? '1 item' : `${qtd} itens`;
+};
+
+const formatNfePreviewItemBlock = (row = {}) => {
+  const nome = String(row.produtoDescricao || row.descricao || row.discriminacao || 'Produto').trim();
+  const qtd = row.quantidade;
+  const unit = formatValorBr(row.valorUnitario);
+  const lineTotal = formatValorBr(row.valorTotal ?? row.valor);
+  return [
+    `${nome} ${quantidadeItensLabel(qtd)}`,
+    `Preço: ${unit}`,
+    `Valor total: ${lineTotal}`,
+  ].join('\n');
+};
+
 const formatNfPreviewItensBlock = (preview = {}) => {
   const dt = String(preview.documentType || '').toUpperCase();
   const isProduto = dt === 'NFE' || dt === 'NFCE';
   const itens = Array.isArray(preview.itens) ? preview.itens : [];
+
+  if (isProduto) {
+    const rows = itens.length
+      ? itens
+      : [{
+        produtoDescricao: preview.produtoDescricao || preview.discriminacao,
+        quantidade: preview.quantidade,
+        valorUnitario: preview.valorUnitario,
+        valorTotal: preview.valorTotal,
+      }];
+    const blocks = rows.map(formatNfePreviewItemBlock);
+    if (rows.length > 1) {
+      return `${blocks.join('\n\n')}\n\nValor total da nota: ${formatValorBr(preview.valorTotal)}`;
+    }
+    return blocks[0];
+  }
+
   if (itens.length > 1) {
     const lines = itens.map((row, index) => {
       const nome = String(row.produtoDescricao || row.descricao || row.discriminacao || 'Item').trim();
@@ -24,12 +59,12 @@ const formatNfPreviewItensBlock = (preview = {}) => {
       const valor = formatValorBr(row.valorTotal ?? row.valor ?? row.valorUnitario);
       return `  ${index + 1}. ${nome}${qtd} — ${valor}`;
     });
-    return [`• ${isProduto ? 'Produtos' : 'Serviços'}:`, ...lines].join('\n');
+    return [`• Serviços:`, ...lines].join('\n');
   }
   const item = String(
     preview.discriminacao || preview.produtoDescricao || preview.codigoServico || 'Item',
   ).trim();
-  return `• ${isProduto ? 'Produto' : 'Serviço'}: ${item}`;
+  return `• Serviço: ${item}`;
 };
 
 /**
@@ -44,6 +79,7 @@ export const buildNfConfirmRequestUserMessage = (preview = {}) => {
   const tipo = tipoNotaLabel(preview.documentType);
   const itensBlock = formatNfPreviewItensBlock(preview);
   const multiItem = Array.isArray(preview.itens) && preview.itens.length > 1;
+  const isNfeProduto = ['NFE', 'NFCE'].includes(String(preview.documentType || '').toUpperCase());
   const cfop = String(preview.cfop || '').trim();
   const ufLinha = preview.emitenteUf && preview.destinatarioUf
     ? `• UF: ${preview.emitenteUf} → ${preview.destinatarioUf}`
@@ -54,8 +90,8 @@ export const buildNfConfirmRequestUserMessage = (preview = {}) => {
     `• Tipo: ${tipo}`,
     `• Cliente: ${cliente}`,
     itensBlock,
-    `• ${multiItem ? 'Valor total' : 'Valor'}: ${valor}`,
-    ...(!multiItem && cfop ? [`• CFOP: ${cfop}`] : []),
+    ...(isNfeProduto ? [] : [`• ${multiItem ? 'Valor total' : 'Valor'}: ${valor}`]),
+    ...(!isNfeProduto && !multiItem && cfop ? [`• CFOP: ${cfop}`] : []),
     ...(ufLinha ? [ufLinha] : []),
     '',
     'Posso emitir? Responda *sim* ou *confirmo* que eu envio a nota.',
@@ -74,6 +110,7 @@ export const buildNfEmittedUserMessage = (preview = {}, opts = {}) => {
   const tipo = tipoNotaLabel(preview.documentType);
   const itensBlock = formatNfPreviewItensBlock(preview);
   const multiItem = Array.isArray(preview.itens) && preview.itens.length > 1;
+  const isNfeProduto = ['NFE', 'NFCE'].includes(String(preview.documentType || '').toUpperCase());
   const status = String(opts.status || 'processando').trim();
 
   let footer = '';
@@ -88,7 +125,7 @@ export const buildNfEmittedUserMessage = (preview = {}, opts = {}) => {
     `• Tipo: ${tipo}`,
     `• Cliente: ${cliente}`,
     itensBlock,
-    `• ${multiItem ? 'Valor total' : 'Valor'}: ${valor}`,
+    ...(isNfeProduto ? [] : [`• ${multiItem ? 'Valor total' : 'Valor'}: ${valor}`]),
     `• Situação: ${status}`,
   ];
   if (footer) lines.push('', footer);

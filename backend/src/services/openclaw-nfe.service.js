@@ -10,6 +10,7 @@ import {
   criarCatalogoCliente,
   criarCatalogoProduto,
   emitirNota,
+  listarCatalogoClientes,
   listarCatalogoProdutos,
 } from './mei-notas.service.js';
 import {
@@ -314,10 +315,93 @@ export const formatOpenclawNfeProdutosMessage = (produtos) => {
     const nome = String(p.discriminacao || '—').trim();
     const codigo = p.codigo ? `SKU ${p.codigo}` : 'sem SKU';
     const meta = nfeCatalogFieldsFromMetadata(p.metadata_json);
-    const valor = p.valor_sugerido != null ? `R$ ${p.valor_sugerido}` : '';
-    return `${i + 1}. ${nome} (${codigo}, NCM ${meta.ncm}, CFOP ${meta.cfop}${valor ? `, ${valor}` : ''})`;
+    const valor = catalogHasNfeValorSugerido(p)
+      ? `preço R$ ${p.valor_sugerido}`
+      : 'sem preço — vou pedir o unitário';
+    return `${i + 1}. ${nome} (${codigo}, NCM ${meta.ncm}, CFOP ${meta.cfop}, ${valor})`;
   });
   return `${list.length} produto(s) NF-e no catálogo:\n${lines.join('\n')}`;
+};
+
+export const listOpenclawNfeClientes = async (userId, { q = '', limit = 20 } = {}) =>
+  listarCatalogoClientes(userId, { q, limit, documentType: 'NFE' });
+
+export const formatOpenclawNfeClientesMessage = (clientes) => {
+  const list = Array.isArray(clientes) ? clientes : [];
+  if (!list.length) {
+    return 'Nenhum cliente NF-e no catálogo. Cadastre na app (Notas → Clientes) ou use register_nfe_cliente.';
+  }
+  const lines = list.map((c, i) => {
+    const nome = String(c.nome || '—').trim();
+    const doc = String(c.documento || '').replace(/\D/g, '');
+    const docLabel = doc.length === 14
+      ? `CNPJ ${doc}`
+      : (doc.length === 11 ? `CPF ${doc}` : (doc || 'sem documento'));
+    return `${i + 1}. ${nome} (${docLabel})`;
+  });
+  return `${list.length} cliente(s) NF-e no catálogo:\n${lines.join('\n')}`;
+};
+
+export const formatOpenclawNfeCatalogoMessage = (clientes, produtos) => {
+  const ask = 'Qual cliente e quais produtos vão na nota? Depois me diga a quantidade e o preço unitário de cada um, se ainda não estiver no cadastro.';
+  return `${formatOpenclawNfeClientesMessage(clientes)}\n\n${formatOpenclawNfeProdutosMessage(produtos)}\n\n${ask}`;
+};
+
+const firstDefinedRaw = (...values) => {
+  for (const v of values) {
+    if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+  }
+  return undefined;
+};
+
+export const catalogHasNfeValorSugerido = (produto) => {
+  const n = Number(produto?.valor_sugerido);
+  return Number.isFinite(n) && n > 0;
+};
+
+export const pickExplicitNfeQuantidade = (spec = {}, payload = {}, { singleItem = true } = {}) => {
+  const fromSpec = firstDefinedRaw(spec?.quantidade, spec?.qtd);
+  if (fromSpec !== undefined) return fromSpec;
+  if (singleItem) return firstDefinedRaw(payload?.quantidade, payload?.qtd);
+  return undefined;
+};
+
+export const pickExplicitNfeValorUnitario = (spec = {}, payload = {}, { singleItem = true } = {}) => {
+  const fromSpec = firstDefinedRaw(spec?.valorUnitario, spec?.valor, spec?.valorReais);
+  if (fromSpec !== undefined) return fromSpec;
+  if (singleItem) {
+    return firstDefinedRaw(
+      payload?.valorUnitario,
+      payload?.valor,
+      payload?.valorReais,
+      payload?.valorServico,
+    );
+  }
+  return undefined;
+};
+
+export const isNfeItemDetailsMissingError = (err) =>
+  String(err?.errors?.code || err?.code || '') === 'NFE_ITEM_DETAILS_MISSING';
+
+export const formatNfeAskItemDetailsMessage = (gaps = []) => {
+  const list = Array.isArray(gaps) ? gaps : [];
+  const lines = list.map((gap) => {
+    const nome = String(gap?.nome || 'Produto').trim();
+    const missing = [];
+    if (gap?.missingQuantidade) missing.push('quantidade');
+    if (gap?.missingValor) missing.push('preço unitário');
+    return `• ${nome}: falta ${missing.join(' e ') || 'quantidade ou preço unitário'}`;
+  });
+  return [
+    'Para emitir a nota preciso da quantidade e do preço unitário de cada produto.',
+    ...lines,
+    '',
+    'Manda assim (o valor é o preço de 1 item, não o total):',
+    'Anel de aço 10 itens',
+    'Preço: 10 reais',
+    '',
+    'Eu calculo o valor total (quantidade × preço unitário).',
+  ].join('\n');
 };
 
 export const formatOpenclawCatalogServicosMessage = (produtos) => {
@@ -688,6 +772,21 @@ const parseQuantidade = (raw) => {
   return Number.isFinite(n) && n > 0 ? n : 1;
 };
 
+const resolveNfeItemPricing = (produto, spec, payload, { singleItem }) => {
+  const qtyRaw = pickExplicitNfeQuantidade(spec, payload, { singleItem });
+  const valorRaw = pickExplicitNfeValorUnitario(spec, payload, { singleItem });
+  const missingQuantidade = qtyRaw === undefined;
+  const missingValor = valorRaw === undefined && !catalogHasNfeValorSugerido(produto);
+  return {
+    produto,
+    missingQuantidade,
+    missingValor,
+    quantidade: missingQuantidade ? null : parseQuantidade(qtyRaw),
+    valorUnitario: parseValorReais(valorRaw)
+      ?? (catalogHasNfeValorSugerido(produto) ? Number(produto.valor_sugerido) : 0),
+  };
+};
+
 /** Payload legado (1 produto no root) ou array `itens` / `produtos` / `items`. */
 export const extractNfeItemSpecsFromPayload = (payload = {}) => {
   const rawList = payload?.itens || payload?.produtos || payload?.items;
@@ -727,32 +826,44 @@ const resolveProdutoNfeFromSpec = async (userId, payload, spec = {}) => {
   return resolveProdutoNfe(userId, { ...payload, ...spec });
 };
 
-const buildNfeItemFromCatalog = async (userId, payload, spec) => {
+const buildNfeItemFromCatalog = async (userId, payload, spec, { singleItem = true } = {}) => {
   const produto = await resolveProdutoNfeFromSpec(userId, payload, spec);
-  const valorUnitario = parseValorReais(
-    spec?.valorUnitario
-      ?? spec?.valor
-      ?? spec?.valorReais
-      ?? payload?.valorUnitario
-      ?? payload?.valor
-      ?? payload?.valorReais
-      ?? payload?.valorServico,
-  );
-  const quantidade = parseQuantidade(
-    spec?.quantidade ?? spec?.qtd ?? payload?.quantidade ?? payload?.qtd,
-  );
+  const pricing = resolveNfeItemPricing(produto, spec, payload, { singleItem });
+  if (pricing.missingQuantidade || pricing.missingValor) {
+    return { produto, pricing, incomplete: true };
+  }
   const item = mapCatalogProdutoToNfeItem(produto, {
-    quantidade,
-    valorUnitario: (valorUnitario ?? Number(produto.valor_sugerido)) || 0,
+    quantidade: pricing.quantidade,
+    valorUnitario: pricing.valorUnitario,
   });
-  return { item, produto };
+  return { item, produto, pricing, incomplete: false };
 };
 
 const resolveNfeItensFromPayload = async (userId, payload) => {
   const specs = extractNfeItemSpecsFromPayload(payload);
+  const singleItem = specs.length === 1;
   const built = [];
+  const gaps = [];
   for (const spec of specs) {
-    built.push(await buildNfeItemFromCatalog(userId, payload, spec));
+    const row = await buildNfeItemFromCatalog(userId, payload, spec, { singleItem });
+    if (row.incomplete) {
+      gaps.push({
+        nome: String(row.produto?.discriminacao || spec?.produtoNome || 'Produto').trim(),
+        missingQuantidade: row.pricing.missingQuantidade,
+        missingValor: row.pricing.missingValor,
+      });
+      continue;
+    }
+    built.push(row);
+  }
+  if (gaps.length) {
+    throw badRequest(formatNfeAskItemDetailsMessage(gaps), {
+      code: 'NFE_ITEM_DETAILS_MISSING',
+      missingItemDetails: gaps,
+      botHint:
+        'Repita APENAS message. Espere o utilizador mandar quantidade e preço UNITÁRIO '
+        + '(não o total). Depois preview_nfe de novo com itens[].quantidade e itens[].valor (unitário).',
+    });
   }
   return built;
 };
@@ -932,6 +1043,16 @@ export const rethrowNfeErrorForBot = (err) => {
       nfeAtivo: e?.errors?.nfeAtivo,
     });
     const loopGuard = `${BOT_NF_EMIT_FAILED_INSTRUCTION} ${existingHint || ''}`.trim();
+
+    if (code === 'NFE_ITEM_DETAILS_MISSING') {
+      throw badRequest(rawMsg, {
+        code,
+        missingItemDetails: e?.errors?.missingItemDetails,
+        botHint:
+          existingHint
+          || 'Repita APENAS message. Espere quantidade e preço unitário. valor no payload é o preço de 1 item.',
+      });
+    }
 
     if (existingHint) {
       throw badRequest(userMessage, { code, botHint: loopGuard });

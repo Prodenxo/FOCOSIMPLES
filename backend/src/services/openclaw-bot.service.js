@@ -57,7 +57,11 @@ import {
 import {
   emitOpenclawNfe,
   formatOpenclawCatalogServicosMessage,
+  formatOpenclawNfeCatalogoMessage,
+  formatOpenclawNfeClientesMessage,
   formatOpenclawNfeProdutosMessage,
+  isNfeItemDetailsMissingError,
+  listOpenclawNfeClientes,
   listOpenclawNfeProdutos,
   previewOpenclawNfeEmit,
   registerOpenclawNfeCliente,
@@ -661,6 +665,11 @@ export const runOpenclawAction = async (input) => {
     list_catalog_servicos: 'list_catalog_servicos',
     listar_produtos_nfe: 'list_nfe_produtos',
     listar_servicos_nfse: 'list_catalog_servicos',
+    list_nfe_clientes: 'list_nfe_clientes',
+    listar_clientes_nfe: 'list_nfe_clientes',
+    list_nfe_catalogo: 'list_nfe_catalogo',
+    listar_clientes_e_produtos: 'list_nfe_catalogo',
+    list_nfe_clientes_e_produtos: 'list_nfe_catalogo',
     register_nfe_cliente: 'register_nfe_cliente',
     cadastrar_cliente_nfe: 'register_nfe_cliente',
     register_nfe_produto: 'register_nfe_produto',
@@ -1980,6 +1989,56 @@ export const runOpenclawAction = async (input) => {
     };
   }
 
+  if (action === 'list_nfe_clientes') {
+    const q = String(
+      payload?.q ?? payload?.nome ?? payload?.busca ?? payload?.documento ?? '',
+    ).trim();
+    const limit = payload?.limit;
+    const clientes = await listOpenclawNfeClientes(userId, { q, limit });
+    return {
+      ok: true,
+      message: formatOpenclawNfeClientesMessage(clientes),
+      data: {
+        clientes,
+        documentType: 'NFE',
+        userId,
+        actorContext,
+        ...linkDebug,
+        agentInstructions:
+          'Mostre APENAS message (lista numerada). Depois peça qual cliente e quais produtos. '
+          + 'Na preview_nfe use destinatarioNome ou o nome exato da lista.',
+      },
+    };
+  }
+
+  if (action === 'list_nfe_catalogo') {
+    const q = String(
+      payload?.q ?? payload?.nome ?? payload?.busca ?? '',
+    ).trim();
+    const limit = payload?.limit;
+    const [clientes, produtos] = await Promise.all([
+      listOpenclawNfeClientes(userId, { q, limit }),
+      listOpenclawNfeProdutos(userId, { q, limit }),
+    ]);
+    return {
+      ok: true,
+      message: formatOpenclawNfeCatalogoMessage(clientes, produtos),
+      data: {
+        clientes,
+        produtos,
+        documentType: 'NFE',
+        userId,
+        actorContext,
+        ...linkDebug,
+        agentInstructions:
+          'Mostre APENAS message. Espere o utilizador escolher cliente + produtos. '
+          + 'Se faltar quantidade ou preço unitário, NÃO invente — chame preview_nfe com o que ele disse '
+          + 'ou pergunte no formato: "Anel de aço 10 itens / Preço: 10 reais". '
+          + 'valor no payload é SEMPRE unitário. quantidade × preço = total (a API calcula).',
+      },
+    };
+  }
+
   if (action === 'list_nfe_produtos') {
     const q = String(
       payload?.q ?? payload?.nome ?? payload?.busca ?? payload?.produto ?? '',
@@ -1997,7 +2056,8 @@ export const runOpenclawAction = async (input) => {
         ...linkDebug,
         agentInstructions:
           'Mostre APENAS message (lista numerada). Na preview_nfe use produtoIndice (número da lista, ex.: 3) '
-          + 'ou produtoNome exato — prefira produtoIndice quando o utilizador disser "produto 3".',
+          + 'ou produtoNome exato — prefira produtoIndice quando o utilizador disser "produto 3". '
+          + 'Se o produto estiver sem preço, peça quantidade e preço UNITÁRIO antes ou via preview_nfe.',
       },
     };
   }
@@ -2050,6 +2110,23 @@ export const runOpenclawAction = async (input) => {
         },
       };
     } catch (err) {
+      if (isNfeItemDetailsMissingError(err)) {
+        return {
+          ok: true,
+          message: String(err.message || ''),
+          data: {
+            needsItemDetails: true,
+            missingItemDetails: err?.errors?.missingItemDetails,
+            userId,
+            actorContext,
+            ...linkDebug,
+            agentInstructions:
+              'Repita APENAS message. NÃO emita e NÃO invente valor. Espere quantidade e preço UNITÁRIO. '
+              + 'Exemplo do utilizador: "Anel de aço 10 itens" e "Preço: 10 reais". '
+              + 'Depois preview_nfe com itens[].quantidade e itens[].valor (unitário).',
+          },
+        };
+      }
       rethrowNfeErrorForBot(err);
     }
   }
@@ -2141,6 +2218,21 @@ export const runOpenclawAction = async (input) => {
         },
       };
     } catch (err) {
+      if (isNfeItemDetailsMissingError(err)) {
+        return {
+          ok: true,
+          message: String(err.message || ''),
+          data: {
+            needsItemDetails: true,
+            missingItemDetails: err?.errors?.missingItemDetails,
+            userId,
+            actorContext,
+            ...linkDebug,
+            agentInstructions:
+              'Repita APENAS message. NÃO emita. Espere quantidade e preço UNITÁRIO e chame preview_nfe de novo.',
+          },
+        };
+      }
       rethrowNfeErrorForBot(err);
     }
   }
@@ -2618,6 +2710,6 @@ export const runOpenclawAction = async (input) => {
   }
 
   throw badRequest(
-    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_contas, get_saldo, create_conta, update_conta, delete_conta, list_transactions, create_transaction, update_transaction, delete_transaction, list_calendar_events, list_agenda_checklist_today, complete_calendar_event, list_upcoming_calendar_events, get_next_calendar_event, create_calendar_event, add_calendar_event_meet, delete_calendar_event, get_nfse_setup_status, list_nfse_clientes, register_nfse_cliente, list_nfse_produtos, list_catalog_servicos, list_nfe_produtos, register_nfse_produto, register_nfe_cliente, register_nfe_produto, preview_nfse, emit_nfse, preview_nfe, emit_nfe, list_nfse_notas, consult_nfse, get_nfse_pdf, get_nfe_pdf, send_nfse_whatsapp, send_nfe_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
+    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_contas, get_saldo, create_conta, update_conta, delete_conta, list_transactions, create_transaction, update_transaction, delete_transaction, list_calendar_events, list_agenda_checklist_today, complete_calendar_event, list_upcoming_calendar_events, get_next_calendar_event, create_calendar_event, add_calendar_event_meet, delete_calendar_event, get_nfse_setup_status, list_nfse_clientes, register_nfse_cliente, list_nfse_produtos, list_catalog_servicos, list_nfe_produtos, list_nfe_clientes, list_nfe_catalogo, register_nfse_produto, register_nfe_cliente, register_nfe_produto, preview_nfse, emit_nfse, preview_nfe, emit_nfe, list_nfse_notas, consult_nfse, get_nfse_pdf, get_nfe_pdf, send_nfse_whatsapp, send_nfe_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
   );
 };

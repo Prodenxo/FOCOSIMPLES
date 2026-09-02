@@ -26,10 +26,11 @@ Proibido: só get_das_current / base64 no chat.
 ```
 
 ## NFS-e vs NF-e (não misturar)
-- **Produto** (camisa, mercadoria, NF-e) → `list_nfe_produtos` → `preview_nfe` → `emit_nfe`
+- **Produto** (camisa, mercadoria, NF-e) → `list_nfe_catalogo` (clientes + produtos) → `preview_nfe` → `emit_nfe`
 - **Serviço** (NFS-e) → `list_catalog_servicos` → `preview_nfse` → `emit_nfse`
 - Nunca inventar preview sem JSON da API. Nunca `servicoIndice` em pedido de produto.
-- **Vários produtos na mesma NF-e:** `payload.itens` (aliases `produtos` / `items`) — um objeto por linha (`produtoNome` | `produtoIndice` | `produtoId`, `valor`/`valorUnitario`, `quantidade` opcional). Uma nota só; não emitir uma NF-e por produto.
+- **Vários produtos na mesma NF-e:** `payload.itens` (aliases `produtos` / `items`) — um objeto por linha (`produtoNome` | `produtoIndice` | `produtoId`, `valor`/`valorUnitario` **unitário**, `quantidade`). Uma nota só; não emitir uma NF-e por produto.
+- **Quantidade e preço:** se o utilizador não mandou quantidade, **pergunte**. Se o produto não tem preço no cadastro e o utilizador não mandou o unitário, **pergunte**. Não invente. Exemplo de resposta do utilizador: `Anel de aço 10 itens` + `Preço: 10 reais` → `quantidade:10`, `valor:10` (unitário). Total = 100 (a API calcula).
 
 ## Actions principais
 ping, resolve_user, list_roles, get_permissions, check_permission,
@@ -43,5 +44,5 @@ get_das_current, get_das_payment_status, send_das_whatsapp, refresh_das_pdf,
 get_nfse_setup_status, sync_nfse_emitente,
 list_nfse_clientes, register_nfse_cliente, list_nfse_produtos, register_nfse_produto,
 list_catalog_servicos, preview_nfse, emit_nfse, list_nfse_notas, consult_nfse, get_nfse_pdf, send_nfse_whatsapp,
-list_nfe_produtos, register_nfe_cliente, register_nfe_produto, preview_nfe, emit_nfe,
+list_nfe_produtos, list_nfe_clientes, list_nfe_catalogo, register_nfe_cliente, register_nfe_produto, preview_nfe, emit_nfe,
 send_text_whatsapp

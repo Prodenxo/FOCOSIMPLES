@@ -37,10 +37,30 @@ test('buildNfConfirmRequestUserMessage — NF-e produto', () => {
     documentType: 'NFE',
     destinatarioRazaoSocial: 'Cliente XYZ',
     produtoDescricao: 'Água 20L',
+    quantidade: 1,
+    valorUnitario: 25,
     valorTotal: 25,
   });
   assert.match(msg, /NF-e \(produto\)/);
-  assert.match(msg, /Produto: Água 20L/);
+  assert.match(msg, /Água 20L 1 item/);
+  assert.match(msg, /Preço:/);
+  assert.match(msg, /Valor total:/);
+});
+
+test('buildNfConfirmRequestUserMessage — NF-e com quantidade e preço unitário', () => {
+  const msg = buildNfConfirmRequestUserMessage({
+    documentType: 'NFE',
+    destinatarioRazaoSocial: 'Marli',
+    valorTotal: 100,
+    itens: [
+      { produtoDescricao: 'Anel de aço', quantidade: 10, valorUnitario: 10, valorTotal: 100 },
+    ],
+  });
+  assert.match(msg, /Anel de aço 10 itens/);
+  assert.match(msg, /Preço:/);
+  assert.match(msg, /Valor total:/);
+  assert.match(msg, /R\$\s*10,00/);
+  assert.match(msg, /R\$\s*100,00/);
 });
 
 test('buildNfConfirmRequestUserMessage — NF-e com vários produtos', () => {
@@ -50,14 +70,13 @@ test('buildNfConfirmRequestUserMessage — NF-e com vários produtos', () => {
     produtoDescricao: 'Camisa branca; Água 20L',
     valorTotal: 22,
     itens: [
-      { produtoDescricao: 'Camisa branca', quantidade: 2, valorTotal: 10 },
-      { produtoDescricao: 'Água 20L', quantidade: 1, valorTotal: 12 },
+      { produtoDescricao: 'Camisa branca', quantidade: 2, valorUnitario: 5, valorTotal: 10 },
+      { produtoDescricao: 'Água 20L', quantidade: 1, valorUnitario: 12, valorTotal: 12 },
     ],
   });
-  assert.match(msg, /Produtos:/);
-  assert.match(msg, /1\. Camisa branca/);
-  assert.match(msg, /2\. Água 20L/);
-  assert.match(msg, /Valor total/);
+  assert.match(msg, /Camisa branca 2 itens/);
+  assert.match(msg, /Água 20L 1 item/);
+  assert.match(msg, /Valor total da nota/);
   assert.match(msg, /R\$\s*22,00/);
 });
 
@@ -68,15 +87,15 @@ test('buildNfEmittedUserMessage — NF-e com vários produtos', () => {
       destinatarioRazaoSocial: 'João',
       valorTotal: 22,
       itens: [
-        { produtoDescricao: 'Camisa branca', quantidade: 2, valorTotal: 10 },
-        { produtoDescricao: 'Água 20L', valorTotal: 12 },
+        { produtoDescricao: 'Camisa branca', quantidade: 2, valorUnitario: 5, valorTotal: 10 },
+        { produtoDescricao: 'Água 20L', quantidade: 1, valorUnitario: 12, valorTotal: 12 },
       ],
     },
     { status: 'processando', pdfSent: true },
   );
-  assert.match(msg, /1\. Camisa branca/);
-  assert.match(msg, /2\. Água 20L/);
-  assert.match(msg, /Valor total/);
+  assert.match(msg, /Camisa branca 2 itens/);
+  assert.match(msg, /Água 20L 1 item/);
+  assert.match(msg, /Valor total da nota/);
 });
 
 test('buildNfEmittedUserMessage — PDF enviado', () => {

@@ -293,7 +293,7 @@ Lê **`MF-API.md`** no workspace. Para **qualquer** dado da app usa **`exec`** c
 - **`ping`:** `mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"ping"}'` (telefone do remetente no 1º arg).
 - **`list_roles`:** podes omitir `phone` para só o catálogo de cargos; com `phone` inclui o cargo do utilizador em `actorContext`.
 - **`phone`:** **Regra-base:** dígitos (DDI+número) do **remetente** deste chat — para **`list_categories` / `list_contas` / `get_saldo` / `list_transactions` / `create_transaction` / `update_transaction` / `delete_transaction` / `create_conta` / `update_conta` / `delete_conta`**. **Excepção autorizada:** em **`get_das_current`**, se (**admin da empresa**, confirmado por `resolve_user` no remetente) e colaborador com **mesmo `empresaId`** após segundo `resolve_user` no número do colaborador — usa esse **telefone do colaborador** no JSON; ou **superadmin** com conta alvo em `n8n_link`. Nunca inventes número.
-- **`action`:** `resolve_user`, `list_roles`, `get_permissions`, `check_permission`, `list_access_requests`, `approve_access_request`, `reject_access_request`, `list_categories`, `list_contas`, `get_saldo`, `create_conta`, `update_conta`, `delete_conta`, `list_transactions`, `list_calendar_events`, `list_upcoming_calendar_events`, **`get_next_calendar_event`**, **`get_google_calendar_status`**, `create_calendar_event`, `create_transaction`, `update_transaction`, `delete_transaction`, `get_nfse_setup_status`, `list_nfse_clientes`, `register_nfse_cliente`, **`list_nfse_produtos`**, **`list_catalog_servicos`**, **`list_nfe_produtos`**, **`register_nfse_produto`**, **`register_nfe_cliente`**, **`register_nfe_produto`**, `preview_nfse`, `emit_nfse`, **`preview_nfe`**, **`emit_nfe`**, `list_nfse_notas`, `consult_nfse`, `get_nfse_pdf`, `send_nfse_whatsapp`, `get_das_current`, **`send_text_whatsapp`** (entrega da resposta — ver secção crítica no topo), ou `ping`.
+- **`action`:** `resolve_user`, `list_roles`, `get_permissions`, `check_permission`, `list_access_requests`, `approve_access_request`, `reject_access_request`, `list_categories`, `list_contas`, `get_saldo`, `create_conta`, `update_conta`, `delete_conta`, `list_transactions`, `list_calendar_events`, `list_upcoming_calendar_events`, **`get_next_calendar_event`**, **`get_google_calendar_status`**, `create_calendar_event`, `create_transaction`, `update_transaction`, `delete_transaction`, `get_nfse_setup_status`, `list_nfse_clientes`, `register_nfse_cliente`, **`list_nfse_produtos`**, **`list_catalog_servicos`**, **`list_nfe_produtos`**, **`list_nfe_clientes`**, **`list_nfe_catalogo`**, **`register_nfse_produto`**, **`register_nfe_cliente`**, **`register_nfe_produto`**, `preview_nfse`, `emit_nfse`, **`preview_nfe`**, **`emit_nfe`**, `list_nfse_notas`, `consult_nfse`, `get_nfse_pdf`, `send_nfse_whatsapp`, `get_das_current`, **`send_text_whatsapp`** (entrega da resposta — ver secção crítica no topo), ou `ping`.
 - Em **cada** resposta com utilizador resolvido, o JSON inclui **`data.actorContext`**: **`profileRole`**, **`hasSuperadminCapability`**, `memberships` (cargo `role`, `empresaNome`, **`empresaId`**, …), **`hasActiveMembership`**. Usa **obrigatoriamente** para aplicar as regras de cargo antes de prometer ou executar algo (**comparar `empresaId`** admin × colaborador antes de **`get_das_current`** alheio). **Lançamentos** via API ficam sempre no **`user_id` do `phone` enviado** (não “toda a empresa”).
 - **Referência técnica completa:** ficheiro **`MF-API.md`** (ou `MF-API.md` no teu workspace com o mesmo conteúdo).
 
@@ -355,7 +355,7 @@ Só use `create_transaction` para *recebi*, *gastei*, *lança* **sem** pedir not
 
 | Pedido do utilizador (texto ou áudio) | Fluxo | Actions |
 |---------------------------------------|--------|---------|
-| *nota de **produto***, *NF-e*, *mercadoria*, *camisa*, *água*, *SKU*, *NCM*, *vender produto*, lista **"Produtos:"** já mostrada | **NF-e** | `list_nfe_produtos` → `preview_nfe` → `emit_nfe` |
+| *nota de **produto***, *NF-e*, *mercadoria*, *camisa*, *água*, *SKU*, *NCM*, *vender produto*, lista **"Produtos:"** já mostrada | **NF-e** | `list_nfe_catalogo` → `preview_nfe` → `emit_nfe` |
 | *nota de **serviço***, *NFS-e*, *NFSe*, *prestação*, *código de serviço* | **NFS-e** | `list_catalog_servicos` → `preview_nfse` → `emit_nfse` |
 | *emite nota* / *nota fiscal* **sem** dizer serviço nem produto | **PERGUNTA** | *É nota de **serviço** (NFS-e) ou de **produto** (NF-e)?* — **não** emitas à cegas |
 
@@ -365,8 +365,9 @@ Só use `create_transaction` para *recebi*, *gastei*, *lança* **sem** pedir not
 2. Se nesta conversa já listaste **Produtos:** (SKU/NCM/CFOP) e o utilizador escolheu um → continua em **NF-e**. **PROIBIDO** mudar para NFS-e no meio.
 3. **PROIBIDO** inventar resumo (*Tipo / Cliente / Serviço / Valor / Posso emitir?*) **sem** ter chamado `preview_nfe` ou `preview_nfse` (ou `emit_*` sem `confirm`) e recebido o campo **`message`** da API. Sem JSON da API = **não** mostres preview.
 4. **PROIBIDO** usar `servicoIndice` quando o pedido é produto — `servicoIndice` é **só** NFS-e.
-5. Ex.: *"nota pro Leonardo, camisa branca, R$ 5"* → `preview_nfe` com `destinatarioNome` + `produtoNome`/`produtoIndice` + `valor` — **nunca** `emit_nfse`.
-6. Ex.: *"nota pro João, 2 camisas R$5 e 1 água R$12"* → **um** `preview_nfe` com `itens` (dois objetos). **PROIBIDO** chamar `preview_nfe` / `emit_nfe` duas vezes (uma por produto).
+5. Ex.: *"nota pro Leonardo, camisa branca, 2 itens, R$ 5 cada"* → `preview_nfe` com `destinatarioNome` + `produtoNome` + `quantidade` + `valor` (**unitário**) — **nunca** `emit_nfse`.
+6. Ex.: *"nota pro João, 2 camisas R$5 e 1 água R$12"* → **um** `preview_nfe` com `itens` (dois objetos, cada um com quantidade e preço unitário). **PROIBIDO** chamar `preview_nfe` / `emit_nfe` duas vezes (uma por produto).
+7. Se o utilizador escolheu cliente/produto **sem** quantidade ou **sem** preço unitário (e o produto está sem preço no cadastro) → **pergunte** no formato abaixo. **PROIBIDO** inventar quantidade 1 ou preço.
 
 ### Carteiras, saldo e lançamentos — NÃO confundir
 
@@ -442,7 +443,7 @@ Se o utilizador pedir *"emite nota"*, *"nota de 100 reais para X"* **sem** dizer
 2. **`get_nfse_setup_status`** — lê `data.setup.documentosPermitidos` e `catalogCounts`.
 3. Se **NFS-e e NF-e** estiverem permitidos → pergunta: *É nota de **serviço** (NFS-e) ou de **produto** (NF-e)?*
 4. **Serviço:** `list_catalog_servicos` → mostra lista **numerada** → espera escolha (número ou nome exato) → só então `preview_nfse` com **`servicoIndice`** = número da lista (ex.: `1`). **`descricao` sozinha não conta** se há mais de um serviço — o backend ignora texto inventado pelo modelo.
-5. **Produto:** `list_nfe_produtos` → idem → `preview_nfe` com **`produtoIndice`** ou `produtoNome` = nome exato do catálogo.
+5. **Produto:** `list_nfe_catalogo` → escolha cliente/produto → se faltar qtd/preço unitário, pergunte → `preview_nfe` com **`produtoIndice`** ou `produtoNome` + `quantidade` + `valor` unitário.
 6. Se a API responder `NFSE_SERVICO_CHOICE_REQUIRED`, `NFE_PRODUTO_CHOICE_REQUIRED` ou lista de escolha → repete **só** o `message` (já é a lista) e **espera** a escolha.
 7. Só há **um** serviço/produto no catálogo → podes usar esse automaticamente, mas o resumo de confirmação deve mostrar o **nome real** do catálogo.
 
@@ -483,7 +484,7 @@ Quando pedirem *“nota de serviço”*, *“NFSe”*, *“NFS-e”* (texto ou �
    - Se `enderecoIncomplete: true` na resposta → leia `nextEnderecoField` / `message` e peça **só esse campo**. Quando o utilizador responder, `register_nfse_cliente` com `tomadorNome` + `tomadorIbge` / `tomadorNumero` / etc. Repita até o endereço ficar completo — **não** mande cadastrar na app no meio do fluxo.
 3. **Serviço/produto (catálogo — NÃO confundir com cliente):**
    - *"quais serviços tenho?"* → **`list_catalog_servicos`** ou **`list_nfse_produtos`** (tipo serviço).
-   - *"quais produtos tenho?"* / *"nota de produto"* → **`list_nfe_produtos`** (nunca `list_nfse_clientes`).
+   - *"quais produtos tenho?"* / *"quais clientes tenho?"* / *"nota de produto"* → **`list_nfe_catalogo`** (nunca `list_nfse_clientes`).
    - **Serviço (NFS-e)** e **produto (NF-e)** são catálogos diferentes — lista o certo **antes** de emitir.
    - O catálogo já tem **código municipal** e **CNAE** — **NUNCA** peça CNAE/código se o serviço está cadastrado.
    - Na emissão: `preview_nfse` / `emit_nfse` com **`servicoIndice`** (preferido) ou `codigoServico` do catálogo — o backend resolve discriminação, código e CNAE. **`descricao` sozinha não basta** com vários serviços.
@@ -526,40 +527,53 @@ O `UUID_DA_NOTA` vem de `emit_nfse` → `data.nota.id`. Se automático desligado
 
 ### NF-e (nota fiscal de produto) pelo WhatsApp
 
-Quando pedirem *“nota de produto”*, *“NF-e”*, *“vender mercadoria”*, *“camisa”*, *“água”*, ou qualquer item de **`list_nfe_produtos`*:
+Quando pedirem *nota de produto*, *NF-e*, *vender mercadoria*, *lista meus clientes e produtos*, ou qualquer item do catálogo NF-e:
 
-1. **`get_nfse_setup_status`** — certificado e dados fiscais do emitente (mesmo pré-requisito). NF-e também exige liberação pelo **admin** (`NFE_NOT_ALLOWED` se não liberado).
-2. **Antes de emitir, lista o catálogo:**
-   - **`list_nfe_produtos`** — mostra produtos com SKU, NCM, CFOP e valor sugerido.
-   - **`list_nfse_clientes`** — clientes (mesmo catálogo de destinatários).
-   - Se produtos vazio → **`register_nfe_produto`**: `discriminacao`, `codigo` (SKU), `ncm` (8 dígitos), opcional `valor`, `cfop` (padrão 5102).
-3. **Cliente (destinatário):** por nome → `list_nfse_clientes` ou `destinatarioNome` no payload.
-   - NF-e exige **endereço completo**. Se cliente novo ou sem endereço → **`register_nfe_cliente`** com CPF/CNPJ, nome e endereço (CEP, logradouro, número, bairro, cidade, UF, código IBGE). CNPJ pode preencher endereço via BrasilAPI.
-4. Coleta **valor** (e **produto** se houver vários no catálogo). Se o pedido tiver **mais de um produto**, monte `itens` (não peça duas notas).
-5. Se **não** souber o produto → **`list_nfe_produtos`** primeiro. Com vários itens, use `produtoIndice` ou `produtoNome` **em cada linha** de `itens`.
-6. **`preview_nfe`** (obrigatório antes do *sim*) — repete **só** o **`message`** da API (deve dizer **NF-e (produto)** + produto real do catálogo; se houver 2+ itens, a mensagem lista todos e o valor total).
-7. Após *sim* / *confirmo*, **`emit_nfe`** com **`"confirm":true` só no JSON interno** — o utilizador não vê esse detalhe.
+1. **`get_nfse_setup_status`** — certificado e dados fiscais do emitente. NF-e também exige liberação pelo admin.
+2. **Primeiro passo — listar clientes e produtos juntos:**
+   - **`list_nfe_catalogo`** — clientes NF-e e produtos NF-e numerados. Use quando pedirem *lista meus clientes/produtos* ou *quero emitir nota*.
+   - Alternativas: **`list_nfe_clientes`** / **`list_nfe_produtos`**.
+   - **PROIBIDO** `list_nfse_clientes` neste fluxo (catálogo de serviço).
+   - Se produtos vazio → **`register_nfe_produto`**: discriminacao, codigo (SKU), ncm (8 dígitos), opcional valor, cfop (padrão 5102).
+3. **O utilizador escolhe** o cliente e o(s) produto(s) pelo número ou nome da lista.
+4. **Quantidade e preço unitário:**
+   - Quantidade **não** se assume 1. Se não disse quantos itens → **pergunte**.
+   - Preço = **preço de 1 item**. Se o cadastro está *sem preço* e ele não mandou valor → **pergunte**.
+   - Se o cadastro já tem preço e ele não falou valor, podes usar o do cadastro — mas **sempre** confirma a quantidade.
+   - **PROIBIDO** inventar quantidade ou preço. **PROIBIDO** tratar o valor dele como total da nota.
+   - Peça e aceite neste formato:
 
-Exemplo (pedido: *"nota pro Leonardo, camisa branca, R$ 5"*):
-
-```bash
-/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"list_nfe_produtos","payload":{}}'
-/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"preview_nfe","payload":{"destinatarioNome":"Leonardo de Lima","produtoNome":"Camisa branca","valor":5}}'
-/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"emit_nfe","payload":{"destinatarioNome":"Leonardo de Lima","produtoNome":"Camisa branca","valor":5,"confirm":true}}'
+```
+Anel de aço 10 itens
+Preço: 10 reais
 ```
 
-**Vários produtos na mesma NF-e:** use `itens` (ou `produtos` / `items`) — um objeto por linha, com `produtoNome` / `produtoIndice` / `produtoId`, `valor` (ou `valorUnitario`) e `quantidade` opcional. Payload antigo (só `produtoNome` + `valor`) continua válido.
+     Isso é `quantidade: 10` e `valor: 10` (unitário). Total 100 — a API calcula.
+5. Cliente novo ou sem endereço → **`register_nfe_cliente`** com CPF/CNPJ, nome e endereço completo.
+6. Mais de um produto → monte `itens` (uma nota só).
+7. **`preview_nfe`** antes do *sim*. Se a API pedir quantidade/preço, repita só o `message` e espere. Não emita.
+8. Após *sim* / *confirmo*, **`emit_nfe`** com **`"confirm":true` só no JSON interno** — mesmos quantidade e valor unitário.
 
-Quando o utilizador pedir *“nota com camisa e água”* ou *“2 camisas e 1 água”* → **monte `itens` com um objeto por produto** e emita **uma** NF-e. **PROIBIDO** emitir uma nota por produto.
+Exemplo (pedido: *nota pra Marli, anel de aço, 10 itens, 10 reais cada*):
 
 ```bash
-/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"preview_nfe","payload":{"destinatarioNome":"Leonardo de Lima","itens":[{"produtoNome":"Camisa branca","valor":5,"quantidade":2},{"produtoNome":"Agua 20L","valor":12}]}}'
-/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"emit_nfe","payload":{"destinatarioNome":"Leonardo de Lima","itens":[{"produtoNome":"Camisa branca","valor":5,"quantidade":2},{"produtoNome":"Agua 20L","valor":12}],"confirm":true}}'
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"list_nfe_catalogo","payload":{}}'
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"preview_nfe","payload":{"destinatarioNome":"Marli","produtoNome":"Anel de aço","quantidade":10,"valor":10}}'
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"emit_nfe","payload":{"destinatarioNome":"Marli","produtoNome":"Anel de aço","quantidade":10,"valor":10,"confirm":true}}'
 ```
 
-- **PROIBIDO** `emit_nfse` / `servicoIndice` / inventar serviço (ex.: *transporte rodoviário*) quando o pedido é produto.
-- **PROIBIDO** emitir sem listar produtos quando o utilizador não souber qual item escolher — mostra `list_nfe_produtos` numerada.
-- Se já mostraste a lista de produtos nesta conversa e o utilizador escolheu (ex.: *camisa* + valor) → vai direto a `preview_nfe` (não perguntes de novo o tipo).
+**Vários produtos na mesma NF-e:** use `itens` — um objeto por linha, com produtoNome / produtoIndice, valor (**unitário**) e quantidade.
+
+Quando o utilizador pedir *nota com camisa e água* → se faltar qtd/preço de algum, pergunte **por produto**. Depois **uma** NF-e com `itens`.
+
+```bash
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"preview_nfe","payload":{"destinatarioNome":"Leonardo de Lima","itens":[{"produtoNome":"Camisa branca","valor":5,"quantidade":2},{"produtoNome":"Agua 20L","valor":12,"quantidade":1}]}}'
+/home/node/.openclaw/workspace/mf-curl.sh TELEFONE_REMETENTE_55 '{"action":"emit_nfe","payload":{"destinatarioNome":"Leonardo de Lima","itens":[{"produtoNome":"Camisa branca","valor":5,"quantidade":2},{"produtoNome":"Agua 20L","valor":12,"quantidade":1}],"confirm":true}}'
+```
+
+- **PROIBIDO** `emit_nfse` / `servicoIndice` quando o pedido é produto.
+- **PROIBIDO** emitir sem listar clientes/produtos quando o utilizador não souber o que escolher — mostra `list_nfe_catalogo`.
+- Se já mostraste a lista nesta conversa e o utilizador escolheu (ex.: *anel de aço 10 itens preço 10*) → vai direto a `preview_nfe`.
 
 ### Segurança e apagar
 
