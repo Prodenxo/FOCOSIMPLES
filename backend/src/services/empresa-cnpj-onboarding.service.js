@@ -24,6 +24,9 @@ const EMPRESA_ONBOARDING_FIELDS = [
   'email',
 ];
 
+/** Precisa incluir `id` — o status 400 "Empresa não encontrada" vinha de select sem essa coluna. */
+export const EMPRESA_ONBOARDING_SELECT = ['id', ...EMPRESA_ONBOARDING_FIELDS].join(', ');
+
 const normalizeEmpresaText = (value) => {
   if (value === undefined) return undefined;
   if (value === null) return null;
@@ -82,12 +85,12 @@ export const getEmpresaCnpjOnboardingStatus = async (accessToken) => {
   const adminClient = createSupabaseClient({ useServiceRole: true });
   const { data, error } = await adminClient
     .from('empresas')
-    .select(EMPRESA_ONBOARDING_FIELDS.join(', '))
+    .select(EMPRESA_ONBOARDING_SELECT)
     .eq('id', empresaId)
     .maybeSingle();
 
   if (error) throw badRequest(error.message);
-  if (!data?.id) throw badRequest('Empresa não encontrada');
+  if (!data) throw badRequest('Empresa não encontrada');
 
   return {
     required: !isValidEmpresaCnpj(data.cnpj),
@@ -127,11 +130,11 @@ export const completeEmpresaCnpjOnboarding = async (accessToken, input = {}) => 
     .from('empresas')
     .update(updates)
     .eq('id', empresaId)
-    .select(EMPRESA_ONBOARDING_FIELDS.join(', '))
+    .select(EMPRESA_ONBOARDING_SELECT)
     .maybeSingle();
 
   if (error) throw badRequest(error.message || 'Erro ao salvar dados da empresa');
-  if (!data?.id) throw badRequest('Empresa não encontrada');
+  if (!data) throw badRequest('Empresa não encontrada');
 
   return { empresa: data, required: false };
 };

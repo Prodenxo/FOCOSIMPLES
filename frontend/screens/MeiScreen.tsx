@@ -1481,7 +1481,9 @@ function MeiScreenContent() {
               || 'Integração Simples Nacional (PGDAS-D) não configurada no servidor.',
           );
         } else if (data?.remoteError) {
-          setMeiPeriodsError(toMeiUserErrorMessage(data.remoteError));
+          const friendly = toMeiUserErrorMessage(data.remoteError);
+          const genericConsulta = friendly === 'Não foi possível consultar agora. Tente de novo.';
+          setMeiPeriodsError(rows.length > 0 && genericConsulta ? null : friendly);
         } else if (rows.length === 0) {
           setMeiPeriodsError(
             'Nenhuma declaração PGDAS-D encontrada para este CNPJ neste ano. '

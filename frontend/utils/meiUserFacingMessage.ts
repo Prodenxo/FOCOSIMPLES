@@ -8,6 +8,7 @@ const TECHNICAL_MARKERS = [
   'termo de autorização',
   'jwt_token',
   'icgerenciador',
+  'runtime error',
 ]
 
 /**
