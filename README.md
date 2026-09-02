@@ -1,44 +1,34 @@
-# FocoSimples
+# Foco Simples
 
-Produto irmão do FocoMEI: **mesmo layout** (financeiro + emissão de notas), cliente/domínio/base **separados**.
+Site de finanças e notas fiscais: [focosimples.com.br](https://focosimples.com.br)
 
-**Repo:** `Documents/Dev/FOCOSIMPLES` (não fica no monorepo FOCOMEI).
+| Pasta | O que é |
+|-------|---------|
+| `/` (raiz) | Site (Expo web) |
+| `backend/` | API |
 
-## Estrutura
-
-| Pasta | Conteúdo |
-|-------|----------|
-| `/` (raiz) | Frontend Expo (web/mobile) |
-| `backend/` | API Express (cópia do backend FocoMEI) |
-
-## Banco
-
-Sem projeto Supabase novo por enquanto (custo compute). Quando tiver base:
-1. Clonar só **schema** do FocoMEI (sem dados de usuário)
-2. Preencher `backend/.env` e `./.env` com URL/keys dessa base
-
-## Subir local (quando tiver .env)
+## Subir no computador
 
 ```bash
-# Backend
+# API
 cd backend
 cp .env.example .env
 npm install
-npm run dev   # :3333
+npm run dev
 
-# Frontend (outra aba)
+# Site (outra janela)
 cd ..
 cp .env.example .env
-# EXPO_PUBLIC_MEI_API_URL_DEV=http://localhost:3333
 npm install --legacy-peer-deps
 npx expo start --web
 ```
 
-## Escopo
+No `.env` do site, a API local fica assim:
 
-| Hoje | Depois |
-|------|--------|
-| Nota + financeiro | DAS Serpro |
-| Brand FocoSimples | Domínio + Easypanel |
+```
+EXPO_PUBLIC_MEI_API_URL_DEV=http://localhost:3333
+```
 
-Não misturar secrets/Supabase de produção do FocoMEI.
+## Produção
+
+No Easypanel: **Deploy** do backend e do site. Restart sozinho não pega código novo.

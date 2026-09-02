@@ -17,6 +17,7 @@ mei-empresas-full-*/
 
 # Expo / Metro
 .expo/
+.expo-web-check/
 dist/
 web-build/
 expo-env.d.ts
