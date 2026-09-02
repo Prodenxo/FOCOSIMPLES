@@ -49,7 +49,10 @@ const toObject = (value) => (
 export const isOpenclawNfseAutoWhatsappEnabled = () => {
   const raw = process.env.OPENCLAW_NFSE_AUTO_WHATSAPP_ENABLED
     ?? env.OPENCLAW_NFSE_AUTO_WHATSAPP_ENABLED;
-  return String(raw || '').toLowerCase() === 'true';
+  const v = String(raw || '').trim().toLowerCase();
+  if (v === 'false' || v === '0' || v === 'off') return false;
+  if (v === 'true' || v === '1' || v === 'on') return true;
+  return isWhatsappOutboundConfigured();
 };
 
 /** NF-e/NFC-e: flag própria ou herda NFSe. */

@@ -2157,9 +2157,12 @@ export const runOpenclawAction = async (input) => {
       const destinationPhone = resolveOpenclawWhatsappPhone(phoneDigits, matchedUserNumber);
       const pdfReady = isOpenclawNotaPdfReadyStatus(status);
       const autoEnabled = isOpenclawNotaAutoWhatsappEnabled('NFE');
+      const outboundOk = isWhatsappOutboundConfigured();
+      const shouldPushPdf = outboundOk && Boolean(destinationPhone && nota?.id)
+        && (autoEnabled || pdfReady);
       let autoWhatsapp = null;
 
-      if (autoEnabled && destinationPhone && nota?.id && !result.deduplicated) {
+      if (shouldPushPdf && !result.deduplicated) {
         await registerOpenclawNfseWhatsappDelivery(userId, nota.id, destinationPhone);
         if (pdfReady) {
           autoWhatsapp = await deliverOpenclawNfseWhatsappPdf(
@@ -2174,7 +2177,7 @@ export const runOpenclawAction = async (input) => {
       const autoFailed = ['failed', 'skipped_no_whatsapp'].includes(
         autoWhatsapp?.whatsappStatus || '',
       );
-      if (autoEnabled && nota?.id && !autoSent && !result.deduplicated) {
+      if (shouldPushPdf && nota?.id && !autoSent && !result.deduplicated) {
         scheduleOpenclawNfseWhatsappDeliveryRetries(userId, nota.id, 'NFE');
       }
 
@@ -2187,7 +2190,7 @@ export const runOpenclawAction = async (input) => {
         message: buildNfEmittedUserMessage(result.preview, {
           status,
           pdfSent: autoSent,
-          pdfPending: autoEnabled && !pdfReady && !autoSent,
+          pdfPending: shouldPushPdf && !pdfReady && !autoSent,
         }),
         data: {
           nota: {
@@ -2328,9 +2331,12 @@ export const runOpenclawAction = async (input) => {
       const destinationPhone = resolveOpenclawWhatsappPhone(phoneDigits, matchedUserNumber);
       const pdfReady = isNfsePdfReadyStatus(status);
       const autoEnabled = isOpenclawNfseAutoWhatsappEnabled();
+      const outboundOk = isWhatsappOutboundConfigured();
+      const shouldPushPdf = outboundOk && Boolean(destinationPhone && nota?.id)
+        && (autoEnabled || pdfReady);
       let autoWhatsapp = null;
 
-      if (autoEnabled && destinationPhone && nota?.id && !result.deduplicated) {
+      if (shouldPushPdf && !result.deduplicated) {
         await registerOpenclawNfseWhatsappDelivery(userId, nota.id, destinationPhone);
         if (pdfReady) {
           autoWhatsapp = await deliverOpenclawNfseWhatsappPdf(
@@ -2345,7 +2351,7 @@ export const runOpenclawAction = async (input) => {
       const autoFailed = ['failed', 'skipped_no_whatsapp'].includes(
         autoWhatsapp?.whatsappStatus || '',
       );
-      if (autoEnabled && nota?.id && !autoSent && !result.deduplicated) {
+      if (shouldPushPdf && nota?.id && !autoSent && !result.deduplicated) {
         scheduleOpenclawNfseWhatsappDeliveryRetries(userId, nota.id, 'NFSE');
       }
       const useOpenclawScriptFallback = !autoSent && (!autoEnabled || autoFailed);
@@ -2357,7 +2363,7 @@ export const runOpenclawAction = async (input) => {
       const userMessage = buildNfEmittedUserMessage(result.preview, {
         status,
         pdfSent: autoSent,
-        pdfPending: autoEnabled && !pdfReady,
+        pdfPending: shouldPushPdf && !pdfReady && !autoSent,
       });
 
       let agentInstructions =

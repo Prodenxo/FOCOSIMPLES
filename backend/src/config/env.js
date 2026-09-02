@@ -368,7 +368,7 @@ export const env = {
    */
   NCM_SYNC_ENABLED: process.env.NCM_SYNC_ENABLED || 'true',
   OPENCLAW_NFSE_AUTO_WHATSAPP_ENABLED:
-    process.env.OPENCLAW_NFSE_AUTO_WHATSAPP_ENABLED || "false",
+    process.env.OPENCLAW_NFSE_AUTO_WHATSAPP_ENABLED ?? "",
   /**
    * `true`: após `emit_nfe`/`emit_nfce` pelo OpenClaw, envia PDF via Z-API (mesmo cron que NFSe).
    * Se omitido, herda OPENCLAW_NFSE_AUTO_WHATSAPP_ENABLED.

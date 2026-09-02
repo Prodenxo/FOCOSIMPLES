@@ -116,8 +116,10 @@ export const buildNfEmittedUserMessage = (preview = {}, opts = {}) => {
   let footer = '';
   if (opts.pdfSent) {
     footer = 'Enviei o PDF da nota aqui no WhatsApp.';
-  } else if (opts.pdfPending !== false) {
+  } else if (opts.pdfPending) {
     footer = 'Assim que a nota for autorizada, envio o PDF neste chat.';
+  } else {
+    footer = 'Se o PDF não aparecer neste chat, responda *manda o PDF*.';
   }
 
   const lines = [
