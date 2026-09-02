@@ -22,7 +22,7 @@ import {
   getMeiCertificateUploadToast,
 } from '../lib/meiCertificateUpload'
 import { formatApiNetworkError } from '../lib/apiNetworkError';
-import { alertDialog } from '../lib/confirmDialog';
+import { alertDialog, confirmDialog } from '../lib/confirmDialog';
 import { APP_BRAND_NAME } from '../lib/appBrand';
 import {
   DAS_PAGE_DESC,
@@ -1884,22 +1884,36 @@ function MeiScreenContent() {
     [styles, isDarkMode]
   );
 
+  const offerPgdasdAfterDasMessage = async (title: string, message: string) => {
+    showToast(message, 'info');
+    const openPortal = await confirmDialog({
+      title,
+      message: `${message}\n\nAbrir o site da Receita (${DAS_PORTAL_LABEL}) agora?`,
+      confirmLabel: `Abrir ${DAS_PORTAL_LABEL}`,
+      cancelLabel: 'Agora não',
+    });
+    if (openPortal) void handleOpenPgmei();
+  };
+
   const handleCreateGuide = async () => {
     if (normalizedCnpj.length !== 14 || (!isFocoSimplesUi && !contribuinteTipo)) {
-      Alert.alert('Erro', 'Informe um CNPJ válido');
+      alertDialog('Erro', 'Informe um CNPJ válido');
       return;
     }
+    // Sempre o último mês fechado (hoje 02/09 → 08/2026). Não usa a linha clicada.
+    const closed = getDefaultPeriod();
+    const periodoApuracao = `${closed.year}${closed.month}`;
+    const periodoLabel = `${closed.month}/${closed.year}`;
+    setSelectedYear(closed.year);
+    setSelectedMonth(closed.month);
     setCreateGuideLoading(true);
     try {
-      const periodoApuracao = `${selectedYear}${selectedMonth}`;
-
       if (isFocoSimplesUi) {
         const guide = await gerarSimplesDas({ cnpj: normalizedCnpj, periodoApuracao });
         if (!guide?.pdfBase64) {
-          Alert.alert(
-            'Sem PDF',
-            'A Receita não devolveu o arquivo. Confirme a declaração no PGDAS-D.',
-            [{ text: `Abrir ${DAS_PORTAL_LABEL}`, onPress: () => void handleOpenPgmei() }, { text: 'OK' }],
+          await offerPgdasdAfterDasMessage(
+            `Sem PDF de ${periodoLabel}`,
+            `A Receita não devolveu a guia de ${periodoLabel}. Envie a declaração desse mês no PGDAS-D e tente de novo.`,
           );
           return;
         }
@@ -1911,7 +1925,7 @@ function MeiScreenContent() {
           mimeType: 'application/pdf',
           dialogTitle: 'DAS Simples Nacional',
         });
-        Alert.alert('Sucesso', 'PDF do DAS Simples gerado.');
+        alertDialog('Sucesso', `PDF do DAS ${periodoLabel} gerado.`);
         loadMeiPeriods({ refresh: true });
         return;
       }
@@ -1924,10 +1938,9 @@ function MeiScreenContent() {
       const guide = await createMeiGuide(input);
 
       if (!guide?.pdfBase64) {
-        Alert.alert(
-          'Sem PDF',
-          'A Receita não devolveu o arquivo. Para mês já pago, baixe o comprovante no PGDAS-D.',
-          [{ text: `Abrir ${DAS_PORTAL_LABEL}`, onPress: () => void handleOpenPgmei() }, { text: 'OK' }]
+        await offerPgdasdAfterDasMessage(
+          `Sem PDF de ${periodoLabel}`,
+          `A Receita não devolveu a guia de ${periodoLabel}. Para mês já pago, baixe o comprovante no PGDAS-D.`,
         );
         return;
       }
@@ -1940,40 +1953,36 @@ function MeiScreenContent() {
         mimeType: 'application/pdf',
         dialogTitle: DAS_GUIDE_DIALOG_TITLE,
       });
-      Alert.alert('Sucesso', 'PDF gerado. Abra o arquivo e confira se o nome é o seu (Fernando).');
+      alertDialog('Sucesso', `PDF gerado (${periodoLabel}).`);
       loadMeiPeriods({ refresh: true });
     } catch (e: any) {
       const msg = String(e?.message || 'Não foi possível criar a guia');
       const code = String(e?.code || e?.errors?.code || '');
+      const friendly = toMeiUserErrorMessage(msg);
       const isSemDebito = code === 'PGDASD_SEM_DEBITO'
         || /msg_e0139|sem valor devido|n[aã]o foi gerado das/i.test(msg);
       const isIndisponivel = code === 'MEI_DAS_PERIODO_INDISPONIVEL'
         || /indispon[ií]vel|n[aã]o era optante/i.test(msg);
       if (isSemDebito) {
-        Alert.alert(
-          'Sem DAS — Receita sem imposto devido',
-          'A declaração deste mês está na Receita, mas não há guia DAS porque o cálculo deu zero. '
-          + 'Se a loja teve faturamento, retifique a declaração no PGDAS-D (com o contador) e tente de novo.',
-          [
-            { text: `Abrir ${DAS_PORTAL_LABEL}`, onPress: () => void handleOpenPgmei() },
-            { text: 'OK' },
-          ],
+        await offerPgdasdAfterDasMessage(
+          `Sem DAS em ${periodoLabel}`,
+          `A Receita não emitiu guia de ${periodoLabel} porque não há imposto a pagar. `
+          + 'Se houve venda, a declaração pode estar zerada — retifique no PGDAS-D.',
         );
       } else if (isIndisponivel) {
-        Alert.alert('Período indisponível', msg);
+        alertDialog(`Período ${periodoLabel} indisponível`, friendly);
       } else if (
-        String(e?.code || '') === 'MEI_DAS_PAID_NO_PDF' || /j[aá]\s*pago|n[aã]o devolveu/i.test(msg)
+        code === 'MEI_DAS_PAID_NO_PDF' || /j[aá]\s*pago/i.test(msg)
       ) {
-        Alert.alert(
-          'Mês já pago',
-          `${msg}\n\nBaixe o comprovante no site da Receita (${DAS_PORTAL_LABEL}).`,
-          [
-            { text: `Abrir ${DAS_PORTAL_LABEL}`, onPress: () => void handleOpenPgmei() },
-            { text: 'OK' },
-          ]
+        await offerPgdasdAfterDasMessage(
+          `Mês ${periodoLabel} já pago`,
+          `${friendly}\n\nBaixe o comprovante no site da Receita.`,
         );
       } else {
-        Alert.alert('Erro ao criar guia', msg);
+        await offerPgdasdAfterDasMessage(
+          `Não deu para gerar ${periodoLabel}`,
+          friendly,
+        );
       }
     } finally {
       setCreateGuideLoading(false);

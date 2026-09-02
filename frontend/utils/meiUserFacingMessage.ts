@@ -51,6 +51,14 @@ function rewriteKnownFiscalErrors (raw: string): string | null {
     return 'O CNPJ do certificado diverge do CNPJ da empresa cadastrada.'
   }
 
+  if (
+    /pgdasd_das_no_pdf/i.test(raw)
+    || /declara[cç][aã]o do per[ií]odo j[aá] foi transmitida/i.test(raw)
+    || /n[aã]o devolveu o (arquivo|pdf) do das/i.test(raw)
+  ) {
+    return 'A Receita ainda não tem a declaração deste mês. Envie o mês no PGDAS-D e depois gere a guia de novo.'
+  }
+
   return null
 }
 
