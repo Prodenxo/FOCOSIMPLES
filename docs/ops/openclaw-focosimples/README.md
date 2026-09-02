@@ -2,14 +2,6 @@
 
 Pacote para o serviço **`openclaw-focosimples`** no Easypanel.
 
-## Gerar / atualizar SOUL
-
-```bash
-node docs/ops/openclaw-focosimples/port-soul-from-focomei.mjs
-```
-
-Fonte: `FOCOMEI/docs/ops/openclaw-focomei/SOUL.md` (paridade funcional).
-
 ## Deploy no OpenClaw (Easypanel Console)
 
 O container OpenClaw **não** tem o repo em `/app`. Use **curl do GitHub** (não caminho local).
