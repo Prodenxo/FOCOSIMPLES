@@ -1,11 +1,11 @@
 # Foco Simples
 
-Site de finanças e notas fiscais: [focosimples.com.br](https://focosimples.com.br)
+Site: [focosimples.com.br](https://focosimples.com.br)
 
-| Pasta | O que é |
-|-------|---------|
-| `/` (raiz) | Site (Expo web) |
-| `backend/` | API |
+```
+backend/   API
+frontend/  site
+```
 
 ## Subir no computador
 
@@ -17,18 +17,21 @@ npm install
 npm run dev
 
 # Site (outra janela)
-cd ..
+cd frontend
 cp .env.example .env
 npm install --legacy-peer-deps
 npx expo start --web
 ```
 
-No `.env` do site, a API local fica assim:
+No `.env` do frontend:
 
 ```
 EXPO_PUBLIC_MEI_API_URL_DEV=http://localhost:3333
 ```
 
-## Produção
+## Produção (Easypanel)
 
-No Easypanel: **Deploy** do backend e do site. Restart sozinho não pega código novo.
+- Backend: pasta `backend`, Dockerfile, porta 3333
+- Site: raiz do repo (o `Dockerfile` da raiz usa `frontend/`), porta 80
+
+Restart sozinho não pega código novo — use **Deploy**.

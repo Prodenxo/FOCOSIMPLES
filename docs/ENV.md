@@ -4,7 +4,7 @@
 
 **Fonte da verdade:** `financas-pessoais://`
 
-- Definido em [`app.json`](../app.json) como `expo.scheme` (deve coincidir com o prebuild nativo).
+- Definido em [`frontend/app.json`](../frontend/app.json) como `expo.scheme` (deve coincidir com o prebuild nativo).
 - O fluxo Google Calendar redireciona para `financas-pessoais://google-callback` (ver `App.tsx`, `google-auth-flow.ts` e Edge Function `google-calendar`).
 - O fluxo de reset de senha (Supabase recovery) usa `financas-pessoais://reset-password` e pode chegar com tokens em hash/query:
   - `financas-pessoais://reset-password#access_token=...&refresh_token=...&type=recovery`
@@ -25,7 +25,7 @@ Valores com prefixo `EXPO_PUBLIC_` entram no bundle do Metro e são **visíveis 
 | `EXPO_PUBLIC_MEI_API_URL`       | Sim      | Base URL da API (Easypanel em produção).                                                                           |
 | `EXPO_PUBLIC_MEI_API_URL_DEV`   | Sim      | Opcional. Só em `__DEV__`: substitui a URL acima (ex.: `http://localhost:3333`).                                   |
 
-**Fallback:** [`app.json`](../app.json) `expo.extra`: `supabaseUrl`, `supabaseAnonKey`, `meiApiUrl` (útil em EAS quando env vars são injetadas no build).
+**Fallback:** [`frontend/app.json`](../frontend/app.json) `expo.extra`: `supabaseUrl`, `supabaseAnonKey`, `meiApiUrl`.
 
 ## O que nunca colocar no app
 

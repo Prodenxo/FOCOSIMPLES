@@ -1,26 +1,35 @@
 # Dependencies
 node_modules/
+frontend/node_modules/
 backend/node_modules/
 
 # Env / secrets
 .env
 .env.*
 !.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
 backend/.env
 backend/.env.*
 !backend/.env.example
 
-# Pacotes de migração MEI (dados + segredos — não versionar)
+# Pacotes de migração (dados + segredos — não versionar)
 mei-empresas-full-*/
 **/secrets/certificates.json
 **/.import-temp-password.txt
 
 # Expo / Metro
 .expo/
+frontend/.expo/
 .expo-web-check/
+frontend/.expo-web-check/
 dist/
+frontend/dist/
 web-build/
+frontend/web-build/
 expo-env.d.ts
+frontend/expo-env.d.ts
 
 # Native
 *.jks

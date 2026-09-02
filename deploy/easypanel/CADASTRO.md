@@ -67,11 +67,11 @@ curl https://SUA-URL-BACKEND/health
 
    | Campo | Valor |
    |-------|--------|
-   | Caminho de Build | **`/`** (raiz — **não** `backend`) |
-   | Dockerfile | **`dockerfile`** ou **`Dockerfile`** |
+   | Caminho de Build | **`/`** (raiz — o Dockerfile da raiz monta a pasta `frontend/`) |
+   | Dockerfile | **`Dockerfile`** |
    | Porta | **`80`** |
 
-   > Linux do Easypanel é case-sensitive: se o build falhar com "dockerfile not found", use `dockerfile` (minúsculo) — arquivo existe na raiz do repo.
+   > O código do site está em `frontend/`. Não aponte o build para `backend`.
 
 5. **Build Args:** deixe **vazio** (não coloque secrets nem URLs aqui).
 6. **Environment:** copie `deploy/easypanel/frontend.env.template` e ajuste URLs:

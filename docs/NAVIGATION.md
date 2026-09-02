@@ -2,9 +2,9 @@
 
 ## Decisão atual
 
-O app usa **navegação custom** em [`navigation/SimpleNavigator.tsx`](../navigation/SimpleNavigator.tsx): um estado local (`currentScreen`) alterna entre telas principais e uma barra inferior customizada, em vez de **Tab / Stack** completos do React Navigation.
+O app usa **navegação custom** em [`frontend/navigation/SimpleNavigator.tsx`](../frontend/navigation/SimpleNavigator.tsx): um estado local (`currentScreen`) alterna entre telas principais e uma barra inferior customizada, em vez de **Tab / Stack** completos do React Navigation.
 
-**Motivo (comentado em [`AppNavigator.tsx`](../navigation/AppNavigator.tsx)):** workaround para falha no Android com **Expo SDK 54 + React 19 + react-native-screens** (`java.lang.String cannot be cast to java.lang.Boolean`).
+**Motivo (comentado em [`AppNavigator.tsx`](../frontend/navigation/AppNavigator.tsx)):** workaround para falha no Android com **Expo SDK 54 + React 19 + react-native-screens** (`java.lang.String cannot be cast to java.lang.Boolean`).
 
 ## Limitações
 

@@ -1,7 +1,8 @@
-# Easypanel pode apontar para a raiz. O site está em frontend/.
 # ── Stage 1: build ───────────────────────────────────────────────────────────
+# bookworm-slim: Expo/Metro costuma falhar em Alpine (musl) ou por OOM sem heap maior.
 FROM node:20-bookworm-slim AS builder
 
+# Build args: Easypanel pode enviar EXPO_PUBLIC_* ou VITE_* (legado)
 ARG EXPO_PUBLIC_SUPABASE_URL
 ARG EXPO_PUBLIC_SUPABASE_ANON_KEY
 ARG EXPO_PUBLIC_MEI_API_URL
@@ -32,17 +33,26 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
-COPY frontend/package.json frontend/package-lock.json ./
+COPY package.json package-lock.json ./
 RUN npm ci --legacy-peer-deps
 
-COPY frontend/ .
+COPY . .
 
+# Normaliza nomes legados VITE_* → EXPO_PUBLIC_* e exporta (mesmo RUN: export não persiste entre layers)
 RUN set -e; \
   export EXPO_PUBLIC_SUPABASE_URL="${EXPO_PUBLIC_SUPABASE_URL:-$VITE_SUPABASE_URL}"; \
   export EXPO_PUBLIC_SUPABASE_ANON_KEY="${EXPO_PUBLIC_SUPABASE_ANON_KEY:-$VITE_SUPABASE_ANON_KEY}"; \
   export EXPO_PUBLIC_MEI_API_URL="${EXPO_PUBLIC_MEI_API_URL:-$VITE_API_URL}"; \
+  if [ -z "$EXPO_PUBLIC_SUPABASE_URL" ] || [ -z "$EXPO_PUBLIC_SUPABASE_ANON_KEY" ]; then \
+    echo "BUILD: Supabase vazio - OK se Environment do Easypanel tiver as vars (runtime via env-config.js)."; \
+  else \
+    echo "BUILD: Supabase configurado."; \
+  fi; \
+  echo "BUILD: APP_PRODUCT=${EXPO_PUBLIC_APP_PRODUCT:-}"; \
   if [ ! -f assets/brand-mark.jpg ]; then \
-    echo "BUILD ERROR: frontend/assets/brand-mark.jpg ausente."; \
+    echo "BUILD ERROR: assets/brand-mark.jpg ausente no contexto Docker."; \
+    echo "BUILD ERROR: verifique .gitignore (nao ignore frontend/assets/)."; \
+    ls -la assets 2>/dev/null || echo "BUILD ERROR: pasta assets/ nao existe"; \
     exit 1; \
   fi; \
   echo "BUILD: iniciando expo export..."; \
@@ -55,8 +65,8 @@ RUN node scripts/patch-web-index.mjs dist/index.html \
 FROM nginx:alpine
 
 COPY --from=builder /app/dist /usr/share/nginx/html
-COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
-COPY frontend/docker-entrypoint.sh /docker-entrypoint.sh
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
 EXPOSE 80
