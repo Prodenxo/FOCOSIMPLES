@@ -276,6 +276,22 @@ export function anoCivilFromIsoCreatedAt(createdAt) {
   return Number.isFinite(n) ? n : null;
 }
 
+/** Competência AAAAMM no fuso America/Sao_Paulo. */
+export function competenciaCivilFromIsoCreatedAt(createdAt) {
+  if (!createdAt) return null;
+  const parsed = new Date(createdAt);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: MEI_LIMITE_ANO_CIVIL_TZ,
+    year: 'numeric',
+    month: '2-digit',
+  }).formatToParts(parsed);
+  const y = parts.find((p) => p.type === 'year')?.value;
+  const m = parts.find((p) => p.type === 'month')?.value;
+  if (!y || !m) return null;
+  return `${y}${m}`;
+}
+
 /**
  * @param {Array<Record<string, unknown>>} rows - linhas com payload_json, response_json, status, created_at, document_type
  * @param {number} anoCivil

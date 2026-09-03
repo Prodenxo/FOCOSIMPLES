@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { mapDeclaracoesToPeriods, buildFallbackPeriodList } from '../src/services/pgdasd/consultar-declaracoes.js'
-import { buildDeclaracaoMensalPayload } from '../src/services/pgdasd/transmitir-declaracao.js'
+import { mapDeclaracoesToPeriods, buildFallbackPeriodList, lastClosedPeriodoApuracao } from '../src/services/pgdasd/consultar-declaracoes.js'
+import { aggregateNotasFaturamentoPeriodo, buildDeclaracaoMensalPayload } from '../src/services/pgdasd/transmitir-declaracao.js'
 import { extractPdfBase64FromPgdasdResponse } from '../src/services/pgdasd/client.js'
 import { inspectPgdasdSerproConfig } from '../src/services/pgdasd/client.js'
 
@@ -24,6 +24,11 @@ describe('pgdasd consultar map', () => {
     assert.equal(periods.length, 1)
     assert.equal(periods[0].periodoApuracao, '202603')
     assert.equal(periods[0].competencia, '2026-03')
+  })
+
+  it('lastClosedPeriodoApuracao é o mês anterior', () => {
+    assert.equal(lastClosedPeriodoApuracao(new Date(2026, 8, 2)), '202608')
+    assert.equal(lastClosedPeriodoApuracao(new Date(2026, 0, 5)), '202512')
   })
 
   it('fallback gera competências (só para integração off)', () => {
@@ -136,6 +141,35 @@ describe('pgdasd consultar map', () => {
     })
     assert.equal(periods[0].numeroDas, '07202620299718700')
     assert.equal(periods[0].status, 'a_pagar')
+  })
+})
+
+describe('pgdasd faturamento notas', () => {
+  it('soma NFS-e e NF-e concluídas do período', () => {
+    const fat = aggregateNotasFaturamentoPeriodo([
+      {
+        document_type: 'NFSE',
+        status: 'concluido',
+        created_at: '2026-08-10T15:00:00.000Z',
+        payload_json: { servico: [{ valor: { servico: 1.13 } }] },
+      },
+      {
+        document_type: 'NFE',
+        status: 'autorizado',
+        created_at: '2026-08-20T15:00:00.000Z',
+        payload_json: { itens: [{ valor: 100, quantidade: 1 }] },
+      },
+      {
+        document_type: 'NFSE',
+        status: 'processando',
+        created_at: '2026-08-12T15:00:00.000Z',
+        payload_json: { servico: [{ valor: { servico: 999 } }] },
+      },
+    ], '202608')
+    assert.equal(fat.count, 2)
+    assert.equal(fat.total, 101.13)
+    assert.equal(fat.porTipo.NFSE, 1)
+    assert.equal(fat.porTipo.NFE, 1)
   })
 })
 

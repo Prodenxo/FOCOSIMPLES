@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View, StyleSheet, Text, ScrollView, Platform } from 'react-native';
+import { View, StyleSheet, Text, ScrollView, Platform, LogBox } from 'react-native';
 import { clearHardReloadQueryFromUrl, hideBootSplash, installWebStaleChunkRecovery } from '@/lib/hardReload';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useThemeStore } from '@/store/themeStore';
@@ -15,6 +15,22 @@ import {
 import ResetPasswordScreen from '@/screens/auth/ResetPasswordScreen';
 import { isAppConfigured } from '@/lib/authMode';
 import { RootErrorBoundary } from '@/components/RootErrorBoundary';
+
+if (__DEV__) {
+  LogBox.ignoreLogs(["The action 'GO_BACK' was not handled by any navigator"]);
+  const originalError = console.error;
+  console.error = (...args: unknown[]) => {
+    const text = args
+      .map((arg) => (typeof arg === 'string' ? arg : arg instanceof Error ? arg.message : ''))
+      .join(' ');
+    if (text.includes("The action 'GO_BACK' was not handled")) return;
+    originalError.apply(console, args as []);
+  };
+}
+
+export const unstable_settings = {
+  initialRouteName: 'index',
+};
 
 type RecoveryUiState =
   | { kind: 'none' }

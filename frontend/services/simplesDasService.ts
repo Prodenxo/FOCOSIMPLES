@@ -66,9 +66,18 @@ export async function downloadSimplesDas (
   return apiClient.get(`/simples-das/${encodeURIComponent(idOrPeriodo)}/download${qs}`)
 }
 
+export type SimplesDasFaturamento = {
+  cnpj?: string
+  total: number
+  count: number
+  periodoApuracao?: string
+  porTipo?: { NFSE?: number; NFE?: number; NFCE?: number }
+  aviso?: string
+}
+
 export async function fetchSimplesDasFaturamento (periodoApuracao: string) {
   const params = new URLSearchParams({ periodo: periodoApuracao })
-  return apiClient.get(`/simples-das/faturamento?${params.toString()}`)
+  return apiClient.get<SimplesDasFaturamento>(`/simples-das/faturamento?${params.toString()}`)
 }
 
 export async function declararSimplesDas (input: {

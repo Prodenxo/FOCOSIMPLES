@@ -80,6 +80,8 @@ import {
   fetchSimplesDasPeriods,
   gerarSimplesDas,
   downloadSimplesDas,
+  fetchSimplesDasFaturamento,
+  declararSimplesDas,
 } from '../services/simplesDasService';
 import {
   listarNfse,
@@ -119,7 +121,6 @@ import {
   buildClienteCatalogLabel,
   buildProdutoCatalogLabel,
 } from '../lib/meiFormatters';
-import { confirmDialog } from '../lib/confirmDialog';
 import { NotaFiscalRowActions } from '../components/NotaFiscalRowActions';
 import { NotaFiscalFailureBanner } from '../components/NotaFiscalFailureBanner';
 import { getNotaCardAccentColor, NotaFiscalListRowHeader } from '../components/NotaFiscalListRowHeader';
@@ -1112,6 +1113,15 @@ function MeiScreenContent() {
   };
 
   const handleDownloadGuide = async (period?: MeiPeriod) => {
+    if (period?.status === 'a_declarar' || period?.podeDeclarar) {
+      const periodo = period
+        ? meiCompetenciaToPeriodoApuracao(period.competencia)
+        : `${selectedYear}${selectedMonth}`;
+      if (periodo) {
+        await handleDeclararEGerar(periodo);
+      }
+      return;
+    }
     const forceGenerateDas = period?.status === 'sem_debito';
     if (normalizedCnpj.length !== 14) {
       Alert.alert('Erro', 'Informe um CNPJ válido do contribuinte');
@@ -1895,6 +1905,96 @@ function MeiScreenContent() {
     if (openPortal) void handleOpenPgmei();
   };
 
+  const handleDeclararEGerar = async (periodoApuracao: string) => {
+    const periodo = String(periodoApuracao || '').replace(/\D/g, '');
+    if (periodo.length !== 6) {
+      alertDialog('Erro', 'Competência inválida.');
+      return;
+    }
+    const periodoLabel = `${periodo.slice(4, 6)}/${periodo.slice(0, 4)}`;
+    if (normalizedCnpj.length !== 14) {
+      alertDialog('Erro', 'Informe um CNPJ válido');
+      return;
+    }
+    if (!hasCertificate) {
+      alertDialog(
+        'Certificado',
+        'Envie o certificado A1 da empresa na aba Certificado antes de declarar.',
+      );
+      return;
+    }
+    setSelectedYear(Number(periodo.slice(0, 4)));
+    setSelectedMonth(periodo.slice(4, 6));
+    setCreateGuideLoading(true);
+    try {
+      const fat = await fetchSimplesDasFaturamento(periodo);
+      const total = Number(fat?.total);
+      const count = Number(fat?.count) || 0;
+      const valorOk = Number.isFinite(total) ? total : 0;
+      const confirmed = await confirmDialog({
+        title: `Declarar ${periodoLabel}`,
+        message:
+          `Vou enviar à Receita o faturamento de ${periodoLabel}, somado das notas concluídas neste app.\n\n`
+          + `${count} nota${count === 1 ? '' : 's'} · ${formatCurrencyBR(valorOk)}\n\n`
+          + 'Confira se está certo. Depois disso a Receita pode gerar a guia DAS.',
+        confirmLabel: 'Enviar declaração',
+        cancelLabel: 'Agora não',
+      });
+      if (!confirmed) return;
+
+      await declararSimplesDas({
+        confirm: true,
+        periodoApuracao: periodo,
+        cnpj: normalizedCnpj,
+        valorReceitaInterna: valorOk,
+      });
+
+      try {
+        const guide = await gerarSimplesDas({ cnpj: normalizedCnpj, periodoApuracao: periodo });
+        if (guide?.pdfBase64) {
+          const saved = await saveMeiGuidePdfFromBase64(
+            guide.pdfBase64,
+            guide.filename || `DAS-SN-${periodo}.pdf`,
+          );
+          await presentDownloadedFile(saved, {
+            mimeType: 'application/pdf',
+            dialogTitle: 'DAS Simples Nacional',
+          });
+          alertDialog('Pronto', `Declaração de ${periodoLabel} enviada e guia gerada.`);
+        } else {
+          alertDialog(
+            'Declaração enviada',
+            `A Receita recebeu ${periodoLabel}, mas não devolveu PDF. Atualize a lista ou abra o PGDAS-D.`,
+          );
+        }
+      } catch (genErr: any) {
+        const genMsg = String(genErr?.message || '');
+        const genCode = String(genErr?.code || '');
+        const isSemDebito = genCode === 'PGDASD_SEM_DEBITO'
+          || /msg_e0139|sem valor devido|n[aã]o foi gerado das/i.test(genMsg);
+        if (isSemDebito) {
+          alertDialog(
+            `Declaração de ${periodoLabel} enviada`,
+            'A Receita não gerou guia porque não há imposto a pagar neste mês.',
+          );
+        } else {
+          await offerPgdasdAfterDasMessage(
+            `Declaração de ${periodoLabel} enviada`,
+            toMeiUserErrorMessage(genMsg) || 'Não consegui baixar a guia agora. Atualize a lista ou abra o PGDAS-D.',
+          );
+        }
+      }
+      loadMeiPeriods({ refresh: true });
+    } catch (e: any) {
+      await offerPgdasdAfterDasMessage(
+        `Não deu para declarar ${periodoLabel}`,
+        toMeiUserErrorMessage(e?.message || 'A Receita recusou a declaração.'),
+      );
+    } finally {
+      setCreateGuideLoading(false);
+    }
+  };
+
   const handleCreateGuide = async () => {
     if (normalizedCnpj.length !== 14 || (!isFocoSimplesUi && !contribuinteTipo)) {
       alertDialog('Erro', 'Informe um CNPJ válido');
@@ -1903,32 +2003,15 @@ function MeiScreenContent() {
     // Sempre o último mês fechado (hoje 02/09 → 08/2026). Não usa a linha clicada.
     const closed = getDefaultPeriod();
     const periodoApuracao = `${closed.year}${closed.month}`;
+    if (isFocoSimplesUi) {
+      await handleDeclararEGerar(periodoApuracao);
+      return;
+    }
     const periodoLabel = `${closed.month}/${closed.year}`;
     setSelectedYear(closed.year);
     setSelectedMonth(closed.month);
     setCreateGuideLoading(true);
     try {
-      if (isFocoSimplesUi) {
-        const guide = await gerarSimplesDas({ cnpj: normalizedCnpj, periodoApuracao });
-        if (!guide?.pdfBase64) {
-          await offerPgdasdAfterDasMessage(
-            `Sem PDF de ${periodoLabel}`,
-            `A Receita não devolveu a guia de ${periodoLabel}. Envie a declaração desse mês no PGDAS-D e tente de novo.`,
-          );
-          return;
-        }
-        const saved = await saveMeiGuidePdfFromBase64(
-          guide.pdfBase64,
-          guide.filename || `DAS-SN-${periodoApuracao}.pdf`,
-        );
-        await presentDownloadedFile(saved, {
-          mimeType: 'application/pdf',
-          dialogTitle: 'DAS Simples Nacional',
-        });
-        alertDialog('Sucesso', `PDF do DAS ${periodoLabel} gerado.`);
-        loadMeiPeriods({ refresh: true });
-        return;
-      }
 
       const input = {
         cnpj: normalizedCnpj,

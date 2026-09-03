@@ -20,7 +20,9 @@ export interface MeiGuideResponse {
 
 export interface MeiPeriod {
   competencia: string;
-  status: 'pago' | 'a_pagar' | 'sem_debito' | 'erro' | 'indisponivel';
+  status: 'pago' | 'a_pagar' | 'sem_debito' | 'a_declarar' | 'erro' | 'indisponivel';
+  /** Mês fechado ainda sem declaração na Receita — dá para enviar pelo site. */
+  podeDeclarar?: boolean;
   guideId?: string | null;
   errorMessage?: string | null;
   /** Após dia 20 do mês seguinte à competência e ainda a_pagar. */

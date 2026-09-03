@@ -14,6 +14,7 @@ import { PGDASD_PORTAL_URL, SIMPLES_DAS_NOT_CONFIGURED } from './pgdasd/constant
 import {
   buildFallbackPeriodList,
   consultarDeclaracoesPorAno,
+  lastClosedPeriodoApuracao,
   mapDeclaracoesToPeriods,
   resolveDasIdsDoPeriodo,
 } from './pgdasd/consultar-declaracoes.js'
@@ -198,6 +199,21 @@ export const listSimplesDasPeriods = async (userId, { cnpj, ano, refresh = false
       valorTotal: row.valor_total ?? prev.valorTotal ?? null,
       numeroDocumento: row.numero_documento || prev.numeroDocumento || null,
       hasLocalPdf: isUsableDasPdfCache(row),
+    })
+  }
+
+  const lastClosed = lastClosedPeriodoApuracao()
+  const lastClosedYear = Number(lastClosed.slice(0, 4))
+  if (lastClosedYear === year && !byPeriodo.has(lastClosed)) {
+    byPeriodo.set(lastClosed, {
+      competencia: `${lastClosed.slice(0, 4)}-${lastClosed.slice(4, 6)}`,
+      periodoApuracao: lastClosed,
+      status: 'a_declarar',
+      podeDeclarar: true,
+      tipoOperacao: null,
+      numeroDeclaracao: null,
+      guideId: `pgdasd-${lastClosed}`,
+      errorMessage: null,
     })
   }
 
@@ -457,7 +473,7 @@ export const getSimplesDasFaturamento = async (userId, periodoApuracao) => {
     ...fat,
     draftPreview: draft,
     aviso:
-      'A transmissão oficial (TRANSDECLARACAO11) exige validação contábil dos anexos. Use POST /declarar com confirm=true após revisar.',
+      'Confira o valor das notas concluídas neste app antes de enviar. A Receita recebe esse faturamento.',
   }
 }
 

@@ -80,7 +80,7 @@ export default function ForgotScreen() {
           label="Voltar ao login"
           align="center"
           palette={palette}
-          onPress={() => router.back()}
+          onPress={() => router.replace('/(auth)/login')}
         />
       </AuthLayoutWeb>
     );
@@ -118,7 +118,7 @@ export default function ForgotScreen() {
         label="Voltar ao login"
         align="center"
         palette={palette}
-        onPress={() => router.back()}
+        onPress={() => router.replace('/(auth)/login')}
       />
     </AuthLayoutMobile>
   );

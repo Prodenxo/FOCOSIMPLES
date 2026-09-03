@@ -6,7 +6,7 @@ export default function RegisterScreen() {
   const router = useRouter();
   return (
     <RegisterAuthForm
-      onGoToLogin={() => router.back()}
+      onGoToLogin={() => router.replace('/(auth)/login')}
     />
   );
 }

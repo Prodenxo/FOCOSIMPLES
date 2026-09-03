@@ -3,6 +3,12 @@ import { createSupabaseClient } from '../../config/supabase.js'
 import { env } from '../../config/env.js'
 import { PGDASD_SERVICOS } from './constants.js'
 import { callPgdasdServico } from './client.js'
+import {
+  competenciaCivilFromIsoCreatedAt,
+  extrairValorLimiteSimplesDaNota,
+  isDocumentoLimiteSimplesRow,
+  nfseDeveEntrarNoSomatorioLimite,
+} from '../../utils/meiLimitePayloadSum.js'
 
 const normalizePeriodo = (value) => {
   const digits = String(value || '').replace(/\D/g, '')
@@ -81,51 +87,57 @@ export const buildDeclaracaoMensalPayload = (input = {}) => {
 }
 
 /**
- * Soma faturamento NFS-e autorizadas do usuário no período AAAAMM.
+ * Soma notas concluídas (NFS-e + NF-e + NFC-e) no período AAAAMM.
+ * @param {object[]} rows
+ */
+export const aggregateNotasFaturamentoPeriodo = (rows, periodoApuracao) => {
+  const pa = normalizePeriodo(periodoApuracao)
+  let total = 0
+  let count = 0
+  const porTipo = { NFSE: 0, NFE: 0, NFCE: 0 }
+  for (const row of Array.isArray(rows) ? rows : []) {
+    if (!isDocumentoLimiteSimplesRow(row)) continue
+    if (!nfseDeveEntrarNoSomatorioLimite(row.status)) continue
+    if (pa && competenciaCivilFromIsoCreatedAt(row.created_at) !== pa) continue
+    const valor = extrairValorLimiteSimplesDaNota(row)
+    if (valor === null || valor < 0) continue
+    total += valor
+    count += 1
+    const dt = String(row.document_type || '').toUpperCase()
+    if (Object.prototype.hasOwnProperty.call(porTipo, dt)) porTipo[dt] += 1
+  }
+  return { total, count, porTipo, periodoApuracao: pa }
+}
+
+/**
+ * Soma faturamento de notas autorizadas do usuário no período AAAAMM.
  * @param {string} userId
  * @param {string} periodoApuracao
  */
 export const sumNfseFaturamentoPeriodo = async (userId, periodoApuracao) => {
   const pa = normalizePeriodo(periodoApuracao)
-  if (!userId || !pa) return { total: 0, count: 0 }
+  if (!userId || !pa) return { total: 0, count: 0, porTipo: { NFSE: 0, NFE: 0, NFCE: 0 }, periodoApuracao: pa }
 
   const year = Number(pa.slice(0, 4))
   const month = Number(pa.slice(4, 6))
-  const start = new Date(Date.UTC(year, month - 1, 1)).toISOString()
-  const end = new Date(Date.UTC(year, month, 1)).toISOString()
+  const start = new Date(Date.UTC(year, month - 1, 1) - 4 * 86400000).toISOString()
+  const end = new Date(Date.UTC(year, month, 1) + 4 * 86400000).toISOString()
 
   const db = createSupabaseClient({ useServiceRole: true })
   const { data, error } = await db
     .from('mei_nfse')
-    .select('id, status, payload_json, created_at')
+    .select('id, status, document_type, payload_json, response_json, created_at')
     .eq('user_id', userId)
-    .eq('document_type', 'NFSE')
+    .in('document_type', ['NFSE', 'NFE', 'NFCE'])
     .gte('created_at', start)
     .lt('created_at', end)
     .limit(500)
 
   if (error) {
-    throw badRequest(error.message || 'Falha ao consultar NFS-e do período.')
+    throw badRequest(error.message || 'Falha ao consultar notas do período.')
   }
 
-  let total = 0
-  let count = 0
-  for (const row of data || []) {
-    const st = String(row.status || '').toLowerCase()
-    if (st && !['autorizado', 'autorizada', 'concluido', 'concluído'].includes(st)) {
-      continue
-    }
-    const servicos = row.payload_json?.servico
-    const list = Array.isArray(servicos) ? servicos : servicos ? [servicos] : []
-    for (const s of list) {
-      const v = toNumber(s?.valor?.servico ?? s?.valorServico)
-      if (v > 0) {
-        total += v
-        count += 1
-      }
-    }
-  }
-  return { total, count, periodoApuracao: pa }
+  return aggregateNotasFaturamentoPeriodo(data, pa)
 }
 
 /**

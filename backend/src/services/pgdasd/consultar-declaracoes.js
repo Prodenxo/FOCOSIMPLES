@@ -311,6 +311,14 @@ export const mapDeclaracoesToPeriods = (dados) => {
  * Monta fallback local dos últimos N meses quando SERPRO não devolve lista.
  * @param {number} [count=12]
  */
+/** Último mês civil já fechado (ex.: 2/set → 202608). */
+export const lastClosedPeriodoApuracao = (now = new Date()) => {
+  const d = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  return `${y}${m}`
+}
+
 export const buildFallbackPeriodList = (count = 12) => {
   const now = new Date()
   const rows = []

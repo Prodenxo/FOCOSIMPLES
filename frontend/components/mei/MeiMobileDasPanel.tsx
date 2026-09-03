@@ -52,6 +52,7 @@ type Props = {
 function statusLabel (status: MeiPeriod['status'], vencida = false): string {
   if (status === 'pago') return 'Pago'
   if (status === 'sem_debito') return 'Sem DAS'
+  if (status === 'a_declarar') return 'A declarar'
   if (status === 'a_pagar' && vencida) return 'Vencida'
   if (status === 'a_pagar') return 'A pagar'
   if (status === 'erro') return 'Erro'
@@ -145,7 +146,7 @@ export function MeiMobileDasPanel ({
       (a, b) => competenciaSortKey(b.competencia) - competenciaSortKey(a.competencia),
     )
     if (statusFilter === 'a_pagar') {
-      return sorted.filter((p) => p.status === 'a_pagar')
+      return sorted.filter((p) => p.status === 'a_pagar' || p.status === 'a_declarar')
     }
     if (statusFilter === 'pago') {
       return sorted.filter((p) => p.status === 'pago' || p.status === 'sem_debito')
@@ -295,13 +296,15 @@ export function MeiMobileDasPanel ({
               const vencida = isMeiPeriodVencida(p)
               // Pago também pode baixar (reimpressão / PDF já quitado na Receita).
               const canDownload =
-                (p.status === 'a_pagar' || p.status === 'pago' || p.status === 'sem_debito')
+                (p.status === 'a_pagar' || p.status === 'pago' || p.status === 'sem_debito' || p.status === 'a_declarar')
                 && Boolean(onDownloadPeriod)
               const statusColor =
                 p.status === 'pago'
                   ? theme.success
                   : p.status === 'sem_debito'
                     ? theme.textSecondary
+                  : p.status === 'a_declarar'
+                    ? theme.primary
                   : p.status === 'erro'
                     ? theme.error
                     : p.status === 'indisponivel'
@@ -357,23 +360,27 @@ export function MeiMobileDasPanel ({
                         downloadLoading && selected && styles.ledgerDownloadPillDisabled,
                       ]}
                       onPress={() => onDownloadPeriod?.(p)}
-                      disabled={downloadLoading && selected}
+                      disabled={(downloadLoading && selected) || (createGuideLoading && p.status === 'a_declarar')}
                       accessibilityRole="button"
                       accessibilityLabel={
-                        p.status === 'sem_debito'
+                        p.status === 'a_declarar'
+                          ? `Declarar e gerar DAS de ${formatCompetenciaLabel(p.competencia)}`
+                          : p.status === 'sem_debito'
                           ? `Gerar DAS de ${formatCompetenciaLabel(p.competencia)}`
                           : vencida && p.status === 'a_pagar'
                           ? `Atualizar valor e baixar PDF de ${formatCompetenciaLabel(p.competencia)}`
                           : `Baixar PDF de ${formatCompetenciaLabel(p.competencia)}`
                       }
                     >
-                      {downloadLoading && selected ? (
+                      {(downloadLoading && selected) || (createGuideLoading && p.status === 'a_declarar') ? (
                         <ActivityIndicator size="small" color={isDarkMode ? '#030508' : '#fff'} />
                       ) : (
                         <>
                           <Ionicons
                             name={
-                              p.status === 'sem_debito'
+                              p.status === 'a_declarar'
+                                ? 'send-outline'
+                                : p.status === 'sem_debito'
                                 ? 'create-outline'
                                 : vencida && p.status === 'a_pagar'
                                   ? 'refresh-outline'
@@ -383,7 +390,9 @@ export function MeiMobileDasPanel ({
                             color={isDarkMode ? '#030508' : '#fff'}
                           />
                           <Text style={styles.ledgerDownloadText}>
-                            {p.status === 'sem_debito'
+                            {p.status === 'a_declarar'
+                              ? 'Declarar'
+                              : p.status === 'sem_debito'
                               ? 'Gerar DAS'
                               : vencida && p.status === 'a_pagar'
                                 ? 'Atualizar'
@@ -449,7 +458,7 @@ export function MeiMobileDasPanel ({
             {createGuideLoading ? (
               <ActivityIndicator size="small" color={tokens.accent} />
             ) : (
-              <Text style={styles.advancedBtnText}>Gerar guia nova</Text>
+              <Text style={styles.advancedBtnText}>Declarar mês fechado</Text>
             )}
           </TouchableOpacity>
 
