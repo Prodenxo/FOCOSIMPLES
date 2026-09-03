@@ -1,4 +1,5 @@
 import { env } from '../config/env.js';
+import { recordOpenAiUsage } from './openai-usage.service.js';
 
 const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
 const DOWNLOAD_TIMEOUT_MS = 45_000;
@@ -132,7 +133,7 @@ const transcribeWithOpenAiCompatible = async (buffer, mimeType) => {
     );
     form.append('model', model);
     form.append('language', 'pt');
-    form.append('response_format', 'json');
+    form.append('response_format', creds.provider === 'openai' ? 'verbose_json' : 'json');
 
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), TRANSCRIBE_TIMEOUT_MS);
@@ -154,7 +155,14 @@ const transcribeWithOpenAiCompatible = async (buffer, mimeType) => {
         continue;
       }
       const text = String(payload?.text || '').trim();
-      if (text) return text;
+      if (text) {
+        return {
+          text,
+          model,
+          provider: creds.provider,
+          durationSeconds: Number(payload?.duration) || 0,
+        };
+      }
       lastError = `transcription_empty:${model}`;
     } finally {
       clearTimeout(timer);
@@ -169,7 +177,7 @@ const transcribeWithOpenAiCompatible = async (buffer, mimeType) => {
  * @param {unknown} rawBody — corpo do webhook Z-API
  * @returns {Promise<string|null>}
  */
-export const transcribeZapiInboundAudio = async (rawBody) => {
+export const transcribeZapiInboundAudio = async (rawBody, context = {}) => {
   if (!isWhatsappAudioTranscriptionEnabled()) {
     return null;
   }
@@ -179,8 +187,17 @@ export const transcribeZapiInboundAudio = async (rawBody) => {
 
   try {
     const { buffer, mimeType } = await downloadZapiAudio(audio.audioUrl);
-    const text = await transcribeWithOpenAiCompatible(buffer, mimeType || audio.mimeType);
-    return text;
+    const result = await transcribeWithOpenAiCompatible(buffer, mimeType || audio.mimeType);
+    if (result?.provider === 'openai') {
+      const estimatedSeconds = buffer.length > 0 ? buffer.length / 2500 : 0;
+      void recordOpenAiUsage({
+        source: 'transcription',
+        model: result.model,
+        phone: context.phone,
+        audioSeconds: result.durationSeconds || estimatedSeconds,
+      });
+    }
+    return result?.text || null;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     // eslint-disable-next-line no-console

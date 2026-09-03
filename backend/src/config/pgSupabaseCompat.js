@@ -143,6 +143,20 @@ class PgQueryBuilder {
     return this
   }
 
+  /** Paridade Supabase: `.not('col', 'is', null)` → IS NOT NULL */
+  not(column, op, value) {
+    if (op === 'is' && value === null) {
+      this.filters.push({ type: 'is_not_null', column })
+      return this
+    }
+    if (op === 'eq') {
+      this.filters.push({ type: 'neq', column, value })
+      return this
+    }
+    this.filters.push({ type: 'not', column, op, value })
+    return this
+  }
+
   in(column, values) {
     this.filters.push({ type: 'in', column, value: values })
     return this
@@ -240,6 +254,9 @@ class PgQueryBuilder {
           params.push(filter.value)
           sqlParts.push(`${col} IS $${params.length}`)
         }
+        break
+      case 'is_not_null':
+        sqlParts.push(`${col} IS NOT NULL`)
         break
       case 'in': {
         const values = Array.isArray(filter.value) ? filter.value : []

@@ -6,6 +6,7 @@ import { requireSuperAdmin } from '../middlewares/requireSuperAdmin.js';
 import * as controller from '../controllers/admin.controller.js';
 import * as adminBillingController from '../controllers/admin-billing.controller.js';
 import * as whatsappAgentPrefController from '../controllers/whatsapp-agent-pref.controller.js';
+import * as openaiUsageController from '../controllers/openai-usage.controller.js';
 
 const router = Router();
 const upload = multer({
@@ -148,6 +149,12 @@ router.get(
   requireAuth,
   requireSuperAdmin,
   whatsappAgentPrefController.listWhatsappAgentLogMessages,
+);
+router.get(
+  '/openai-usage',
+  requireAuth,
+  requireSuperAdmin,
+  openaiUsageController.getOpenAiUsage,
 );
 
 export default router;

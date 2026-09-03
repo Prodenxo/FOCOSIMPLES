@@ -44,6 +44,7 @@ import { SettingsProfileField } from "../components/settings/SettingsProfileFiel
 import { SettingsPhoneField } from "../components/settings/SettingsPhoneField";
 import { SettingsActionLink } from "../components/settings/SettingsActionLink";
 import { WhatsappAgentLogsModal } from "../components/settings/WhatsappAgentLogsModal";
+import { OpenaiUsageModal } from "../components/settings/OpenaiUsageModal";
 import { SignOutHeaderButton } from "../components/settings/SignOutHeaderButton";
 import { MfAppHeader } from "../components/ui/MfAppHeader";
 import { useMfTheme } from "../components/ui/useMfTheme";
@@ -97,6 +98,7 @@ export default function SettingsScreen() {
   const [whatsappTestReply, setWhatsappTestReply] = useState("");
   const [whatsappTestLoading, setWhatsappTestLoading] = useState(false);
   const [whatsappLogsOpen, setWhatsappLogsOpen] = useState(false);
+  const [openaiUsageOpen, setOpenaiUsageOpen] = useState(false);
   const [disconnectingGoogle, setDisconnectingGoogle] = useState(false);
   const theme = useMemo(() => getTheme(isDarkMode), [isDarkMode]);
   const siteTokens = useMemo(() => getSiteTokens(isDarkMode), [isDarkMode]);
@@ -729,6 +731,21 @@ export default function SettingsScreen() {
             </View>
           </SettingsSectionCard>
 
+          {effectiveRole === "superadmin" ? (
+            <SettingsSectionCard
+              title="Gasto OpenAI"
+              description="Tokens e estimativa em real de todos os usuários"
+              style={styles.sectionFull}
+            >
+              <SettingsActionLink
+                title="Ver painel"
+                description="Só o seu perfil enxerga isso"
+                icon="cash-outline"
+                onPress={() => setOpenaiUsageOpen(true)}
+              />
+            </SettingsSectionCard>
+          ) : null}
+
           {effectiveRole === "superadmin" && whatsappAgentPref ? (
             <SettingsSectionCard
               title="Robô WhatsApp (teste)"
@@ -850,6 +867,10 @@ export default function SettingsScreen() {
       <WhatsappAgentLogsModal
         visible={whatsappLogsOpen}
         onClose={() => setWhatsappLogsOpen(false)}
+      />
+      <OpenaiUsageModal
+        visible={openaiUsageOpen}
+        onClose={() => setOpenaiUsageOpen(false)}
       />
 
       <MfConfirmDialog

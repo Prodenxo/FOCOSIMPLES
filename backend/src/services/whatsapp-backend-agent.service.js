@@ -2,6 +2,11 @@ import { env } from '../config/env.js';
 import { runOpenclawAction } from './openclaw-bot.service.js';
 import { sendWhatsappMessage } from './whatsapp-outbound.service.js';
 import { appendWhatsappBackendAgentLog } from './whatsapp-backend-agent-log.service.js';
+import { recordOpenAiUsage } from './openai-usage.service.js';
+import {
+  estimateUsageFromTexts,
+  hasOpenAiUsageCounts,
+} from '../lib/openai-pricing.js';
 import {
   WHATSAPP_BACKEND_AGENT_ACTIONS,
   buildWhatsappBackendAgentSystemPrompt,
@@ -165,6 +170,17 @@ export const handleWhatsappBackendAgent = async ({
     } catch (err) {
       lastAssistant = err instanceof Error ? err.message : String(err);
     }
+    if (lastAssistant) {
+      void recordOpenAiUsage({
+        source: logSource === 'preview' ? 'preview' : 'whatsapp_agent',
+        model: env.OPENAI_WHATSAPP_MODEL || process.env.OPENAI_WHATSAPP_MODEL || 'gpt-4o-mini',
+        phone: session.key,
+        usage: estimateUsageFromTexts({
+          promptText: trimmed,
+          completionText: lastAssistant,
+        }),
+      });
+    }
   }
 
   try {
@@ -172,6 +188,20 @@ export const handleWhatsappBackendAgent = async ({
       for (let turn = 0; turn < MAX_TOOL_TURNS; turn += 1) {
         const completion = await callOpenAi(messages);
         const choice = completion?.choices?.[0]?.message;
+        const usage = hasOpenAiUsageCounts(completion?.usage)
+          ? completion.usage
+          : estimateUsageFromTexts({
+            promptText: messages
+              .map((item) => (typeof item?.content === 'string' ? item.content : ''))
+              .join('\n'),
+            completionText: choice?.content || '',
+          });
+        void recordOpenAiUsage({
+          source: logSource === 'preview' ? 'preview' : 'whatsapp_agent',
+          model: env.OPENAI_WHATSAPP_MODEL || process.env.OPENAI_WHATSAPP_MODEL || 'gpt-4o-mini',
+          phone: session.key,
+          usage,
+        });
         if (!choice) break;
 
         const toolCalls = Array.isArray(choice.tool_calls) ? choice.tool_calls : [];

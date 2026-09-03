@@ -84,7 +84,9 @@ export const postInbound = async (req, res, next) => {
         parsed.phone,
         audioStatus.enabled ? `provider=${audioStatus.provider}` : 'transcricao_desligada',
       );
-      const transcription = await transcribeZapiInboundAudio(req.body);
+      const transcription = await transcribeZapiInboundAudio(req.body, {
+        phone: parsed.phone,
+      });
       if (transcription) {
         parsed = { ...parsed, text: transcription, hasAudio: true };
         transcriptionSource = 'zapi_audio_stt';
