@@ -75,6 +75,7 @@ test('buildUpcomingReminderEventKey: ignora id Google — só data+hora+título'
     allDay: false,
   });
   assert.equal(keyA, keyB);
+  assert.match(keyA, /^focosimples:slot:/);
 });
 
 test('dedupeUpcomingCalendarEvents: um compromisso duplicado → prefere com Meet', () => {

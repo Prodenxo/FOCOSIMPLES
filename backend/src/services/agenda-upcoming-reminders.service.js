@@ -1,6 +1,9 @@
 import { env } from '../config/env.js';
 import { createSupabaseClient } from '../config/supabase.js';
-import { listUsersWithWhatsappLink } from './agenda-reminders.service.js';
+import {
+  isAgendaWhatsappRemindersEnabled,
+  listUsersWithWhatsappLink,
+} from './agenda-reminders.service.js';
 import {
   calendarDateTodayInSaoPaulo,
   eventStartsAtInstant,
@@ -22,7 +25,13 @@ export const isAgendaUpcomingWhatsappEnabled = () => {
   const explicit = String(env.AGENDA_UPCOMING_WHATSAPP_ENABLED || '').trim().toLowerCase();
   if (explicit === 'true') return true;
   if (explicit === 'false') return false;
+  if (isAgendaWhatsappRemindersEnabled()) return true;
   return isWhatsappOutboundConfigured();
+};
+
+export const getUpcomingReminderProductTag = () => {
+  const raw = String(env.APP_PRODUCT || 'focosimples').trim().toLowerCase();
+  return raw || 'focosimples';
 };
 
 export const getAgendaUpcomingMinutesBefore = () => {
@@ -51,7 +60,7 @@ export const buildUpcomingReminderEventKey = (event) => {
   const title = normalizeUpcomingEventTitle(event?.title);
   const time = event?.allDay || !event?.time ? 'allday' : String(event.time).slice(0, 5);
   const date = String(event?.date || '');
-  return `slot:${date}|${time}|${title}`;
+  return `${getUpcomingReminderProductTag()}:slot:${date}|${time}|${title}`;
 };
 
 /**
@@ -120,10 +129,28 @@ export const tryAcquireUpcomingReminderSlot = async (userId, dateIso, eventKey) 
   }
 
   if (isMissingTableError(error.message)) {
-    console.warn(
-      '[agenda-upcoming] tabela calendar_upcoming_reminder_sent em falta — '
-      + 'execute create-calendar-agenda-whatsapp-tables.sql no Supabase',
-    );
+    try {
+      const { ensureCalendarChecklistTable } = await import('./db-bootstrap.service.js');
+      await ensureCalendarChecklistTable({ force: true });
+      const retry = await admin.from('calendar_upcoming_reminder_sent').insert({
+        user_id: userId,
+        event_date: dateIso,
+        event_key: eventKey,
+        sent_at: new Date().toISOString(),
+      });
+      if (!retry.error) {
+        sentThisProcess.add(localKey);
+        return true;
+      }
+      if (isDuplicateKeyError(retry.error)) {
+        sentThisProcess.add(localKey);
+        return false;
+      }
+      console.warn('[agenda-upcoming] dedup falhou após criar tabela:', retry.error.message);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[agenda-upcoming] não deu para criar calendar_upcoming_reminder_sent:', msg);
+    }
     return false;
   }
 
