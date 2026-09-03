@@ -18,7 +18,7 @@ import {
   mapDeclaracoesToPeriods,
   resolveDasIdsDoPeriodo,
 } from './pgdasd/consultar-declaracoes.js'
-import { gerarDasPgdasd } from './pgdasd/gerar-das.js'
+import { gerarDasPgdasd, gerarDasCobrancaPgdasd } from './pgdasd/gerar-das.js'
 import {
   consultarExtratoDasPgdasd,
 } from './pgdasd/consultar-extrato-das.js'
@@ -331,9 +331,11 @@ export const gerarSimplesDas = async (userId, payload = {}) => {
   }
 
   const dataConsolidacao = normalizeDataConsolidacao(payload.dataConsolidacao)
+  const isRegenerating = payload.regenerate === true
+  const consolidationDate = dataConsolidacao || (isRegenerating ? todayYmdSaoPaulo() : null)
   const allowExtrato = shouldFallbackToDasExtrato({
-    regenerate: payload.regenerate === true,
-    dataConsolidacao,
+    regenerate: isRegenerating,
+    dataConsolidacao: consolidationDate,
   })
 
   // Mês já pago: tenta extrato do DAS emitido (CONSEXTRATO) antes de GERARDAS.
@@ -354,7 +356,7 @@ export const gerarSimplesDas = async (userId, payload = {}) => {
     result = await gerarDasPgdasd({
       contribuinteCnpj,
       periodoApuracao: periodo,
-      dataConsolidacao,
+      dataConsolidacao: consolidationDate,
       userId,
     })
   } catch (err) {
@@ -377,8 +379,33 @@ export const gerarSimplesDas = async (userId, payload = {}) => {
         )
       }
     }
-    throw err
+    if (isRegenerating) {
+      try {
+        result = await gerarDasCobrancaPgdasd({
+          contribuinteCnpj,
+          periodoApuracao: periodo,
+          userId,
+        })
+      } catch (cobrancaErr) {
+        const primary = msg.trim()
+        const secondary = String(cobrancaErr?.message || '').trim()
+        throw badRequest(
+          secondary && secondary !== primary
+            ? `${primary} Guia de cobrança também falhou: ${secondary}`
+            : (secondary || primary || 'Não foi possível atualizar a guia vencida na Receita.'),
+          {
+            code: cobrancaErr?.errors?.code
+              || err?.errors?.code
+              || 'PGDASD_DAS_REGENERATE_FAILED',
+          },
+        )
+      }
+    } else {
+      throw err
+    }
   }
+
+  const fonte = result?.detalhamento?.fonte === 'GERARDASCOBRANCA17' ? 'cobranca' : 'geracao'
 
   const saved = await upsertDasSimples({
     userId,
@@ -400,7 +427,7 @@ export const gerarSimplesDas = async (userId, payload = {}) => {
     valorTotal: result.valorTotal,
     pdfBase64: result.pdfBase64,
     filename: `DAS-SN-${periodo}.pdf`,
-    fonte: 'geracao',
+    fonte,
   }
 }
 

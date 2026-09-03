@@ -11,6 +11,7 @@ import {
   getSerproTokens,
   serproApiFetch
 } from './authProcurador.service.js';
+import { extractSerproErrorMessage } from './serpro-error-message.js';
 
 const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
 
@@ -25,10 +26,10 @@ const parseErrorMessage = async (response) => {
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
     const payload = await response.json();
-    return payload?.message || payload?.error || response.statusText;
+    return extractSerproErrorMessage(payload, response.statusText);
   }
   const text = await response.text();
-  return text || response.statusText;
+  return extractSerproErrorMessage(text, response.statusText);
 };
 
 const isAuthTokenError = (status, message) => {

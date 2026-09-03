@@ -224,3 +224,13 @@ describe('pgdasd guia vencida vs extrato', () => {
     assert.equal(shouldFallbackToDasExtrato({}), true)
   })
 })
+
+describe('serpro error message', () => {
+  it('extrai mensagens da SERPRO', async () => {
+    const { extractSerproErrorMessage } = await import('../src/services/gestao/serpro-error-message.js')
+    const msg = extractSerproErrorMessage({
+      mensagens: [{ codigo: 'MSG_X', texto: 'Período em cobrança.' }],
+    }, 'Bad Request')
+    assert.equal(msg, 'Período em cobrança.')
+  })
+})

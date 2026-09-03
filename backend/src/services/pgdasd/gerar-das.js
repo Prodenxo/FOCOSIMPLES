@@ -21,6 +21,46 @@ const parseDados = (response) => {
   }
 }
 
+const collectSerproHint = (response) => {
+  const msgs = response?.raw?.mensagens || response?.dados?.mensagens || response?.mensagens
+  if (!Array.isArray(msgs)) return ''
+  return msgs
+    .map((m) => (typeof m === 'string' ? m : m?.texto || m?.Descricao || m?.descricao || ''))
+    .filter(Boolean)
+    .join(' ')
+}
+
+const mapDasEmitResponse = (response, periodo, fonte = 'geracao') => {
+  const parsedEarly = parseDados(response)
+  const firstEarly = Array.isArray(parsedEarly) ? parsedEarly[0] : parsedEarly
+  const pdfBase64 =
+    firstEarly?.pdf
+    || firstEarly?.PDF
+    || extractPdfBase64FromPgdasdResponse(response)
+  if (!pdfBase64) {
+    const hint = collectSerproHint(response)
+    const noDebito = /MSG_E0139|n[aã]o\s+haver\s+valor\s+devido|sem\s+valor\s+devido|n[aã]o\s+foi\s+gerado\s+das/i.test(hint)
+    throw badRequest(
+      hint
+        || 'A Receita não devolveu o PDF do DAS. Verifique se a declaração do período já foi transmitida no PGDAS-D.',
+      { code: noDebito ? 'PGDASD_SEM_DEBITO' : 'PGDASD_DAS_NO_PDF' },
+    )
+  }
+
+  const detalhe = firstEarly?.detalhamento || firstEarly?.DetalhamentoDas || firstEarly || null
+
+  return {
+    periodoApuracao: periodo,
+    competencia: `${periodo.slice(0, 4)}-${periodo.slice(4, 6)}`,
+    pdfBase64,
+    numeroDocumento: detalhe?.numeroDocumento || null,
+    valorTotal: detalhe?.valores?.total ?? null,
+    dataVencimento: detalhe?.dataVencimento || null,
+    detalhamento: { ...(detalhe || {}), fonte },
+    response,
+  }
+}
+
 /**
  * Gera DAS (GERARDAS12) para período já declarado no PGDAS-D.
  * @param {{ contribuinteCnpj: string, periodoApuracao: string, dataConsolidacao?: string|null, userId?: string|null }} opts
@@ -50,37 +90,30 @@ export const gerarDasPgdasd = async ({
     userId,
   })
 
-  const parsedEarly = parseDados(response)
-  const firstEarly = Array.isArray(parsedEarly) ? parsedEarly[0] : parsedEarly
-  const pdfBase64 =
-    firstEarly?.pdf
-    || firstEarly?.PDF
-    || extractPdfBase64FromPgdasdResponse(response)
-  if (!pdfBase64) {
-    const msgs = response?.raw?.mensagens || response?.dados?.mensagens || response?.mensagens
-    const hint = Array.isArray(msgs)
-      ? msgs.map((m) => (typeof m === 'string' ? m : m?.texto || m?.Descricao || '')).filter(Boolean).join(' ')
-      : ''
-    const noDebito = /MSG_E0139|n[aã]o\s+haver\s+valor\s+devido|sem\s+valor\s+devido|n[aã]o\s+foi\s+gerado\s+das/i.test(hint)
-    throw badRequest(
-      hint
-        || 'A Receita não devolveu o PDF do DAS. Verifique se a declaração do período já foi transmitida no PGDAS-D.',
-      { code: noDebito ? 'PGDASD_SEM_DEBITO' : 'PGDASD_DAS_NO_PDF' },
-    )
+  return mapDasEmitResponse(response, periodo, 'GERARDAS12')
+}
+
+/**
+ * Gera DAS de cobrança (GERARDASCOBRANCA17) — guia vencida no sistema de cobrança da RFB.
+ * @see https://apicenter.estaleiro.serpro.gov.br/documentacao/api-integra-contador/pt/solucoes/integra-sn/pgdasd/servicos/gerar_dascobranca/
+ */
+export const gerarDasCobrancaPgdasd = async ({
+  contribuinteCnpj,
+  periodoApuracao,
+  userId = null,
+}) => {
+  const periodo = normalizePeriodo(periodoApuracao)
+  if (!periodo) {
+    throw badRequest('Período de apuração inválido (use AAAAMM).')
   }
 
-  const parsed = parsedEarly
-  const first = firstEarly
-  const detalhe = first?.detalhamento || first?.DetalhamentoDas || first || null
+  const response = await callPgdasdServico({
+    idServico: PGDASD_SERVICOS.GERARDASCOBRANCA,
+    dados: { periodoApuracao: Number(periodo) },
+    modo: 'emitir',
+    contribuinteCnpj,
+    userId,
+  })
 
-  return {
-    periodoApuracao: periodo,
-    competencia: `${periodo.slice(0, 4)}-${periodo.slice(4, 6)}`,
-    pdfBase64,
-    numeroDocumento: detalhe?.numeroDocumento || null,
-    valorTotal: detalhe?.valores?.total ?? null,
-    dataVencimento: detalhe?.dataVencimento || null,
-    detalhamento: detalhe,
-    response,
-  }
+  return mapDasEmitResponse(response, periodo, 'GERARDASCOBRANCA17')
 }

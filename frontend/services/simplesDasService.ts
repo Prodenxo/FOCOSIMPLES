@@ -51,6 +51,7 @@ export async function gerarSimplesDas (input: {
   periodoApuracao: string
   dataConsolidacao?: string
   preferExistingPdf?: boolean
+  regenerate?: boolean
 }): Promise<SimplesDasGuideResponse> {
   return apiClient.post('/simples-das/gerar', input)
 }

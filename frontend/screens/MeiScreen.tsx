@@ -1169,17 +1169,30 @@ function MeiScreenContent() {
         const dataConsolidacao = regenerate
           ? new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }).replace(/-/g, '')
           : undefined;
-        let guide = await downloadSimplesDas(downloadKey, {
-          regenerate,
-          preferExistingPdf: preferExistingPdf && !regenerate,
-        });
+        let guide: Awaited<ReturnType<typeof downloadSimplesDas>> | null = null
+        try {
+          guide = await downloadSimplesDas(downloadKey, {
+            regenerate,
+            preferExistingPdf: preferExistingPdf && !regenerate,
+          })
+        } catch (downloadErr) {
+          if (!regenerate) throw downloadErr
+          guide = await gerarSimplesDas({
+            cnpj: normalizedCnpj,
+            periodoApuracao,
+            preferExistingPdf: false,
+            regenerate: true,
+            dataConsolidacao,
+          })
+        }
         if (!guide?.pdfBase64) {
           guide = await gerarSimplesDas({
             cnpj: normalizedCnpj,
             periodoApuracao,
             preferExistingPdf: preferExistingPdf && !regenerate,
+            regenerate,
             dataConsolidacao,
-          });
+          })
         }
         if (!guide?.pdfBase64) {
           Alert.alert(
