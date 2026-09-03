@@ -26,6 +26,8 @@ import {
   claimInboundMessage,
 } from '../services/openclaw-reply-dedup.service.js';
 import { startZapiTypingSoon } from '../services/zapi-outbound.service.js';
+import { shouldUseBackendWhatsappAgent } from '../services/whatsapp-agent-pref.service.js';
+import { handleWhatsappBackendAgent } from '../services/whatsapp-backend-agent.service.js';
 
 export const getZapiMonitor = (_req, res) => {
   return res.json({
@@ -43,6 +45,7 @@ export const getZapiMonitor = (_req, res) => {
       'chat_guard_investment_advice',
       'whatsapp_welcome_on_greeting',
       'openclaw_zapi_sync_relay',
+      'whatsapp_backend_agent_canary',
     ],
     preferredAccessCommand: 'mf pendentes',
     accessRequestWhatsapp: isAccessRequestWhatsappNotifyEnabled(),
@@ -227,7 +230,10 @@ export const postInbound = async (req, res, next) => {
       whatsappError: null,
     };
 
-    if (relayUrl && !skipOpenclawRelay) {
+    const useBackendAgent = !skipOpenclawRelay
+      && await shouldUseBackendWhatsappAgent(parsed.phone);
+
+    if (!skipOpenclawRelay && (useBackendAgent || relayUrl)) {
       sendSuccess(
         res,
         {
@@ -239,9 +245,28 @@ export const postInbound = async (req, res, next) => {
           accessRequestReason,
           inboundBridgeVersion: ZAPI_INBOUND_BRIDGE_VERSION,
           transcriptionSource,
+          engine: useBackendAgent ? 'backend' : 'openclaw',
         },
         'aceite',
       );
+
+      if (useBackendAgent) {
+        setImmediate(() => {
+          handleWhatsappBackendAgent({ phone: parsed.phone, text: parsed.text })
+            .then((result) => {
+              if (result.replySent) {
+                console.info('[ZAPI] resposta backend enviada:', parsed.phone);
+                return;
+              }
+              console.info('[ZAPI] backend sem texto WhatsApp:', result.reason || 'empty');
+            })
+            .catch((err) => {
+              const msg = err instanceof Error ? err.message : String(err);
+              console.warn('[ZAPI] backend agent falhou:', msg);
+            });
+        });
+        return;
+      }
 
       setImmediate(() => {
         zapiInbound.relayZapiInboundToOpenclaw(parsed)

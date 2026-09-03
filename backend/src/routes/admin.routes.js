@@ -5,6 +5,7 @@ import { requireAdmin } from '../middlewares/requireAdmin.js';
 import { requireSuperAdmin } from '../middlewares/requireSuperAdmin.js';
 import * as controller from '../controllers/admin.controller.js';
 import * as adminBillingController from '../controllers/admin-billing.controller.js';
+import * as whatsappAgentPrefController from '../controllers/whatsapp-agent-pref.controller.js';
 
 const router = Router();
 const upload = multer({
@@ -116,6 +117,25 @@ router.post(
   requireAuth,
   requireSuperAdmin,
   adminBillingController.syncStripeMaxMeiFromLines
+);
+
+router.get(
+  '/whatsapp-agent-pref',
+  requireAuth,
+  requireSuperAdmin,
+  whatsappAgentPrefController.getWhatsappAgentPref,
+);
+router.patch(
+  '/whatsapp-agent-pref',
+  requireAuth,
+  requireSuperAdmin,
+  whatsappAgentPrefController.patchWhatsappAgentPref,
+);
+router.post(
+  '/whatsapp-agent-pref/preview',
+  requireAuth,
+  requireSuperAdmin,
+  whatsappAgentPrefController.previewWhatsappBackendAgent,
 );
 
 export default router;

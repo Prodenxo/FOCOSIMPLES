@@ -328,6 +328,8 @@ export const env = {
   WHATSAPP_AUDIO_TRANSCRIPTION_ENABLED:
     process.env.WHATSAPP_AUDIO_TRANSCRIPTION_ENABLED || "true",
   OPENAI_API_KEY: (process.env.OPENAI_API_KEY || "").trim(),
+  /** Modelo do canário WhatsApp (backend no lugar do OpenClaw). */
+  OPENAI_WHATSAPP_MODEL: (process.env.OPENAI_WHATSAPP_MODEL || "gpt-4o-mini").trim(),
   GROQ_API_KEY: (process.env.GROQ_API_KEY || "").trim(),
   WHATSAPP_TRANSCRIPTION_OPENAI_API_KEY: (
     process.env.WHATSAPP_TRANSCRIPTION_OPENAI_API_KEY || ""

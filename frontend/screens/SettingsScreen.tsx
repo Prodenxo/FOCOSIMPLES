@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
+  TextInput,
   StyleSheet,
   TouchableOpacity,
   Alert,
@@ -46,6 +47,13 @@ import { SignOutHeaderButton } from "../components/settings/SignOutHeaderButton"
 import { MfAppHeader } from "../components/ui/MfAppHeader";
 import { useMfTheme } from "../components/ui/useMfTheme";
 import { mfRadius, mfSpacing } from "../lib/theme";
+import { ToggleSwitch } from "../components/ToggleSwitch";
+import {
+  fetchWhatsappAgentPref,
+  previewWhatsappBackendAgent,
+  saveWhatsappAgentPref,
+  type WhatsappAgentPref,
+} from "../services/whatsappAgentPrefService";
 
 const DESKTOP_BREAKPOINT = 900;
 
@@ -82,6 +90,11 @@ export default function SettingsScreen() {
   // Auth local: role já vem do login. Supabase: resolve via vínculo empresa.
   const effectiveRole = isLocalApiAuthMode() ? role : (resolvedRole ?? role);
   const [googleDialog, setGoogleDialog] = useState<GoogleDialogState>(null);
+  const [whatsappAgentPref, setWhatsappAgentPref] = useState<WhatsappAgentPref | null>(null);
+  const [savingWhatsappAgent, setSavingWhatsappAgent] = useState(false);
+  const [whatsappTestText, setWhatsappTestText] = useState("qual meu saldo?");
+  const [whatsappTestReply, setWhatsappTestReply] = useState("");
+  const [whatsappTestLoading, setWhatsappTestLoading] = useState(false);
   const [disconnectingGoogle, setDisconnectingGoogle] = useState(false);
   const theme = useMemo(() => getTheme(isDarkMode), [isDarkMode]);
   const siteTokens = useMemo(() => getSiteTokens(isDarkMode), [isDarkMode]);
@@ -122,6 +135,58 @@ export default function SettingsScreen() {
 
   const showAppToast = useAppToastStore((s) => s.show);
   const googleConnectionVersion = useGoogleCalendarStore((s) => s.connectionVersion);
+
+  useEffect(() => {
+    if (effectiveRole !== "superadmin") {
+      setWhatsappAgentPref(null);
+      return;
+    }
+    let cancelled = false;
+    void fetchWhatsappAgentPref()
+      .then((pref) => {
+        if (!cancelled) setWhatsappAgentPref(pref);
+      })
+      .catch(() => {
+        if (!cancelled) setWhatsappAgentPref(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveRole]);
+
+  const handleToggleWhatsappOpenclaw = async (openclawEnabled: boolean) => {
+    if (savingWhatsappAgent) return;
+    setSavingWhatsappAgent(true);
+    try {
+      const saved = await saveWhatsappAgentPref(openclawEnabled);
+      setWhatsappAgentPref(saved);
+      showAppToast(
+        saved.openclawEnabled
+          ? "Seu WhatsApp voltou para o OpenClaw."
+          : "Seu WhatsApp agora usa o robô do site (teste).",
+        "success",
+      );
+    } catch (err) {
+      showAppToast(getErrorMessage(err) || "Não deu para salvar o interruptor.", "error");
+    } finally {
+      setSavingWhatsappAgent(false);
+    }
+  };
+
+  const handlePreviewWhatsappBackend = async () => {
+    const text = whatsappTestText.trim();
+    if (!text || whatsappTestLoading) return;
+    setWhatsappTestLoading(true);
+    setWhatsappTestReply("");
+    try {
+      const result = await previewWhatsappBackendAgent(text);
+      setWhatsappTestReply(result.reply || "O robô não devolveu texto.");
+    } catch (err) {
+      setWhatsappTestReply(getErrorMessage(err) || "Não deu para testar agora.");
+    } finally {
+      setWhatsappTestLoading(false);
+    }
+  };
 
   useEffect(() => {
     void checkGoogleAgendaIntegration();
@@ -662,6 +727,67 @@ export default function SettingsScreen() {
             </View>
           </SettingsSectionCard>
 
+          {effectiveRole === "superadmin" && whatsappAgentPref ? (
+            <SettingsSectionCard
+              title="Robô WhatsApp (teste)"
+              description="Só o seu número. Os clientes continuam no OpenClaw."
+              style={styles.sectionFull}
+            >
+              <View style={styles.whatsappAgentRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.whatsappAgentLabel}>
+                    {whatsappAgentPref.openclawEnabled
+                      ? "OpenClaw ligado"
+                      : "Robô do site ligado"}
+                  </Text>
+                  <Text style={styles.whatsappAgentHint}>
+                    {!whatsappAgentPref.phoneLinked
+                      ? "Salve seu WhatsApp acima para o teste valer no seu número."
+                      : !whatsappAgentPref.backendReady && !whatsappAgentPref.openclawEnabled
+                        ? "Falta a chave da OpenAI no backend. O site avisa se não conseguir responder."
+                        : whatsappAgentPref.openclawEnabled
+                          ? "Desligue para testar o robô novo só no seu WhatsApp."
+                          : "Mande uma mensagem no seu WhatsApp para testar. Religue se algo falhar."}
+                  </Text>
+                </View>
+                <ToggleSwitch
+                  value={whatsappAgentPref.openclawEnabled}
+                  onValueChange={(next) => {
+                    void handleToggleWhatsappOpenclaw(next);
+                  }}
+                  disabled={savingWhatsappAgent}
+                  activeColor={theme.success}
+                />
+              </View>
+              <Text style={[styles.whatsappAgentLabel, { marginTop: 16 }]}>
+                Teste no computador
+              </Text>
+              <Text style={styles.whatsappAgentHint}>
+                O WhatsApp não chega no localhost. Escreva aqui como se fosse o chat.
+              </Text>
+              <TextInput
+                value={whatsappTestText}
+                onChangeText={setWhatsappTestText}
+                placeholder="Ex.: recebi 200 de salário"
+                placeholderTextColor={siteTokens.textSecondary}
+                style={styles.whatsappTestInput}
+                editable={!whatsappTestLoading}
+              />
+              <TouchableOpacity
+                onPress={() => void handlePreviewWhatsappBackend()}
+                disabled={whatsappTestLoading || !whatsappTestText.trim()}
+                style={styles.whatsappTestButton}
+              >
+                <Text style={styles.whatsappTestButtonText}>
+                  {whatsappTestLoading ? "Testando…" : "Testar robô do site"}
+                </Text>
+              </TouchableOpacity>
+              {whatsappTestReply ? (
+                <Text style={styles.whatsappTestReply}>{whatsappTestReply}</Text>
+              ) : null}
+            </SettingsSectionCard>
+          ) : null}
+
           <SettingsSectionCard
             title="Suporte"
             description="Ajuda humana e comunidade"
@@ -817,6 +943,52 @@ const createStyles = (
     loadingText: {
       fontSize: 14,
       color: theme.textSecondary,
+    },
+    whatsappAgentRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    whatsappAgentLabel: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: siteTokens.textPrimary,
+    },
+    whatsappAgentHint: {
+      fontSize: 13,
+      lineHeight: 18,
+      color: siteTokens.textSecondary,
+      marginTop: 4,
+    },
+    whatsappTestInput: {
+      marginTop: 10,
+      borderWidth: 1,
+      borderColor: siteTokens.inputBorder,
+      borderRadius: mfRadius.md,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 14,
+      color: siteTokens.textPrimary,
+      backgroundColor: isDarkMode ? "rgba(255,255,255,0.04)" : "#FFFFFF",
+    },
+    whatsappTestButton: {
+      marginTop: 10,
+      alignSelf: "flex-start",
+      backgroundColor: theme.primary,
+      borderRadius: mfRadius.pill,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+    },
+    whatsappTestButtonText: {
+      color: "#FFFFFF",
+      fontSize: 13,
+      fontWeight: "600",
+    },
+    whatsappTestReply: {
+      marginTop: 12,
+      fontSize: 14,
+      lineHeight: 20,
+      color: siteTokens.textPrimary,
     },
     linkAction: {
       fontSize: 14,
