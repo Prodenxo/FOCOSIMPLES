@@ -7,6 +7,10 @@ import {
   setWhatsappEngineForUser,
 } from '../services/whatsapp-agent-pref.service.js';
 import { handleWhatsappBackendAgent } from '../services/whatsapp-backend-agent.service.js';
+import {
+  listWhatsappBackendAgentMessages,
+  listWhatsappBackendAgentThreads,
+} from '../services/whatsapp-backend-agent-log.service.js';
 
 const hasLinkedPhone = async (userId) => {
   try {
@@ -116,6 +120,25 @@ export const previewWhatsappBackendAgent = async (req, res, next) => {
       },
       'ok',
     );
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const listWhatsappAgentLogThreads = async (_req, res, next) => {
+  try {
+    const threads = await listWhatsappBackendAgentThreads();
+    return sendSuccess(res, { threads }, 'ok');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const listWhatsappAgentLogMessages = async (req, res, next) => {
+  try {
+    const phone = String(req.params?.phone || req.query?.phone || '').trim();
+    const messages = await listWhatsappBackendAgentMessages(phone);
+    return sendSuccess(res, { phone, messages }, 'ok');
   } catch (error) {
     return next(error);
   }

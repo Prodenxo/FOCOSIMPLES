@@ -1,6 +1,7 @@
 import { env } from '../config/env.js';
 import { runOpenclawAction } from './openclaw-bot.service.js';
 import { sendWhatsappMessage } from './whatsapp-outbound.service.js';
+import { appendWhatsappBackendAgentLog } from './whatsapp-backend-agent-log.service.js';
 import {
   WHATSAPP_BACKEND_AGENT_ACTIONS,
   WHATSAPP_BACKEND_AGENT_SYSTEM_PROMPT,
@@ -131,6 +132,14 @@ export const handleWhatsappBackendAgent = async ({
     return { ok: false, replySent: false, reply: '', reason: 'empty_text' };
   }
 
+  const logSource = deliverWhatsapp ? 'whatsapp' : 'preview';
+  void appendWhatsappBackendAgentLog({
+    phone: session.key,
+    role: 'user',
+    content: trimmed,
+    source: logSource,
+  });
+
   const history = [...session.messages, { role: 'user', content: trimmed }];
   const messages = [
     { role: 'system', content: WHATSAPP_BACKEND_AGENT_SYSTEM_PROMPT },
@@ -196,6 +205,12 @@ export const handleWhatsappBackendAgent = async ({
   if (lastAssistant) {
     history.push({ role: 'assistant', content: lastAssistant });
     saveSession(session.key, history);
+    void appendWhatsappBackendAgentLog({
+      phone: session.key,
+      role: 'assistant',
+      content: lastAssistant,
+      source: logSource,
+    });
     if (!replySent && deliverWhatsapp) {
       try {
         await sendWhatsappMessage({

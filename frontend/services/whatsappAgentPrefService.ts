@@ -23,3 +23,31 @@ export function previewWhatsappBackendAgent(text: string) {
     { text },
   )
 }
+
+export type WhatsappAgentLogThread = {
+  phone: string
+  message_count: number
+  last_at: string
+  last_content: string
+}
+
+export type WhatsappAgentLogMessage = {
+  id: string
+  phone: string
+  role: 'user' | 'assistant'
+  content: string
+  source: 'whatsapp' | 'preview'
+  created_at: string
+}
+
+export function fetchWhatsappAgentLogThreads() {
+  return apiClient.get<{ threads: WhatsappAgentLogThread[] }>(
+    '/admin/whatsapp-agent-logs',
+  )
+}
+
+export function fetchWhatsappAgentLogMessages(phone: string) {
+  return apiClient.get<{ phone: string; messages: WhatsappAgentLogMessage[] }>(
+    `/admin/whatsapp-agent-logs/${encodeURIComponent(phone)}`,
+  )
+}

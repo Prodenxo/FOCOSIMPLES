@@ -137,5 +137,17 @@ router.post(
   requireSuperAdmin,
   whatsappAgentPrefController.previewWhatsappBackendAgent,
 );
+router.get(
+  '/whatsapp-agent-logs',
+  requireAuth,
+  requireSuperAdmin,
+  whatsappAgentPrefController.listWhatsappAgentLogThreads,
+);
+router.get(
+  '/whatsapp-agent-logs/:phone',
+  requireAuth,
+  requireSuperAdmin,
+  whatsappAgentPrefController.listWhatsappAgentLogMessages,
+);
 
 export default router;
