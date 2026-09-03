@@ -1058,11 +1058,19 @@ const buildProdutoCatalogEntries = (payload, { documentType = DOCUMENT_TYPE_NFSE
     .filter(Boolean);
 };
 
+const stripSearchDiacritics = (value) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
 const applyCatalogSearch = (query, q, fields) => {
   const search = sanitizeSearchTerm(q);
   if (!search) return query;
-  const like = `%${search}%`;
-  const filters = fields.map((field) => `${field}.ilike.${like}`);
+  const folded = stripSearchDiacritics(search);
+  const terms = folded && folded !== search ? [search, folded] : [search];
+  const filters = terms.flatMap((term) =>
+    fields.map((field) => `${field}.ilike.%${term}%`),
+  );
   return query.or(filters.join(','));
 };
 

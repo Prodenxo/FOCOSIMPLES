@@ -39,6 +39,22 @@ test('isNfsePdfReadyStatus', () => {
   assert.equal(isNfsePdfReadyStatus('autorizado'), true);
 });
 
+test('pickClienteCatalogoByNomeResult — Ç e C são o mesmo cliente', () => {
+  const rows = [
+    {
+      id: '1',
+      nome: 'ART CARVALHO PRESTACAO DE SERVICOS LTDA',
+      documento: '62960481000134',
+    },
+  ];
+  const r = pickClienteCatalogoByNomeResult(
+    rows,
+    'ART CARVALHO PRESTACAO DE SERVIÇOS LTDA',
+  );
+  assert.equal(r.kind, 'ok');
+  assert.equal(r.cliente.id, '1');
+});
+
 test('pickClienteCatalogoByNomeResult — match exato', () => {
   const rows = [
     { id: '1', nome: 'Rafael Reis', documento: '12345678901' },

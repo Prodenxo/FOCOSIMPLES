@@ -655,7 +655,37 @@ const findClienteCatalogoByNome = async (userId, nome) => {
   const q = String(nome || '').trim();
   if (!q) return { kind: 'missing' };
   const rows = await listarCatalogoClientes(userId, { q, limit: 20, ...NFSE_CATALOG_CLIENTES_OPTS });
-  return pickClienteCatalogoByNomeResult(rows, q);
+  let lookup = pickClienteCatalogoByNomeResult(rows, q);
+  if (lookup.kind !== 'not_found') return lookup;
+
+  const folded = stripDiacritics(q);
+  if (folded && folded !== q) {
+    const foldedRows = await listarCatalogoClientes(userId, {
+      q: folded,
+      limit: 20,
+      ...NFSE_CATALOG_CLIENTES_OPTS,
+    });
+    lookup = pickClienteCatalogoByNomeResult(foldedRows, q);
+    if (lookup.kind !== 'not_found') return lookup;
+  }
+
+  const distinctive = normalizeNameForMatch(q)
+    .split(' ')
+    .filter((word) => word.length >= 3 && !['ltda', 'ltd', 'eireli', 'mei', 'ssa'].includes(word))
+    .slice(0, 2)
+    .join(' ');
+  if (distinctive) {
+    const shortRows = await listarCatalogoClientes(userId, {
+      q: distinctive,
+      limit: 20,
+      ...NFSE_CATALOG_CLIENTES_OPTS,
+    });
+    lookup = pickClienteCatalogoByNomeResult(shortRows, q);
+    if (lookup.kind !== 'not_found') return lookup;
+  }
+
+  const all = await listarCatalogoClientes(userId, { limit: 50, ...NFSE_CATALOG_CLIENTES_OPTS });
+  return pickClienteCatalogoByNomeResult(all, q);
 };
 
 const mapClienteResumo = (cliente) => ({
