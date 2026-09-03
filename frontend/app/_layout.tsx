@@ -6,6 +6,7 @@ import { clearHardReloadQueryFromUrl, hideBootSplash, installWebStaleChunkRecove
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useThemeStore } from '@/store/themeStore';
 import { ToastNotice } from '@/components/ToastNotice';
+import { AppDialogHost } from '@/components/AppDialogHost';
 import { useAppToastStore } from '@/store/appToastStore';
 import {
   capturePasswordRecoveryFromUrlSync,
@@ -118,6 +119,7 @@ function RootLayoutInner() {
   return (
     <>
       <Stack screenOptions={{ headerShown: false }} />
+      <AppDialogHost />
       <ToastNotice
         visible={toastVisible}
         message={toastMessage}

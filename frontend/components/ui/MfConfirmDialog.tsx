@@ -26,6 +26,9 @@ export interface MfConfirmDialogProps {
   title: string;
   message: string;
   detail?: string;
+  /** Valor em destaque (ex.: faturamento da declaração). */
+  highlight?: string;
+  highlightCaption?: string;
   confirmLabel?: string;
   cancelLabel?: string;
   loading?: boolean;
@@ -67,6 +70,8 @@ export function MfConfirmDialog({
   title,
   message,
   detail,
+  highlight,
+  highlightCaption,
   confirmLabel,
   cancelLabel = 'Cancelar',
   loading = false,
@@ -104,6 +109,14 @@ export function MfConfirmDialog({
           </View>
 
           <Text style={s.title}>{title}</Text>
+          {highlight ? (
+            <View style={s.highlightCard}>
+              <Text style={[s.highlightValue, { color: theme.success }]}>{highlight}</Text>
+              {highlightCaption ? (
+                <Text style={s.highlightCaption}>{highlightCaption}</Text>
+              ) : null}
+            </View>
+          ) : null}
           <Text style={s.message}>{message}</Text>
           {detail ? (
             <Text
@@ -202,6 +215,27 @@ function createStyles(theme: ReturnType<typeof getTheme>, isDarkMode: boolean) {
       color: theme.text,
       textAlign: 'center',
       marginBottom: mfSpacing.sm,
+    },
+    highlightCard: {
+      width: '100%',
+      alignItems: 'center',
+      paddingVertical: mfSpacing.md,
+      paddingHorizontal: mfSpacing.md,
+      marginBottom: mfSpacing.md,
+      borderRadius: mfRadius.md,
+      backgroundColor: isDarkMode ? 'rgba(0, 168, 107, 0.12)' : 'rgba(0, 168, 107, 0.08)',
+      borderWidth: 1,
+      borderColor: isDarkMode ? 'rgba(0, 168, 107, 0.28)' : 'rgba(0, 168, 107, 0.2)',
+    },
+    highlightValue: {
+      ...mfTypography.money,
+      textAlign: 'center',
+    },
+    highlightCaption: {
+      ...mfTypography.caption,
+      color: theme.textSecondary,
+      textAlign: 'center',
+      marginTop: mfSpacing.xs,
     },
     message: {
       ...mfTypography.body,

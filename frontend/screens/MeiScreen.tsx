@@ -1926,22 +1926,39 @@ function MeiScreenContent() {
     setSelectedYear(Number(periodo.slice(0, 4)));
     setSelectedMonth(periodo.slice(4, 6));
     setCreateGuideLoading(true);
+    let valorOk = 0;
+    let count = 0;
     try {
       const fat = await fetchSimplesDasFaturamento(periodo);
       const total = Number(fat?.total);
-      const count = Number(fat?.count) || 0;
-      const valorOk = Number.isFinite(total) ? total : 0;
-      const confirmed = await confirmDialog({
-        title: `Declarar ${periodoLabel}`,
-        message:
-          `Vou enviar à Receita o faturamento de ${periodoLabel}, somado das notas concluídas neste app.\n\n`
-          + `${count} nota${count === 1 ? '' : 's'} · ${formatCurrencyBR(valorOk)}\n\n`
-          + 'Confira se está certo. Depois disso a Receita pode gerar a guia DAS.',
-        confirmLabel: 'Enviar declaração',
-        cancelLabel: 'Agora não',
-      });
-      if (!confirmed) return;
+      count = Number(fat?.count) || 0;
+      valorOk = Number.isFinite(total) ? total : 0;
+    } catch (e: any) {
+      setCreateGuideLoading(false);
+      await offerPgdasdAfterDasMessage(
+        `Não deu para declarar ${periodoLabel}`,
+        toMeiUserErrorMessage(e?.message || 'A Receita recusou a declaração.'),
+      );
+      return;
+    }
+    setCreateGuideLoading(false);
 
+    const confirmed = await confirmDialog({
+      title: `Declarar ${periodoLabel}`,
+      message:
+        `Vou enviar à Receita o faturamento de ${periodoLabel}, somado das notas concluídas neste app. `
+        + 'Confira se está certo. Depois disso a Receita pode gerar a guia DAS.',
+      highlight: formatCurrencyBR(valorOk),
+      highlightCaption: `${count} nota${count === 1 ? '' : 's'} concluída${count === 1 ? '' : 's'} neste app`,
+      confirmLabel: 'Enviar declaração',
+      cancelLabel: 'Agora não',
+      iconName: 'document-text-outline',
+      confirmIntent: 'primary',
+    });
+    if (!confirmed) return;
+
+    setCreateGuideLoading(true);
+    try {
       await declararSimplesDas({
         confirm: true,
         periodoApuracao: periodo,
