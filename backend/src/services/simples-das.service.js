@@ -55,6 +55,30 @@ const isReciboOnlyCache = (row) => {
 
 const isUsableDasPdfCache = (row) => Boolean(row?.pdf_base64) && !isReciboOnlyCache(row)
 
+export const todayYmdSaoPaulo = (now = new Date()) => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now)
+  const year = parts.find((p) => p.type === 'year')?.value
+  const month = parts.find((p) => p.type === 'month')?.value
+  const day = parts.find((p) => p.type === 'day')?.value
+  return `${year}${month}${day}`
+}
+
+const normalizeDataConsolidacao = (value) => {
+  const digits = String(value || '').replace(/\D/g, '')
+  return digits.length === 8 ? digits : null
+}
+
+/** Extrato PGDAS só para mês pago / sem débito. Guia vencida precisa de DAS novo. */
+export const shouldFallbackToDasExtrato = ({
+  regenerate = false,
+  dataConsolidacao = null,
+} = {}) => !regenerate && !normalizeDataConsolidacao(dataConsolidacao)
+
 /**
  * CNPJ da operação = certificado da empresa autenticada.
  * Hint do frontend só é aceito se coincidir com o CNPJ do cert / empresa.
@@ -306,8 +330,14 @@ export const gerarSimplesDas = async (userId, payload = {}) => {
     throw badRequest('Informe periodoApuracao (AAAAMM).')
   }
 
+  const dataConsolidacao = normalizeDataConsolidacao(payload.dataConsolidacao)
+  const allowExtrato = shouldFallbackToDasExtrato({
+    regenerate: payload.regenerate === true,
+    dataConsolidacao,
+  })
+
   // Mês já pago: tenta extrato do DAS emitido (CONSEXTRATO) antes de GERARDAS.
-  if (payload.preferExistingPdf) {
+  if (payload.preferExistingPdf && allowExtrato) {
     try {
       return await baixarExtratoDasDoPeriodo({
         userId,
@@ -324,7 +354,7 @@ export const gerarSimplesDas = async (userId, payload = {}) => {
     result = await gerarDasPgdasd({
       contribuinteCnpj,
       periodoApuracao: periodo,
-      dataConsolidacao: payload.dataConsolidacao || null,
+      dataConsolidacao,
       userId,
     })
   } catch (err) {
@@ -332,7 +362,7 @@ export const gerarSimplesDas = async (userId, payload = {}) => {
     const msg = String(err?.message || '')
     const isSemDebito = code === 'PGDASD_SEM_DEBITO'
       || /MSG_E0139|n[aã]o\s+haver\s+valor\s+devido|sem\s+valor\s+devido|n[aã]o\s+foi\s+gerado\s+das/i.test(msg)
-    if (isSemDebito) {
+    if (isSemDebito && allowExtrato) {
       try {
         return await baixarExtratoDasDoPeriodo({
           userId,
@@ -450,7 +480,9 @@ export const downloadSimplesDas = async (
 
   return gerarSimplesDas(userId, {
     periodoApuracao: periodo,
-    preferExistingPdf: Boolean(preferExistingPdf),
+    preferExistingPdf: Boolean(preferExistingPdf) && !regenerate,
+    regenerate,
+    dataConsolidacao: regenerate ? todayYmdSaoPaulo() : null,
   })
 }
 

@@ -4,6 +4,10 @@ import { mapDeclaracoesToPeriods, buildFallbackPeriodList, lastClosedPeriodoApur
 import { aggregateNotasFaturamentoPeriodo, buildDeclaracaoMensalPayload } from '../src/services/pgdasd/transmitir-declaracao.js'
 import { extractPdfBase64FromPgdasdResponse } from '../src/services/pgdasd/client.js'
 import { inspectPgdasdSerproConfig } from '../src/services/pgdasd/client.js'
+import {
+  shouldFallbackToDasExtrato,
+  todayYmdSaoPaulo,
+} from '../src/services/simples-das.service.js'
 
 describe('pgdasd consultar map', () => {
   it('mapeia periodos a partir de estrutura CONSDECLARACAO', () => {
@@ -205,5 +209,18 @@ describe('pgdasd config inspect', () => {
     const cfg = inspectPgdasdSerproConfig()
     assert.equal(typeof cfg.configured, 'boolean')
     assert.ok(Array.isArray(cfg.missing))
+  })
+})
+
+describe('pgdasd guia vencida vs extrato', () => {
+  it('hoje em Brasília tem 8 dígitos', () => {
+    assert.match(todayYmdSaoPaulo(new Date('2026-09-03T20:00:00-03:00')), /^\d{8}$/)
+    assert.equal(todayYmdSaoPaulo(new Date('2026-09-03T20:00:00-03:00')), '20260903')
+  })
+
+  it('atualizar vencido não cai no extrato do PGDAS', () => {
+    assert.equal(shouldFallbackToDasExtrato({ regenerate: true }), false)
+    assert.equal(shouldFallbackToDasExtrato({ dataConsolidacao: '20260903' }), false)
+    assert.equal(shouldFallbackToDasExtrato({}), true)
   })
 })

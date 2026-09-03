@@ -1165,15 +1165,20 @@ function MeiScreenContent() {
         // Sempre período AAAAMM — guideId UUID do cache local quebrava o download.
         const downloadKey = `pgdasd-${periodoApuracao}`;
         const preferExistingPdf = !forceGenerateDas && period?.status === 'pago' && period?.hasDas !== false;
+        const regenerate = Boolean(forceGenerateDas || (vencida && period?.status === 'a_pagar'));
+        const dataConsolidacao = regenerate
+          ? new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }).replace(/-/g, '')
+          : undefined;
         let guide = await downloadSimplesDas(downloadKey, {
-          regenerate: Boolean(forceGenerateDas || (vencida && period?.status === 'a_pagar')),
-          preferExistingPdf,
+          regenerate,
+          preferExistingPdf: preferExistingPdf && !regenerate,
         });
         if (!guide?.pdfBase64) {
           guide = await gerarSimplesDas({
             cnpj: normalizedCnpj,
             periodoApuracao,
-            preferExistingPdf,
+            preferExistingPdf: preferExistingPdf && !regenerate,
+            dataConsolidacao,
           });
         }
         if (!guide?.pdfBase64) {
