@@ -86,8 +86,12 @@ export const resolveAgendaReminderDateIso = (slot, explicitDateIso) => {
   return calendarDateTodayInSaoPaulo();
 };
 
-export const isAgendaWhatsappRemindersEnabled = () =>
-  String(env.AGENDA_WHATSAPP_REMINDERS_ENABLED || '').toLowerCase() === 'true';
+export const isAgendaWhatsappRemindersEnabled = () => {
+  const raw = String(env.AGENDA_WHATSAPP_REMINDERS_ENABLED || '').trim().toLowerCase();
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  return isWhatsappOutboundConfigured();
+};
 
 export const listUsersWithWhatsappLink = async () => {
   const dbConfigError = getServiceDbConfigError();
@@ -126,7 +130,7 @@ export const formatAgendaReminderWhatsappMessage = (checklist, slot = 'manha') =
   if (!checklist?.events?.length) return null;
   const greeting = slot === 'noite' ? 'Boa noite' : 'Bom dia';
   const dayWord = slot === 'noite' ? 'amanhã' : 'hoje';
-  return `${greeting}! Compromissos de ${dayWord}:\n\n${checklist.message}`;
+  return `*Foco Simples*\n${greeting}! Compromissos de ${dayWord}:\n\n${checklist.message}`;
 };
 
 const trySendAgendaReminder = async ({ userId, phone, message, slot, dateIso }) => {

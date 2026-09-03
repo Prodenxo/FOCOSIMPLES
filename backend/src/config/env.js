@@ -345,7 +345,7 @@ export const env = {
    * (`n8n_link` + `list_calendar_events`). Requer Z-API outbound ou `N8N_WHATSAPP_WEBHOOK_URL`.
    */
   AGENDA_WHATSAPP_REMINDERS_ENABLED:
-    process.env.AGENDA_WHATSAPP_REMINDERS_ENABLED || "false",
+    process.env.AGENDA_WHATSAPP_REMINDERS_ENABLED || "",
   /**
    * `true` (padrão quando lembretes estão on): dispara 07:00 e 21:00 no próprio backend
    * (America/Sao_Paulo) — sem cron-job.org. `false` desliga só o scheduler interno.

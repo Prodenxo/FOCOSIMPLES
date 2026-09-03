@@ -32,6 +32,7 @@ test('formatAgendaReminderWhatsappMessage: lista compromissos', () => {
     message: buildDayAgendaChecklistMessage('25/05/2026', events, {}),
   };
   const msg = formatAgendaReminderWhatsappMessage(checklist, 'noite');
+  assert.ok(msg?.includes('Foco Simples'));
   assert.ok(msg?.includes('Boa noite'));
   assert.ok(msg?.includes('amanhã'));
   assert.ok(msg?.includes('📋 Suas atividades'));

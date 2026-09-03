@@ -19,11 +19,9 @@ const MIN_LEAD_MINUTES = 5;
 const sentThisProcess = new Set();
 
 export const isAgendaUpcomingWhatsappEnabled = () => {
-  const explicit = String(env.AGENDA_UPCOMING_WHATSAPP_ENABLED || '').trim();
-  if (explicit) return explicit.toLowerCase() === 'true';
-  if (String(env.AGENDA_WHATSAPP_REMINDERS_ENABLED || '').toLowerCase() === 'true') {
-    return true;
-  }
+  const explicit = String(env.AGENDA_UPCOMING_WHATSAPP_ENABLED || '').trim().toLowerCase();
+  if (explicit === 'true') return true;
+  if (explicit === 'false') return false;
   return isWhatsappOutboundConfigured();
 };
 
@@ -154,7 +152,7 @@ export const formatUpcomingAgendaWhatsappMessage = (event, minutesBefore) => {
     ? Math.max(1, Math.round((start.getTime() - Date.now()) / 60_000))
     : minutesBefore;
   const line = formatCalendarEventDisplayLine(event);
-  let msg = `⏰ Em ~${mins} min\n${line}`;
+  let msg = `*Foco Simples*\n⏰ Em ~${mins} min\n${line}`;
   if (event.meetLink) msg += `\n🔗 ${event.meetLink}`;
   msg += '\n\n_Digite «concluí» ou o número do item quando terminar._';
   return msg;

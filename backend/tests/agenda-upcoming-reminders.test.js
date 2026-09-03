@@ -46,6 +46,7 @@ test('isEventInUpcomingReminderWindow: ignora dia inteiro', () => {
 test('formatUpcomingAgendaWhatsappMessage: inclui lembrete e dica de concluir', () => {
   const event = { title: 'Reunião', time: '14:00:00', date: '2099-06-16', allDay: false };
   const msg = formatUpcomingAgendaWhatsappMessage(event, 30);
+  assert.ok(msg.includes('Foco Simples'));
   assert.ok(msg.includes('⏰'));
   assert.ok(msg.includes('Reunião'));
   assert.ok(msg.includes('concluí'));
