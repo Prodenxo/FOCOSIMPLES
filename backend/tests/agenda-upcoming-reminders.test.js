@@ -6,6 +6,7 @@ import {
   buildUpcomingReminderEventKey,
   dedupeUpcomingCalendarEvents,
   formatUpcomingAgendaWhatsappMessage,
+  getUpcomingReminderDelayMs,
   isEventInUpcomingReminderWindow,
   maybeSendUpcomingReminderForCreatedEvent,
 } from '../src/services/agenda-upcoming-reminders.service.js';
@@ -41,6 +42,22 @@ test('isEventInUpcomingReminderWindow: ignora dia inteiro', () => {
     isEventInUpcomingReminderWindow({ title: 'X', allDay: true }, 30, now),
     false,
   );
+});
+
+test('getUpcomingReminderDelayMs: dispara 30 min antes', () => {
+  const now = new Date('2099-06-16T13:20:00-03:00');
+  const delay = getUpcomingReminderDelayMs(
+    {
+      title: 'Call',
+      time: '14:00',
+      date: '2099-06-16',
+      startAtIso: '2099-06-16T14:00:00-03:00',
+      allDay: false,
+    },
+    30,
+    now,
+  );
+  assert.equal(delay, 10 * 60 * 1000);
 });
 
 test('formatUpcomingAgendaWhatsappMessage: inclui lembrete e dica de concluir', () => {

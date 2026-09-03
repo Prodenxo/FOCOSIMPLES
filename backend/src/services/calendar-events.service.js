@@ -332,6 +332,17 @@ const mapTransactionToCalendarEvent = (t, dateIso) => {
   };
 };
 
+const parseClockToHourMinute = (raw) => {
+  const text = String(raw || '').trim().toLowerCase();
+  const match = text.match(/(\d{1,2})\s*[:h]\s*(\d{2})/);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return { hour, minute };
+};
+
 /**
  * @param {object} event
  * @returns {Date | null}
@@ -345,10 +356,10 @@ export const eventStartsAtInstant = (event) => {
     if (d) return d;
   }
   if (event?.date && event?.time) {
-    const [h, m] = String(event.time).split(':').map((x) => Number(x));
-    if (Number.isFinite(h) && Number.isFinite(m)) {
+    const parsed = parseClockToHourMinute(event.time);
+    if (parsed) {
       return new Date(
-        `${event.date}T${pad2(h)}:${pad2(m)}:00-03:00`,
+        `${event.date}T${pad2(parsed.hour)}:${pad2(parsed.minute)}:00-03:00`,
       );
     }
   }
@@ -375,10 +386,10 @@ export const eventEndsAtInstant = (event) => {
     return new Date(start.getTime() + event.durationMinutes * 60_000);
   }
   if (event?.date && event?.endTime) {
-    const [h, m] = String(event.endTime).split(':').map((x) => Number(x));
-    if (Number.isFinite(h) && Number.isFinite(m)) {
+    const parsed = parseClockToHourMinute(event.endTime);
+    if (parsed) {
       return new Date(
-        `${event.date}T${pad2(h)}:${pad2(m)}:00-03:00`,
+        `${event.date}T${pad2(parsed.hour)}:${pad2(parsed.minute)}:00-03:00`,
       );
     }
   }
@@ -1731,6 +1742,9 @@ export const createCalendarEventForUser = async (userId, payload = {}) => {
     reminderSummary: reminders.map((r) => r.label).join('; ') || null,
     source: 'google',
     timeAdjustedToEvening: !!timeAdjustedToEvening,
+    startAtIso: allDay
+      ? null
+      : `${parsed.iso}T${pad2(startHour)}:${pad2(startMinute)}:00-03:00`,
   };
 };
 

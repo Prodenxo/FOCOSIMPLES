@@ -146,16 +146,15 @@ export const tryAcquireUpcomingReminderSlot = async (userId, dateIso, eventKey) 
         sentThisProcess.add(localKey);
         return false;
       }
-      console.warn('[agenda-upcoming] dedup falhou após criar tabela:', retry.error.message);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn('[agenda-upcoming] não deu para criar calendar_upcoming_reminder_sent:', msg);
     }
-    return false;
   }
 
-  console.warn('[agenda-upcoming] dedup falhou (não envia para evitar flood):', error.message);
-  return false;
+  console.warn('[agenda-upcoming] dedup falhou, envia mesmo assim:', error.message);
+  sentThisProcess.add(localKey);
+  return true;
 };
 
 /**
@@ -165,12 +164,19 @@ export const tryAcquireUpcomingReminderSlot = async (userId, dateIso, eventKey) 
  * @param {Date} [now]
  */
 export const isEventInUpcomingReminderWindow = (event, minutesBefore, now = new Date()) => {
-  if (event?.allDay || !event?.time) return false;
+  if (event?.allDay) return false;
   const start = eventStartsAtInstant(event);
   if (!start) return false;
   const msUntil = start.getTime() - now.getTime();
   const maxMs = minutesBefore * 60_000;
   return msUntil > 0 && msUntil <= maxMs;
+};
+
+export const getUpcomingReminderDelayMs = (event, minutesBefore, now = new Date()) => {
+  if (event?.allDay) return null;
+  const start = eventStartsAtInstant(event);
+  if (!start) return null;
+  return start.getTime() - minutesBefore * 60_000 - now.getTime();
 };
 
 export const formatUpcomingAgendaWhatsappMessage = (event, minutesBefore) => {
@@ -183,6 +189,24 @@ export const formatUpcomingAgendaWhatsappMessage = (event, minutesBefore) => {
   if (event.meetLink) msg += `\n🔗 ${event.meetLink}`;
   msg += '\n\n_Digite «concluí» ou o número do item quando terminar._';
   return msg;
+};
+
+const sendUpcomingReminderNow = async ({ userId, phone, event }) => {
+  const dateIso = String(event?.date || calendarDateTodayInSaoPaulo());
+  const eventKey = buildUpcomingReminderEventKey(event);
+  const canSend = await tryAcquireUpcomingReminderSlot(userId, dateIso, eventKey);
+  if (!canSend) return { sent: false, reason: 'duplicate' };
+  const message = formatUpcomingAgendaWhatsappMessage(event, getAgendaUpcomingMinutesBefore());
+  await sendWhatsappMessage({
+    userId,
+    phone,
+    message,
+    source: 'agenda_reminder_upcoming',
+    date: dateIso,
+    eventId: event?.id,
+  });
+  console.info('[agenda-upcoming] enviado', { userId, eventId: event?.id, dateIso });
+  return { sent: true };
 };
 
 /**
@@ -199,20 +223,62 @@ export const maybeSendUpcomingReminderForCreatedEvent = async ({
   if (!isEventInUpcomingReminderWindow(event, minutesBefore)) {
     return { sent: false, reason: 'outside_window' };
   }
-  const dateIso = String(event?.date || calendarDateTodayInSaoPaulo());
-  const eventKey = buildUpcomingReminderEventKey(event);
-  const canSend = await tryAcquireUpcomingReminderSlot(userId, dateIso, eventKey);
-  if (!canSend) return { sent: false, reason: 'duplicate' };
-  const message = formatUpcomingAgendaWhatsappMessage(event, minutesBefore);
-  await sendWhatsappMessage({
+  return sendUpcomingReminderNow({ userId, phone, event });
+};
+
+const pendingCreateReminderTimers = new Map();
+const MAX_CREATE_REMINDER_DELAY_MS = 12 * 60 * 60 * 1000;
+
+/**
+ * Na criação: se já está na janela, envia agora; senão agenda o aviso neste processo.
+ */
+export const scheduleUpcomingReminderForCreatedEvent = async ({
+  userId,
+  phone,
+  event,
+}) => {
+  if (!userId || !phone) return { ok: false, reason: 'no_target' };
+  if (!isWhatsappOutboundConfigured()) return { ok: false, reason: 'no_whatsapp' };
+  if (event?.allDay) return { ok: false, reason: 'all_day' };
+  const minutesBefore = getAgendaUpcomingMinutesBefore();
+  const delayMs = getUpcomingReminderDelayMs(event, minutesBefore);
+  if (delayMs == null) return { ok: false, reason: 'no_start' };
+
+  if (delayMs <= 0) {
+    const start = eventStartsAtInstant(event);
+    if (start && start.getTime() > Date.now()) {
+      return maybeSendUpcomingReminderForCreatedEvent({ userId, phone, event });
+    }
+    return { ok: false, reason: 'too_late' };
+  }
+
+  if (delayMs > MAX_CREATE_REMINDER_DELAY_MS) {
+    return { ok: false, reason: 'far_future' };
+  }
+
+  const key = buildUpcomingReminderDedupKey(
     userId,
-    phone,
-    message,
-    source: 'agenda_reminder_upcoming',
-    date: dateIso,
-    eventId: event?.id,
+    String(event?.date || ''),
+    buildUpcomingReminderEventKey(event),
+  );
+  if (pendingCreateReminderTimers.has(key)) {
+    return { ok: true, reason: 'already_scheduled' };
+  }
+  const timer = setTimeout(() => {
+    pendingCreateReminderTimers.delete(key);
+    void sendUpcomingReminderNow({ userId, phone, event }).catch((err) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[agenda-upcoming] timer falhou:', msg);
+    });
+  }, delayMs);
+  if (typeof timer.unref === 'function') timer.unref();
+  pendingCreateReminderTimers.set(key, timer);
+  console.info('[agenda-upcoming] aviso agendado', {
+    userId,
+    delayMin: Math.round(delayMs / 60_000),
+    title: event?.title,
   });
-  return { sent: true };
+  return { ok: true, scheduled: true, delayMs };
 };
 
 /**

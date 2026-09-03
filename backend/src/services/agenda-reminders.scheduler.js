@@ -77,11 +77,10 @@ export const resolveAgendaSlotForSchedulerTick = (hour, minute) => {
 };
 
 export const isAgendaRemindersSchedulerEnabled = () => {
-  const explicit = String(env.AGENDA_WHATSAPP_SCHEDULER_ENABLED || '').trim();
-  if (explicit) {
-    return explicit.toLowerCase() === 'true';
+  if (isAgendaWhatsappRemindersEnabled() || isAgendaUpcomingWhatsappEnabled()) {
+    return true;
   }
-  return isAgendaWhatsappRemindersEnabled() || isAgendaUpcomingWhatsappEnabled();
+  return String(env.AGENDA_WHATSAPP_SCHEDULER_ENABLED || '').trim().toLowerCase() === 'true';
 };
 
 const runSchedulerTick = async () => {

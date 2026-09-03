@@ -1626,7 +1626,7 @@ export const runOpenclawAction = async (input) => {
       if (!created.allDay) {
         message += ' Te aviso no WhatsApp uns 30 minutos antes.';
         void import('./agenda-upcoming-reminders.service.js').then((mod) =>
-          mod.maybeSendUpcomingReminderForCreatedEvent({
+          mod.scheduleUpcomingReminderForCreatedEvent({
             userId,
             phone,
             event: {
@@ -1634,6 +1634,7 @@ export const runOpenclawAction = async (input) => {
               title: created.title,
               date: created.date,
               time: created.time,
+              startAtIso: created.startAtIso,
               allDay: created.allDay,
               meetLink: created.meetLink,
             },
