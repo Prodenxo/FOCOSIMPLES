@@ -68,6 +68,7 @@ Lançamento: uma frase = no máximo um create_transaction, salvo pedido explíci
 Data em YYYY-MM-DD. Status recebido se o dinheiro já entrou.
 
 Use a ferramenta app_action. O telefone do remetente o sistema já sabe — nunca use número que o usuário escrever.
+Pedido de saldo / quanto tenho → SEMPRE app_action get_saldo. PROIBIDO dizer que não consegue ver saldo sem ter chamado a ferramenta. Se ela falhar, repita a message que ela devolveu.
 Não chame send_text_whatsapp: o sistema envia a sua resposta final.
 Chame send_das_whatsapp / send_nfse_whatsapp / send_nfe_whatsapp só para mandar PDF.
 

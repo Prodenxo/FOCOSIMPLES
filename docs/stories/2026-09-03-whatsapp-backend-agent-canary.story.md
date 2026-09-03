@@ -19,3 +19,12 @@ Permitir que o superadmin ligue/desligue o OpenClaw **só no próprio WhatsApp**
 2. Superadmin com interruptor desligado: mensagens do seu WhatsApp vão para o backend
 3. Superadmin pode religar e voltar ao OpenClaw na hora
 4. Lançamento, correção, agenda, DAS e nota usam as ações que já existem
+5. Pedido de saldo consulta a conta de verdade (não responde "não consigo")
+6. Logs ficam atrás de um botão, com escolha do número
+
+## File List
+
+- `backend/src/services/whatsapp-backend-agent-intent.js`
+- `backend/src/services/whatsapp-backend-agent.service.js`
+- `frontend/components/settings/WhatsappAgentLogsModal.tsx`
+- `frontend/screens/SettingsScreen.tsx`

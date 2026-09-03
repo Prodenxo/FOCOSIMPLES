@@ -6,6 +6,7 @@ import {
   WHATSAPP_BACKEND_AGENT_ACTIONS,
   WHATSAPP_BACKEND_AGENT_SYSTEM_PROMPT,
 } from './whatsapp-backend-agent-prompt.js';
+import { matchQuickWhatsappIntent } from './whatsapp-backend-agent-intent.js';
 
 const HISTORY_LIMIT = 16;
 const MAX_TOOL_TURNS = 8;
@@ -149,51 +150,69 @@ export const handleWhatsappBackendAgent = async ({
   let replySent = false;
   let lastAssistant = '';
 
+  const quick = matchQuickWhatsappIntent(trimmed);
+  if (quick) {
+    try {
+      const result = await runOpenclawAction({
+        phone,
+        senderPhone: phone,
+        action: quick.action,
+        payload: quick.payload,
+      });
+      lastAssistant = String(result?.message || '').trim()
+        || 'Consulta feita, mas sem texto para mostrar.';
+    } catch (err) {
+      lastAssistant = err instanceof Error ? err.message : String(err);
+    }
+  }
+
   try {
-    for (let turn = 0; turn < MAX_TOOL_TURNS; turn += 1) {
-      const completion = await callOpenAi(messages);
-      const choice = completion?.choices?.[0]?.message;
-      if (!choice) break;
+    if (!lastAssistant) {
+      for (let turn = 0; turn < MAX_TOOL_TURNS; turn += 1) {
+        const completion = await callOpenAi(messages);
+        const choice = completion?.choices?.[0]?.message;
+        if (!choice) break;
 
-      const toolCalls = Array.isArray(choice.tool_calls) ? choice.tool_calls : [];
-      if (toolCalls.length > 0) {
-        messages.push({
-          role: 'assistant',
-          content: choice.content || null,
-          tool_calls: toolCalls,
-        });
-        for (const call of toolCalls) {
-          const args = parseToolArgs(call?.function?.arguments);
-          const action = String(args.action || '').trim();
-          const payload = args.payload && typeof args.payload === 'object' ? args.payload : {};
-          let result;
-          try {
-            result = await runOpenclawAction({
-              phone,
-              senderPhone: phone,
-              action,
-              payload,
-            });
-          } catch (err) {
-            result = {
-              ok: false,
-              message: err instanceof Error ? err.message : String(err),
-            };
-          }
-          if (SEND_FILE_ACTIONS.has(action) && result?.ok !== false) {
-            replySent = true;
-          }
+        const toolCalls = Array.isArray(choice.tool_calls) ? choice.tool_calls : [];
+        if (toolCalls.length > 0) {
           messages.push({
-            role: 'tool',
-            tool_call_id: call.id,
-            content: JSON.stringify(summarizeActionResult(result)),
+            role: 'assistant',
+            content: choice.content || null,
+            tool_calls: toolCalls,
           });
+          for (const call of toolCalls) {
+            const args = parseToolArgs(call?.function?.arguments);
+            const action = String(args.action || '').trim();
+            const payload = args.payload && typeof args.payload === 'object' ? args.payload : {};
+            let result;
+            try {
+              result = await runOpenclawAction({
+                phone,
+                senderPhone: phone,
+                action,
+                payload,
+              });
+            } catch (err) {
+              result = {
+                ok: false,
+                message: err instanceof Error ? err.message : String(err),
+              };
+            }
+            if (SEND_FILE_ACTIONS.has(action) && result?.ok !== false) {
+              replySent = true;
+            }
+            messages.push({
+              role: 'tool',
+              tool_call_id: call.id,
+              content: JSON.stringify(summarizeActionResult(result)),
+            });
+          }
+          continue;
         }
-        continue;
-      }
 
-      lastAssistant = String(choice.content || '').trim();
-      break;
+        lastAssistant = String(choice.content || '').trim();
+        break;
+      }
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

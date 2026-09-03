@@ -43,19 +43,16 @@ import {
 import { SettingsProfileField } from "../components/settings/SettingsProfileField";
 import { SettingsPhoneField } from "../components/settings/SettingsPhoneField";
 import { SettingsActionLink } from "../components/settings/SettingsActionLink";
+import { WhatsappAgentLogsModal } from "../components/settings/WhatsappAgentLogsModal";
 import { SignOutHeaderButton } from "../components/settings/SignOutHeaderButton";
 import { MfAppHeader } from "../components/ui/MfAppHeader";
 import { useMfTheme } from "../components/ui/useMfTheme";
 import { mfRadius, mfSpacing } from "../lib/theme";
 import { ToggleSwitch } from "../components/ToggleSwitch";
 import {
-  fetchWhatsappAgentLogMessages,
-  fetchWhatsappAgentLogThreads,
   fetchWhatsappAgentPref,
   previewWhatsappBackendAgent,
   saveWhatsappAgentPref,
-  type WhatsappAgentLogMessage,
-  type WhatsappAgentLogThread,
   type WhatsappAgentPref,
 } from "../services/whatsappAgentPrefService";
 
@@ -99,10 +96,7 @@ export default function SettingsScreen() {
   const [whatsappTestText, setWhatsappTestText] = useState("qual meu saldo?");
   const [whatsappTestReply, setWhatsappTestReply] = useState("");
   const [whatsappTestLoading, setWhatsappTestLoading] = useState(false);
-  const [whatsappLogThreads, setWhatsappLogThreads] = useState<WhatsappAgentLogThread[]>([]);
-  const [whatsappLogPhone, setWhatsappLogPhone] = useState<string | null>(null);
-  const [whatsappLogMessages, setWhatsappLogMessages] = useState<WhatsappAgentLogMessage[]>([]);
-  const [whatsappLogLoading, setWhatsappLogLoading] = useState(false);
+  const [whatsappLogsOpen, setWhatsappLogsOpen] = useState(false);
   const [disconnectingGoogle, setDisconnectingGoogle] = useState(false);
   const theme = useMemo(() => getTheme(isDarkMode), [isDarkMode]);
   const siteTokens = useMemo(() => getSiteTokens(isDarkMode), [isDarkMode]);
@@ -157,52 +151,10 @@ export default function SettingsScreen() {
       .catch(() => {
         if (!cancelled) setWhatsappAgentPref(null);
       });
-    void fetchWhatsappAgentLogThreads()
-      .then((data) => {
-        if (!cancelled) setWhatsappLogThreads(data.threads || []);
-      })
-      .catch(() => {
-        if (!cancelled) setWhatsappLogThreads([]);
-      });
     return () => {
       cancelled = true;
     };
   }, [effectiveRole]);
-
-  const refreshWhatsappLogs = async (openPhone?: string) => {
-    const data = await fetchWhatsappAgentLogThreads();
-    setWhatsappLogThreads(data.threads || []);
-    const phone = openPhone || whatsappLogPhone;
-    if (!phone) return;
-    const detail = await fetchWhatsappAgentLogMessages(phone);
-    setWhatsappLogMessages(detail.messages || []);
-  };
-
-  const handleOpenWhatsappLog = async (phone: string) => {
-    if (whatsappLogPhone === phone) {
-      setWhatsappLogPhone(null);
-      setWhatsappLogMessages([]);
-      return;
-    }
-    setWhatsappLogPhone(phone);
-    setWhatsappLogLoading(true);
-    try {
-      const detail = await fetchWhatsappAgentLogMessages(phone);
-      setWhatsappLogMessages(detail.messages || []);
-    } catch (err) {
-      showAppToast(getErrorMessage(err) || "Não deu para abrir o histórico.", "error");
-    } finally {
-      setWhatsappLogLoading(false);
-    }
-  };
-
-  const formatWhatsappLogPhone = (phone: string) => {
-    const digits = phone.replace(/\D/g, "");
-    if (digits.startsWith("55") && digits.length >= 12) {
-      return `+55 ${digits.slice(2, 4)} ${digits.slice(4, 9)}-${digits.slice(9)}`;
-    }
-    return digits || phone;
-  };
 
   const handleToggleWhatsappOpenclaw = async (openclawEnabled: boolean) => {
     if (savingWhatsappAgent) return;
@@ -231,7 +183,6 @@ export default function SettingsScreen() {
     try {
       const result = await previewWhatsappBackendAgent(text);
       setWhatsappTestReply(result.reply || "O robô não devolveu texto.");
-      await refreshWhatsappLogs();
     } catch (err) {
       setWhatsappTestReply(getErrorMessage(err) || "Não deu para testar agora.");
     } finally {
@@ -836,50 +787,14 @@ export default function SettingsScreen() {
               {whatsappTestReply ? (
                 <Text style={styles.whatsappTestReply}>{whatsappTestReply}</Text>
               ) : null}
-              <Text style={[styles.whatsappAgentLabel, { marginTop: 20 }]}>
-                Conversas por número
-              </Text>
-              <Text style={styles.whatsappAgentHint}>
-                Só o robô do site. O que passou no OpenClaw não aparece aqui.
-              </Text>
-              {whatsappLogThreads.length === 0 ? (
-                <Text style={styles.whatsappAgentHint}>
-                  Ainda não tem conversa gravada.
-                </Text>
-              ) : (
-                whatsappLogThreads.map((thread) => {
-                  const open = whatsappLogPhone === thread.phone;
-                  return (
-                    <View key={thread.phone} style={styles.whatsappLogThread}>
-                      <TouchableOpacity
-                        onPress={() => void handleOpenWhatsappLog(thread.phone)}
-                      >
-                        <Text style={styles.whatsappAgentLabel}>
-                          {formatWhatsappLogPhone(thread.phone)}
-                        </Text>
-                        <Text style={styles.whatsappAgentHint} numberOfLines={2}>
-                          {thread.message_count} msgs · {thread.last_content}
-                        </Text>
-                      </TouchableOpacity>
-                      {open ? (
-                        whatsappLogLoading ? (
-                          <Text style={styles.whatsappAgentHint}>Abrindo…</Text>
-                        ) : (
-                          whatsappLogMessages.map((msg) => (
-                            <View key={msg.id} style={styles.whatsappLogBubble}>
-                              <Text style={styles.whatsappLogMeta}>
-                                {msg.role === "user" ? "Cliente" : "Robô"}
-                                {msg.source === "preview" ? " · teste na tela" : ""}
-                              </Text>
-                              <Text style={styles.whatsappTestReply}>{msg.content}</Text>
-                            </View>
-                          ))
-                        )
-                      ) : null}
-                    </View>
-                  );
-                })
-              )}
+              <View style={{ marginTop: 8 }}>
+                <SettingsActionLink
+                  title="Ver logs"
+                  description="Auditar conversas por número"
+                  icon="document-text-outline"
+                  onPress={() => setWhatsappLogsOpen(true)}
+                />
+              </View>
             </SettingsSectionCard>
           ) : null}
 
@@ -931,6 +846,11 @@ export default function SettingsScreen() {
         >
           {settingsBody}
         </MfScrollView>
+
+      <WhatsappAgentLogsModal
+        visible={whatsappLogsOpen}
+        onClose={() => setWhatsappLogsOpen(false)}
+      />
 
       <MfConfirmDialog
         visible={googleDialog !== null}
@@ -1084,23 +1004,6 @@ const createStyles = (
       fontSize: 14,
       lineHeight: 20,
       color: siteTokens.textPrimary,
-    },
-    whatsappLogThread: {
-      marginTop: 12,
-      paddingTop: 12,
-      borderTopWidth: 1,
-      borderTopColor: siteTokens.divider,
-    },
-    whatsappLogBubble: {
-      marginTop: 8,
-      padding: 10,
-      borderRadius: mfRadius.md,
-      backgroundColor: isDarkMode ? "rgba(255,255,255,0.04)" : siteTokens.inputBg,
-    },
-    whatsappLogMeta: {
-      fontSize: 11,
-      fontWeight: "600",
-      color: siteTokens.textSecondary,
     },
     linkAction: {
       fontSize: 14,
