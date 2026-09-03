@@ -7,6 +7,7 @@ import {
   dedupeUpcomingCalendarEvents,
   formatUpcomingAgendaWhatsappMessage,
   isEventInUpcomingReminderWindow,
+  maybeSendUpcomingReminderForCreatedEvent,
 } from '../src/services/agenda-upcoming-reminders.service.js';
 
 test('isEventInUpcomingReminderWindow: dentro da janela', () => {
@@ -95,4 +96,14 @@ test('dedupeUpcomingCalendarEvents: um compromisso duplicado → prefere com Mee
   ]);
   assert.equal(merged.length, 1);
   assert.equal(merged[0].meetLink, 'https://meet.google.com/abc-def-ghi');
+});
+
+test('maybeSendUpcomingReminderForCreatedEvent: sem telefone não envia', async () => {
+  const out = await maybeSendUpcomingReminderForCreatedEvent({
+    userId: '',
+    phone: '',
+    event: { title: 'X', date: '2099-01-01', time: '10:00', allDay: false },
+  });
+  assert.equal(out.sent, false);
+  assert.equal(out.reason, 'no_target');
 });

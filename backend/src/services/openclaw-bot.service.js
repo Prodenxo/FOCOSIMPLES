@@ -1593,6 +1593,13 @@ export const runOpenclawAction = async (input) => {
 
   if (action === 'create_calendar_event') {
     try {
+      if (
+        payload.reminderMinutes == null
+        && payload.lembreteMinutos == null
+        && payload.reminder == null
+      ) {
+        payload = { ...payload, lembreteMinutos: 30 };
+      }
       const created = await calendarEventsService.createCalendarEventForUser(userId, payload);
       if (!created.ok) {
         const hint = created.notLinked
@@ -1615,9 +1622,27 @@ export const runOpenclawAction = async (input) => {
           },
         };
       }
+      let message = created.message;
+      if (!created.allDay) {
+        message += ' Te aviso no WhatsApp uns 30 minutos antes.';
+        void import('./agenda-upcoming-reminders.service.js').then((mod) =>
+          mod.maybeSendUpcomingReminderForCreatedEvent({
+            userId,
+            phone,
+            event: {
+              id: created.eventId,
+              title: created.title,
+              date: created.date,
+              time: created.time,
+              allDay: created.allDay,
+              meetLink: created.meetLink,
+            },
+          }),
+        );
+      }
       return {
         ok: true,
-        message: created.message,
+        message,
         data: {
           ...created,
           userId,

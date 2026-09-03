@@ -21,7 +21,10 @@ const sentThisProcess = new Set();
 export const isAgendaUpcomingWhatsappEnabled = () => {
   const explicit = String(env.AGENDA_UPCOMING_WHATSAPP_ENABLED || '').trim();
   if (explicit) return explicit.toLowerCase() === 'true';
-  return String(env.AGENDA_WHATSAPP_REMINDERS_ENABLED || '').toLowerCase() === 'true';
+  if (String(env.AGENDA_WHATSAPP_REMINDERS_ENABLED || '').toLowerCase() === 'true') {
+    return true;
+  }
+  return isWhatsappOutboundConfigured();
 };
 
 export const getAgendaUpcomingMinutesBefore = () => {
@@ -155,6 +158,36 @@ export const formatUpcomingAgendaWhatsappMessage = (event, minutesBefore) => {
   if (event.meetLink) msg += `\n🔗 ${event.meetLink}`;
   msg += '\n\n_Digite «concluí» ou o número do item quando terminar._';
   return msg;
+};
+
+/**
+ * Se o compromisso já está na janela de ~30 min, manda o aviso agora.
+ */
+export const maybeSendUpcomingReminderForCreatedEvent = async ({
+  userId,
+  phone,
+  event,
+}) => {
+  if (!userId || !phone) return { sent: false, reason: 'no_target' };
+  if (!isWhatsappOutboundConfigured()) return { sent: false, reason: 'no_whatsapp' };
+  const minutesBefore = getAgendaUpcomingMinutesBefore();
+  if (!isEventInUpcomingReminderWindow(event, minutesBefore)) {
+    return { sent: false, reason: 'outside_window' };
+  }
+  const dateIso = String(event?.date || calendarDateTodayInSaoPaulo());
+  const eventKey = buildUpcomingReminderEventKey(event);
+  const canSend = await tryAcquireUpcomingReminderSlot(userId, dateIso, eventKey);
+  if (!canSend) return { sent: false, reason: 'duplicate' };
+  const message = formatUpcomingAgendaWhatsappMessage(event, minutesBefore);
+  await sendWhatsappMessage({
+    userId,
+    phone,
+    message,
+    source: 'agenda_reminder_upcoming',
+    date: dateIso,
+    eventId: event?.id,
+  });
+  return { sent: true };
 };
 
 /**
