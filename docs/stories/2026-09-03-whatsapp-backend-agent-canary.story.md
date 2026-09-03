@@ -24,7 +24,12 @@ Permitir que o superadmin ligue/desligue o OpenClaw **só no próprio WhatsApp**
 
 ## File List
 
+- `backend/src/prompts/midas-soul.md`
+- `backend/src/services/openclaw-actions.js`
+- `backend/src/services/openclaw-period.js`
+- `backend/src/services/openclaw-bot.service.js`
 - `backend/src/services/whatsapp-backend-agent-intent.js`
+- `backend/src/services/whatsapp-backend-agent-prompt.js`
 - `backend/src/services/whatsapp-backend-agent.service.js`
 - `frontend/components/settings/WhatsappAgentLogsModal.tsx`
 - `frontend/screens/SettingsScreen.tsx`

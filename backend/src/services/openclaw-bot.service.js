@@ -100,8 +100,14 @@ import {
   resolveOpenclawCallerPhone,
 } from './openclaw-sender-guard.service.js';
 import { rerouteOpenclawNfseProductToNfe } from './openclaw-nf-document-type.service.js';
+import {
+  formatPeriodSummaryMessage,
+  summarizeTransactions,
+} from './openclaw-period.js';
+import { OPENCLAW_CANONICAL_ACTIONS } from './openclaw-actions.js';
 
 const MAX_LIST = 40;
+const MAX_PERIOD_LIST = 80;
 
 /** Erros de DAS com texto claro para o agente WhatsApp (não pedir CNPJ/certificado no chat). */
 const rethrowDasFetchErrorForBot = (err, display) => {
@@ -1040,11 +1046,38 @@ export const runOpenclawAction = async (input) => {
 
   if (action === 'list_transactions') {
     const rows = await transactionsService.listTransactions(userId);
-    const sliced = (rows || []).slice(0, MAX_LIST);
+    const from = String(payload?.from || payload?.data_inicio || payload?.inicio || '').trim();
+    const to = String(payload?.to || payload?.data_fim || payload?.fim || '').trim();
+    const tipo = String(payload?.tipo || payload?.type || '').trim();
+    const hasPeriod = Boolean(from || to);
+    const summary = summarizeTransactions(rows, {
+      from: from || undefined,
+      to: to || undefined,
+      tipo: tipo || undefined,
+    });
+    const sliced = summary.transactions.slice(0, hasPeriod ? MAX_PERIOD_LIST : MAX_LIST);
+    const message = hasPeriod
+      ? formatPeriodSummaryMessage(summary)
+      : `Últimas ${sliced.length} transações (máx. ${MAX_LIST}).`;
     return {
       ok: true,
-      message: `Últimas ${sliced.length} transações (máx. ${MAX_LIST}).`,
-      data: { transactions: sliced, userId, actorContext, ...linkDebug },
+      message,
+      data: {
+        transactions: sliced,
+        totalEntradas: summary.totalEntradas,
+        totalSaidas: summary.totalSaidas,
+        from: summary.from,
+        to: summary.to,
+        tipo: summary.tipo,
+        count: summary.count,
+        userId,
+        actorContext,
+        ...linkDebug,
+        agentInstructions:
+          'Repita o campo message para o utilizador. '
+          + 'ok:true com total zero é resposta válida — não diga que não conseguiu aceder aos dados. '
+          + 'Para outro período use from/to em YYYY-MM-DD; tipo saida = gastos, tipo entrada = receitas.',
+      },
     };
   }
 
@@ -2716,6 +2749,6 @@ export const runOpenclawAction = async (input) => {
   }
 
   throw badRequest(
-    `Ação desconhecida: "${action}". Use: ping, resolve_user, list_roles, get_permissions, check_permission, list_access_requests, approve_access_request, reject_access_request, list_categories, list_contas, get_saldo, create_conta, update_conta, delete_conta, list_transactions, create_transaction, update_transaction, delete_transaction, list_calendar_events, list_agenda_checklist_today, complete_calendar_event, list_upcoming_calendar_events, get_next_calendar_event, create_calendar_event, add_calendar_event_meet, delete_calendar_event, get_nfse_setup_status, list_nfse_clientes, register_nfse_cliente, list_nfse_produtos, list_catalog_servicos, list_nfe_produtos, list_nfe_clientes, list_nfe_catalogo, register_nfse_produto, register_nfe_cliente, register_nfe_produto, preview_nfse, emit_nfse, preview_nfe, emit_nfe, list_nfse_notas, consult_nfse, get_nfse_pdf, get_nfe_pdf, send_nfse_whatsapp, send_nfe_whatsapp, get_das_payment_status, get_das_current, send_das_whatsapp, refresh_das_pdf.`,
+    `Ação desconhecida: "${action}". Use: ${OPENCLAW_CANONICAL_ACTIONS.join(', ')}.`,
   );
 };

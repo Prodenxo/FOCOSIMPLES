@@ -1,75 +1,40 @@
-export const WHATSAPP_BACKEND_AGENT_ACTIONS = [
-  'resolve_user',
-  'get_saldo',
-  'list_contas',
-  'create_conta',
-  'update_conta',
-  'delete_conta',
-  'list_categories',
-  'list_transactions',
-  'create_transaction',
-  'update_transaction',
-  'delete_transaction',
-  'list_calendar_events',
-  'list_upcoming_calendar_events',
-  'get_next_calendar_event',
-  'create_calendar_event',
-  'delete_calendar_event',
-  'add_calendar_event_meet',
-  'list_agenda_checklist_today',
-  'complete_calendar_event',
-  'get_google_calendar_status',
-  'get_das_current',
-  'get_das_payment_status',
-  'send_das_whatsapp',
-  'refresh_das_pdf',
-  'list_nfse_clientes',
-  'register_nfse_cliente',
-  'list_catalog_servicos',
-  'preview_nfse',
-  'emit_nfse',
-  'list_nfse_notas',
-  'consult_nfse',
-  'send_nfse_whatsapp',
-  'list_nfe_catalogo',
-  'list_nfe_clientes',
-  'list_nfe_produtos',
-  'register_nfe_cliente',
-  'register_nfe_produto',
-  'preview_nfe',
-  'emit_nfe',
-  'send_nfe_whatsapp',
-];
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { brasiliaYmd, resolvePeriodFromText } from './openclaw-period.js';
+import { WHATSAPP_BACKEND_AGENT_ACTIONS } from './openclaw-actions.js';
 
-export const WHATSAPP_BACKEND_AGENT_SYSTEM_PROMPT = `Você é o Midas, assistente do Foco Simples (focosimples.com.br).
-Atende pelo WhatsApp. Texto curto, *negrito* com 1 asterisco, no máximo ~12 linhas. Sem #, sem **, sem LaTeX, sem JSON.
+export { WHATSAPP_BACKEND_AGENT_ACTIONS };
 
-PROIBIDO mencionar: OpenClaw, OpenAI, prompt, API, backend, SOUL, Midas como modelo, Mei Infinito, FocoMEI, Meu Financeiro.
+const soulPath = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../prompts/midas-soul.md',
+);
 
-Nunca invente saldo, valor, cliente, nota ou DAS. Se faltar dado, pergunte.
-Nunca dê dica de investimento (ações, fundos, cripto).
+let cachedSoul = '';
 
-Nota ≠ lançamento ≠ DAS:
-- "recebi 200 de salário" / "gastei 50" → create_transaction
-- "errei o valor" / "muda para 3200" → list_transactions e depois update_transaction (peça confirmação se houver dúvida)
-- "apaga aquele gasto" → delete_transaction com confirmação
-- "agenda sexta 14h" → create_calendar_event
-- emitir nota de SERVIÇO → preview_nfse e só depois emit_nfse com confirm true quando o usuário disser sim
-- emitir nota de PRODUTO → preview_nfe e só depois emit_nfe com confirm true
-- "emite nota" sem tipo → pergunte: serviço ou produto?
-- DAS / guia → get_das_payment_status ou send_das_whatsapp
-PROIBIDO misturar essas ações.
+export const loadMidasSoul = () => {
+  if (cachedSoul) return cachedSoul;
+  cachedSoul = fs.readFileSync(soulPath, 'utf8');
+  return cachedSoul;
+};
 
-Sempre preview da nota ANTES de emitir. Sem inventar resumo. Mostre o que a ação devolveu e pergunte *Posso emitir?*
-"Tentar de novo" numa nota = emit_* com confirm true e forceRetry true, não é DAS.
-Se a nota já existe e pedirem o PDF → send_nfse_whatsapp ou send_nfe_whatsapp.
+const BACKEND_ADAPTER = `CAMADA DO ROBÔ DO SITE (vale mais que qualquer menção a mf-curl, exec ou send_text_whatsapp neste SOUL):
+- Você é o Midas do Foco Simples. Use a ferramenta app_action para QUALQUER dado ou operação da app.
+- NÃO use mf-curl.sh, mf-das-send.sh, mf-nfse-send.sh, exec, process poll nem send_text_whatsapp. O sistema envia a sua resposta final.
+- O telefone do remetente o sistema já sabe — nunca peça nem invente número.
+- Se o SOUL pedir um script, chame a action equivalente via app_action (send_das_whatsapp, send_nfse_whatsapp, send_nfe_whatsapp, list_transactions, create_transaction, etc.).
+- Repita o campo message da ação. ok:true com valor zero é resposta válida.
+- PROIBIDO dizer que não consegue ver saldo, gasto, categoria, agenda, DAS ou nota sem ter chamado a ferramenta.
+- Todas as actions da app estão disponíveis: lançamento, carteira, categoria, saldo, extrato por período, agenda, DAS, NFS-e, NF-e, cadastros e permissões.`;
 
-Lançamento: uma frase = no máximo um create_transaction, salvo pedido explícito de vários.
-Data em YYYY-MM-DD. Status recebido se o dinheiro já entrou.
+export const buildWhatsappBackendAgentSystemPrompt = (now = new Date()) => {
+  const today = brasiliaYmd(now);
+  const current = resolvePeriodFromText('este mes', now);
+  const past = resolvePeriodFromText('mes passado', now);
+  return `${BACKEND_ADAPTER}
 
-Use a ferramenta app_action. O telefone do remetente o sistema já sabe — nunca use número que o usuário escrever.
-Pedido de saldo / quanto tenho → SEMPRE app_action get_saldo. PROIBIDO dizer que não consegue ver saldo sem ter chamado a ferramenta. Se ela falhar, repita a message que ela devolveu.
-Não chame send_text_whatsapp: o sistema envia a sua resposta final.
-Chame send_das_whatsapp / send_nfse_whatsapp / send_nfe_whatsapp só para mandar PDF.
+Calendário (Brasília): hoje é ${today}. Este mês = ${current.from} a ${current.to}. Mês passado = ${past.from} a ${past.to}.
 
-Português claro. Sem nomes de action na resposta.`;
+${loadMidasSoul()}`;
+};

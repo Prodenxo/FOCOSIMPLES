@@ -4,7 +4,7 @@ import { sendWhatsappMessage } from './whatsapp-outbound.service.js';
 import { appendWhatsappBackendAgentLog } from './whatsapp-backend-agent-log.service.js';
 import {
   WHATSAPP_BACKEND_AGENT_ACTIONS,
-  WHATSAPP_BACKEND_AGENT_SYSTEM_PROMPT,
+  buildWhatsappBackendAgentSystemPrompt,
 } from './whatsapp-backend-agent-prompt.js';
 import { matchQuickWhatsappIntent } from './whatsapp-backend-agent-intent.js';
 
@@ -54,7 +54,8 @@ const openaiTools = [
     type: 'function',
     function: {
       name: 'app_action',
-      description: 'Executa uma ação do Foco Simples (lançamento, agenda, DAS, nota).',
+      description:
+        'Executa qualquer ação do Foco Simples: saldo, extrato, lançamento, carteira, categoria, agenda, DAS, NFS-e, NF-e, cadastro e permissão.',
       parameters: {
         type: 'object',
         additionalProperties: false,
@@ -143,7 +144,7 @@ export const handleWhatsappBackendAgent = async ({
 
   const history = [...session.messages, { role: 'user', content: trimmed }];
   const messages = [
-    { role: 'system', content: WHATSAPP_BACKEND_AGENT_SYSTEM_PROMPT },
+    { role: 'system', content: buildWhatsappBackendAgentSystemPrompt() },
     ...history,
   ];
 
