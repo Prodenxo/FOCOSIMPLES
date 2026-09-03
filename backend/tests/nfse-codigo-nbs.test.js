@@ -41,8 +41,8 @@ test('enrichCodigosServicosComNbs adiciona codigo_nbs nas linhas', () => {
   assert.equal(out[1].codigo_nbs, null);
 });
 
-test('resolveCodigoTributacaoForServico usa 001 por padrão (ADN / RJ)', () => {
-  assert.equal(resolveCodigoTributacaoForServico({}), '001');
+test('resolveCodigoTributacaoForServico só envia se veio no cadastro', () => {
+  assert.equal(resolveCodigoTributacaoForServico({}), null);
   assert.equal(resolveCodigoTributacaoForServico({ codigoTributacao: '1' }), '001');
   assert.equal(resolveCodigoTributacaoForServico({ codigoTributacao: '12' }), '012');
   assert.equal(resolveCodigoTributacaoForServico({ cTribMun: '045' }), '045');

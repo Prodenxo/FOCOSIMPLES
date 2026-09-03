@@ -590,7 +590,7 @@ const resolveServicoDefaults = async (userId, payload, emitente) => {
     codigo: codigoFinal,
     discriminacao,
     cnae: cnaeNorm,
-    codigoTributacao,
+    ...(codigoTributacao ? { codigoTributacao } : {}),
     ...(codigoNbsResolved ? { codigoNbs: codigoNbsResolved } : {}),
   };
 

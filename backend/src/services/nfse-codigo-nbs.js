@@ -81,15 +81,15 @@ export const normalizeCodigoTributacaoMunicipal = (value) => {
 };
 
 /**
- * Resolve cTribMun: explícito no input > default `001` (exigido pelo ADN em vários municípios, ex. RJ).
+ * Resolve cTribMun só quando veio no cadastro/payload.
+ * Não força `001`: em Vitória/ES e outras cidades o `001` gera E0314.
  * @param {{ codigoTributacao?: unknown, codigo_tributacao?: unknown, cTribMun?: unknown }} input
- * @returns {string}
+ * @returns {string|null}
  */
 export const resolveCodigoTributacaoForServico = (input = {}) => {
-  const explicit = normalizeCodigoTributacaoMunicipal(
+  return normalizeCodigoTributacaoMunicipal(
     input.codigoTributacao ?? input.codigo_tributacao ?? input.cTribMun,
   );
-  return explicit || '001';
 };
 
 /**
