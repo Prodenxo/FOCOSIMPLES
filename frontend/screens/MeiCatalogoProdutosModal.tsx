@@ -139,6 +139,7 @@ export default function MeiCatalogoProdutosModal ({
   const [deleteTarget, setDeleteTarget] = useState<NfseCatalogProduto | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [addChoiceVisible, setAddChoiceVisible] = useState(false)
+  const [contadorInfoVisible, setContadorInfoVisible] = useState(false)
   const [importVisible, setImportVisible] = useState(false)
   const [importBusy, setImportBusy] = useState(false)
   const [importFileName, setImportFileName] = useState<string | null>(null)
@@ -254,13 +255,17 @@ export default function MeiCatalogoProdutosModal ({
     setFormVisible(true)
   }
 
-  const openAddChoice = () => {
-    if (isFocoSimples && canImportSpreadsheet) {
+  const openAddChoice = useCallback(() => {
+    if (isFocoSimples) {
+      setContadorInfoVisible(true)
+      return
+    }
+    if (canImportSpreadsheet) {
       setAddChoiceVisible(true)
       return
     }
     openCreate()
-  }
+  }, [canImportSpreadsheet, isFocoSimples])
 
   const openImportSheet = () => {
     setAddChoiceVisible(false)
@@ -439,24 +444,27 @@ export default function MeiCatalogoProdutosModal ({
     }
   }
 
-  const emptyListMessage = isFocoSimples && canImportSpreadsheet
-    ? 'Nenhum item. Toque em + para criar produto ou importar planilha.'
-    : typeFilter === 'ALL'
-      ? 'Nenhum item. Toque em + para adicionar.'
-      : `Nenhum item de ${typeFilter === 'NFSE' ? 'NFS-e' : typeFilter === 'NFE' ? 'NF-e' : 'NFC-e'}. Toque em + para adicionar.`
+  const emptyListMessage = isFocoSimples
+    ? 'Nenhum item no catálogo. Peça ao seu contador para cadastrar produtos e serviços.'
+    : canImportSpreadsheet
+      ? 'Nenhum item. Toque em + para criar produto ou importar planilha.'
+      : typeFilter === 'ALL'
+        ? 'Nenhum item. Toque em + para adicionar.'
+        : `Nenhum item de ${typeFilter === 'NFSE' ? 'NFS-e' : typeFilter === 'NFE' ? 'NF-e' : 'NFC-e'}. Toque em + para adicionar.`
 
-  const headerRight = useMemo(
-    () => (
-      <Pressable
-        onPress={openAddChoice}
-        style={flow.headerAdd}
-        accessibilityRole="button"
-        accessibilityLabel="Adicionar produto ou serviço"
-      >
-        <Ionicons name="add" size={22} color={theme.primary} />
-      </Pressable>
-    ),
-    [flow.headerAdd, theme.primary],
+  const headerRight = (
+    <Pressable
+      onPress={openAddChoice}
+      style={flow.headerAdd}
+      accessibilityRole="button"
+      accessibilityLabel={
+        isFocoSimples
+          ? 'Informações sobre cadastro de produtos'
+          : 'Adicionar produto ou serviço'
+      }
+    >
+      <Ionicons name="add" size={22} color={theme.primary} />
+    </Pressable>
   )
 
   return (
@@ -540,6 +548,25 @@ export default function MeiCatalogoProdutosModal ({
           Lista até {PAGE_SIZE} itens por página; deslize para carregar mais.
         </Text>
       </MeiFlowModalShell>
+
+      <MeiFormSheet
+        visible={contadorInfoVisible}
+        title="Cadastro pelo contador"
+        onClose={() => setContadorInfoVisible(false)}
+        footer={
+          <MeiFormSheetActions
+            onCancel={() => setContadorInfoVisible(false)}
+            onConfirm={() => setContadorInfoVisible(false)}
+            cancelLabel="Fechar"
+            confirmLabel="Entendi"
+          />
+        }
+      >
+        <Text style={flow.hint}>
+          Para incluir um novo produto ou serviço no catálogo, entre em contato com seu contador.
+          Ele cadastra NCM, CFOP, CSOSN e os demais dados fiscais necessários para emitir notas.
+        </Text>
+      </MeiFormSheet>
 
       <MeiFormSheet
         visible={addChoiceVisible}
