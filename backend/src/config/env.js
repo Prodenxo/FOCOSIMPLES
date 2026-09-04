@@ -312,6 +312,8 @@ export const env = {
     process.env.OPENCLAW_ZAPI_RELAY_TIMEOUT_MS || "120000",
   /** Origem pública OpenClaw (fallback para derivar /hooks/agent). */
   OPENCLAW_PUBLIC_ORIGIN: (process.env.OPENCLAW_PUBLIC_ORIGIN || "").trim(),
+  /** Modelo OpenAI usado para estimar custo do OpenClaw no painel (padrão gpt-4o-mini). */
+  OPENCLAW_USAGE_MODEL: (process.env.OPENCLAW_USAGE_MODEL || "gpt-4o-mini").trim(),
   /**
    * `true`: em saudações curtas (oi, tudo bom…) envia boas-vindas pela Z-API antes do OpenClaw.
    * O `/new` no painel OpenClaw não envia WhatsApp — isto cobre o primeiro contacto no chat.

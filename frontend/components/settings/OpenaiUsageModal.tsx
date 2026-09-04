@@ -50,8 +50,26 @@ const formatPhone = (phone: string) => {
 
 const sourceLabel = (source: string) => {
   if (source === 'preview') return 'Teste na tela'
-  if (source === 'transcription') return 'Áudio'
-  return 'Robô WhatsApp'
+  if (source === 'transcription') return 'Áudio (OpenAI)'
+  if (source === 'openclaw') return 'OpenClaw (clientes)'
+  return 'Robô site (DeepSeek)'
+}
+
+const providerLabel = (provider: string) => {
+  if (provider === 'deepseek') return 'DeepSeek'
+  if (provider === 'openclaw') return 'OpenClaw'
+  return 'OpenAI'
+}
+
+const formatWhen = (iso: string) => {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  return date.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 export function OpenaiUsageModal ({ visible, onClose }: Props) {
@@ -92,13 +110,13 @@ export function OpenaiUsageModal ({ visible, onClose }: Props) {
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable style={styles.sheet} onPress={() => {}}>
           <View style={styles.header}>
-            <Text style={styles.title}>Gasto OpenAI</Text>
+            <Text style={styles.title}>Gasto do robô (IA)</Text>
             <TouchableOpacity onPress={onClose} accessibilityLabel="Fechar">
               <Ionicons name="close" size={22} color={tokens.textSecondary} />
             </TouchableOpacity>
           </View>
           <Text style={styles.hint}>
-            Soma de todos os usuários que passaram pelo robô do site. Só você vê isso.
+            DeepSeek (robô do site), OpenAI (áudio) e OpenClaw (demais clientes). Só você vê isso.
           </Text>
 
           <View style={styles.periods}>
@@ -134,6 +152,20 @@ export function OpenaiUsageModal ({ visible, onClose }: Props) {
                 </Text>
               </View>
 
+              {(data.byProvider?.length ?? 0) > 0 ? (
+                <>
+                  <Text style={styles.sectionTitle}>Por provedor</Text>
+                  {(data.byProvider ?? []).map((row) => (
+                    <View key={row.provider} style={styles.row}>
+                      <Text style={styles.rowTitle}>{providerLabel(row.provider)}</Text>
+                      <Text style={styles.rowMeta}>
+                        {formatTokens(row.tokens)} tokens · {formatBrl(row.costBrl)}
+                      </Text>
+                    </View>
+                  ))}
+                </>
+              ) : null}
+
               {data.bySource.length > 0 ? (
                 <Text style={styles.sectionTitle}>Por tipo</Text>
               ) : null}
@@ -161,6 +193,23 @@ export function OpenaiUsageModal ({ visible, onClose }: Props) {
                   </View>
                 ))
               )}
+
+              {(data.recentLogs?.length ?? 0) > 0 ? (
+                <>
+                  <Text style={styles.sectionTitle}>Chamadas recentes</Text>
+                  {(data.recentLogs ?? []).map((row, index) => (
+                    <View key={`${row.createdAt}-${row.source}-${index}`} style={styles.row}>
+                      <Text style={styles.rowTitle}>
+                        {formatWhen(row.createdAt)} · {sourceLabel(row.source)}
+                      </Text>
+                      <Text style={styles.rowMeta}>
+                        {row.phone ? `${formatPhone(row.phone)} · ` : ''}
+                        {formatTokens(row.tokens)} tokens · {formatBrl(row.costBrl)}
+                      </Text>
+                    </View>
+                  ))}
+                </>
+              ) : null}
 
               <Text style={styles.note}>{data.note}</Text>
             </ScrollView>

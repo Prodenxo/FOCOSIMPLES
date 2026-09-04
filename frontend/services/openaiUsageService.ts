@@ -30,6 +30,24 @@ export type OpenaiUsageBySource = {
   costBrl: number
 }
 
+export type OpenaiUsageByProvider = {
+  provider: 'deepseek' | 'openai' | 'openclaw' | string
+  calls: number
+  tokens: number
+  costUsd: number
+  costBrl: number
+}
+
+export type OpenaiUsageRecentLog = {
+  createdAt: string
+  source: string
+  model: string
+  phone: string | null
+  tokens: number
+  costUsd: number
+  costBrl: number
+}
+
 export type OpenaiUsageDashboard = {
   period: OpenaiUsagePeriod
   from: string
@@ -39,6 +57,8 @@ export type OpenaiUsageDashboard = {
   totals: OpenaiUsageTotals
   byUser: OpenaiUsageByUser[]
   bySource: OpenaiUsageBySource[]
+  byProvider: OpenaiUsageByProvider[]
+  recentLogs: OpenaiUsageRecentLog[]
   note: string
 }
 

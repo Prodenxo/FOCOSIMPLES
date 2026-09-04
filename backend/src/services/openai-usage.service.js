@@ -17,7 +17,17 @@ let tableReady = false;
 /** @type {{ rate: number, source: string, fetchedAt: number } | null} */
 let fxCache = null;
 
-const SOURCES = new Set(['whatsapp_agent', 'preview', 'transcription']);
+const SOURCES = new Set(['whatsapp_agent', 'preview', 'transcription', 'openclaw']);
+
+/** deepseek | openai | openclaw — agrupa custo no painel. */
+export const resolveUsageProvider = ({ source, model }) => {
+  const safeSource = String(source || '').trim().toLowerCase();
+  if (safeSource === 'openclaw') return 'openclaw';
+  if (safeSource === 'transcription') return 'openai';
+  const normalized = normalizeOpenAiModel(model);
+  if (normalized.startsWith('deepseek')) return 'deepseek';
+  return 'openai';
+};
 
 export const normalizeUsagePhone = (rawPhone) =>
   String(rawPhone || '').replace(/\D/g, '');
@@ -301,6 +311,41 @@ export const getOpenAiUsageDashboard = async ({ period = 'month' } = {}) => {
     `,
     [range.from.toISOString(), range.to.toISOString()],
   );
+  const { rows: byProviderRows } = await query(
+    `
+    SELECT
+      CASE
+        WHEN source = 'openclaw' THEN 'openclaw'
+        WHEN source = 'transcription' THEN 'openai'
+        WHEN model ILIKE '%deepseek%' THEN 'deepseek'
+        ELSE 'openai'
+      END AS provider,
+      COUNT(*)::int AS calls,
+      COALESCE(SUM(total_tokens), 0)::bigint AS tokens,
+      COALESCE(SUM(cost_usd), 0)::numeric AS cost_usd
+    FROM public.openai_usage_events
+    WHERE created_at >= $1 AND created_at < $2
+    GROUP BY 1
+    ORDER BY cost_usd DESC
+    `,
+    [range.from.toISOString(), range.to.toISOString()],
+  );
+  const { rows: recentRows } = await query(
+    `
+    SELECT
+      created_at,
+      source,
+      model,
+      phone,
+      total_tokens,
+      cost_usd
+    FROM public.openai_usage_events
+    WHERE created_at >= $1 AND created_at < $2
+    ORDER BY created_at DESC
+    LIMIT 40
+    `,
+    [range.from.toISOString(), range.to.toISOString()],
+  );
 
   const toMoney = (usd) => {
     const costUsd = Number(usd) || 0;
@@ -341,7 +386,21 @@ export const getOpenAiUsageDashboard = async ({ period = 'month' } = {}) => {
       tokens: Number(row.tokens) || 0,
       ...toMoney(row.cost_usd),
     })),
+    byProvider: byProviderRows.map((row) => ({
+      provider: row.provider,
+      calls: Number(row.calls) || 0,
+      tokens: Number(row.tokens) || 0,
+      ...toMoney(row.cost_usd),
+    })),
+    recentLogs: recentRows.map((row) => ({
+      createdAt: row.created_at,
+      source: row.source,
+      model: row.model,
+      phone: row.phone,
+      tokens: Number(row.total_tokens) || 0,
+      ...toMoney(row.cost_usd),
+    })),
     note:
-      'Chat DeepSeek (robô do site) + transcrição OpenAI. OpenClaw não entra. Valores são estimativa em USD→BRL.',
+      'DeepSeek (robô do site) + OpenAI (áudio/transcrição) + OpenClaw (demais clientes). Estimativa USD→BRL; confira a fatura real nos painéis DeepSeek/OpenAI.',
   };
 };

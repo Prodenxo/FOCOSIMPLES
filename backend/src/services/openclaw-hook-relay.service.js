@@ -1,4 +1,9 @@
 import { env } from '../config/env.js';
+import {
+  estimateUsageFromTexts,
+  hasOpenAiUsageCounts,
+} from '../lib/openai-pricing.js';
+import { recordOpenAiUsage } from './openai-usage.service.js';
 
 /**
  * @param {string} relayUrlRaw
@@ -28,6 +33,23 @@ export const resolveOpenclawHooksAgentUrl = () =>
 
 export const isOpenclawZapiRelaySyncEnabled = () =>
   String(env.OPENCLAW_ZAPI_RELAY_SYNC || 'true').trim().toLowerCase() !== 'false';
+
+const recordOpenclawRelayUsage = ({ normalized, promptText, replyText, apiUsage }) => {
+  const reply = String(replyText || '').trim();
+  if (!reply) return;
+  const usage = hasOpenAiUsageCounts(apiUsage)
+    ? apiUsage
+    : estimateUsageFromTexts({
+      promptText: String(promptText || normalized?.text || ''),
+      completionText: reply,
+    });
+  void recordOpenAiUsage({
+    source: 'openclaw',
+    model: env.OPENCLAW_USAGE_MODEL || 'gpt-4o-mini',
+    phone: normalized?.phone,
+    usage,
+  });
+};
 
 /**
  * @param {number} fallbackMs
@@ -339,6 +361,14 @@ export const callOpenclawChatCompletions = async (normalized) => {
     }
 
     const replyText = extractOpenclawChatCompletionReply(body);
+    if (replyText) {
+      recordOpenclawRelayUsage({
+        normalized,
+        promptText: payload.message,
+        replyText,
+        apiUsage: body && typeof body === 'object' ? body.usage : null,
+      });
+    }
     return {
       ok: Boolean(replyText),
       mode: 'sync',
@@ -495,6 +525,15 @@ export const callOpenclawHookAgentSync = async (normalized) => {
         runId,
         secret: String(env.OPENCLAW_GATEWAY_TOKEN || '').trim() || secret,
         timeoutMs: pollMs,
+      });
+    }
+
+    if (replyText) {
+      recordOpenclawRelayUsage({
+        normalized,
+        promptText: payload.message,
+        replyText,
+        apiUsage: null,
       });
     }
 

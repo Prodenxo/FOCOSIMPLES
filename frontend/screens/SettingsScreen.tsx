@@ -733,8 +733,8 @@ export default function SettingsScreen() {
 
           {effectiveRole === "superadmin" ? (
             <SettingsSectionCard
-              title="Gasto OpenAI"
-              description="Tokens e estimativa em real de todos os usuários"
+              title="Gasto do robô (IA)"
+              description="DeepSeek, OpenAI e OpenClaw — tokens e estimativa em real"
               style={styles.sectionFull}
             >
               <SettingsActionLink

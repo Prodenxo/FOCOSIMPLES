@@ -8,7 +8,7 @@ import {
   hasOpenAiUsageCounts,
   normalizeOpenAiModel,
 } from '../src/lib/openai-pricing.js';
-import { resolveUsagePeriodRange } from '../src/services/openai-usage.service.js';
+import { resolveUsagePeriodRange, resolveUsageProvider } from '../src/services/openai-usage.service.js';
 
 test('normalizeOpenAiModel reconhece gpt-4o-mini e whisper', () => {
   assert.equal(normalizeOpenAiModel('GPT-4o-mini'), 'gpt-4o-mini');
@@ -59,4 +59,11 @@ test('resolveUsagePeriodRange: hoje começa à meia-noite de Brasília', () => {
   const now = new Date('2026-09-03T14:00:00-03:00');
   const range = resolveUsagePeriodRange('today', now);
   assert.equal(range.from.toISOString(), new Date('2026-09-03T00:00:00-03:00').toISOString());
+});
+
+test('resolveUsageProvider agrupa deepseek, openai e openclaw', () => {
+  assert.equal(resolveUsageProvider({ source: 'openclaw', model: 'gpt-4o-mini' }), 'openclaw');
+  assert.equal(resolveUsageProvider({ source: 'transcription', model: 'whisper-1' }), 'openai');
+  assert.equal(resolveUsageProvider({ source: 'whatsapp_agent', model: 'deepseek-chat' }), 'deepseek');
+  assert.equal(resolveUsageProvider({ source: 'whatsapp_agent', model: 'gpt-4o-mini' }), 'openai');
 });
