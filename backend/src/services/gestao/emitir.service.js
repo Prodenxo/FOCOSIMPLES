@@ -3,7 +3,11 @@ import {
   MEI_GUIDE_INTEGRATION_SERPRO,
   MEI_GUIDE_SERPRO_UNAVAILABLE
 } from '../../constants/mei-guide-error-codes.js';
-import { badRequest, serviceUnavailable } from '../../utils/errors.js';
+import { badRequest, forbidden, serviceUnavailable, unauthorized } from '../../utils/errors.js';
+import {
+  extractSerproErrorMessage,
+  humanizeSerproForbiddenMessage,
+} from './serpro-error-message.js';
 import {
   obterTokenProcurador,
   armazenarTokenNoCache,
@@ -11,7 +15,6 @@ import {
   getSerproTokens,
   serproApiFetch
 } from './authProcurador.service.js';
-import { extractSerproErrorMessage } from './serpro-error-message.js';
 
 const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
 
@@ -33,8 +36,13 @@ const parseErrorMessage = async (response) => {
 };
 
 const isAuthTokenError = (status, message) => {
-  if (status === 401 || status === 403) return true;
-  const normalized = String(message || '').toLowerCase();
+  if (status === 401) return true;
+  const normalized = String(message || '').toLowerCase().trim();
+  if (status === 403) {
+    if (!normalized || normalized === 'forbidden' || normalized === 'access denied') {
+      return false;
+    }
+  }
   if (!normalized) return false;
   if (normalized.includes('authorization')) {
     return normalized.includes('inválid')
@@ -221,6 +229,15 @@ export const emitirServico = async ({
 
   if (!result.response.ok) {
     const upstreamStatus = result.response.status;
+    const rawMessage = result.message || 'Falha ao emitir serviço';
+    if (upstreamStatus === 401) {
+      throw unauthorized(rawMessage);
+    }
+    if (upstreamStatus === 403) {
+      throw forbidden(humanizeSerproForbiddenMessage(rawMessage), {
+        code: 'SERPRO_FORBIDDEN',
+      });
+    }
     if (upstreamStatus >= 500) {
       if (env.NODE_ENV !== 'production') {
         // eslint-disable-next-line no-console
@@ -238,7 +255,7 @@ export const emitirServico = async ({
         }
       );
     }
-    throw badRequest(result.message || 'Falha ao emitir serviço');
+    throw badRequest(rawMessage);
   }
 
   let payload;

@@ -317,6 +317,55 @@ const baixarExtratoDasDoPeriodo = async ({
   }
 }
 
+/** Guia vencida: consolidação → cobrança → geração simples. */
+const attemptRegenerateDasVencido = async ({
+  userId,
+  contribuinteCnpj,
+  periodo,
+  consolidationDate,
+}) => {
+  const attempts = [
+    {
+      run: () => gerarDasPgdasd({
+        contribuinteCnpj,
+        periodoApuracao: periodo,
+        dataConsolidacao: consolidationDate,
+        userId,
+      }),
+    },
+    {
+      run: () => gerarDasCobrancaPgdasd({
+        contribuinteCnpj,
+        periodoApuracao: periodo,
+        userId,
+      }),
+    },
+    {
+      run: () => gerarDasPgdasd({
+        contribuinteCnpj,
+        periodoApuracao: periodo,
+        dataConsolidacao: null,
+        userId,
+      }),
+    },
+  ]
+
+  const failures = []
+  for (const attempt of attempts) {
+    try {
+      return await attempt.run()
+    } catch (err) {
+      const msg = String(err?.message || '').trim()
+      if (msg) failures.push(msg)
+    }
+  }
+
+  throw badRequest(
+    failures.join(' ') || 'Não foi possível atualizar a guia vencida na Receita.',
+    { code: 'PGDASD_DAS_REGENERATE_FAILED' },
+  )
+}
+
 /**
  * Gera DAS e persiste PDF.
  * Se não houver valor devido (mês pago), tenta extrato/recibo automaticamente.
@@ -353,12 +402,21 @@ export const gerarSimplesDas = async (userId, payload = {}) => {
 
   let result
   try {
-    result = await gerarDasPgdasd({
-      contribuinteCnpj,
-      periodoApuracao: periodo,
-      dataConsolidacao: consolidationDate,
-      userId,
-    })
+    if (isRegenerating) {
+      result = await attemptRegenerateDasVencido({
+        userId,
+        contribuinteCnpj,
+        periodo,
+        consolidationDate,
+      })
+    } else {
+      result = await gerarDasPgdasd({
+        contribuinteCnpj,
+        periodoApuracao: periodo,
+        dataConsolidacao: consolidationDate,
+        userId,
+      })
+    }
   } catch (err) {
     const code = err?.errors?.code || err?.code
     const msg = String(err?.message || '')
@@ -379,30 +437,7 @@ export const gerarSimplesDas = async (userId, payload = {}) => {
         )
       }
     }
-    if (isRegenerating) {
-      try {
-        result = await gerarDasCobrancaPgdasd({
-          contribuinteCnpj,
-          periodoApuracao: periodo,
-          userId,
-        })
-      } catch (cobrancaErr) {
-        const primary = msg.trim()
-        const secondary = String(cobrancaErr?.message || '').trim()
-        throw badRequest(
-          secondary && secondary !== primary
-            ? `${primary} Guia de cobrança também falhou: ${secondary}`
-            : (secondary || primary || 'Não foi possível atualizar a guia vencida na Receita.'),
-          {
-            code: cobrancaErr?.errors?.code
-              || err?.errors?.code
-              || 'PGDASD_DAS_REGENERATE_FAILED',
-          },
-        )
-      }
-    } else {
-      throw err
-    }
+    throw err
   }
 
   const fonte = result?.detalhamento?.fonte === 'GERARDASCOBRANCA17' ? 'cobranca' : 'geracao'

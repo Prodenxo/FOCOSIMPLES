@@ -47,6 +47,20 @@ function rewriteKnownFiscalErrors (raw: string): string | null {
     return 'Não é permitido consultar ou emitir DAS de outro CNPJ.'
   }
 
+  if (/serpro_forbidden|receita negou a emissão|acesso proibido/i.test(raw)) {
+    return (
+      'A Receita negou a emissão da guia. Confira o certificado A1 na aba Certificado '
+      + 'e se o contrato SERPRO inclui emissão PGDAS-D.'
+    )
+  }
+
+  if (/^forbidden$/i.test(raw.trim())) {
+    return (
+      'A Receita negou a emissão da guia. Confira o certificado A1 na aba Certificado '
+      + 'e se o contrato SERPRO inclui emissão PGDAS-D.'
+    )
+  }
+
   if (/cert_cnpj_mismatch/i.test(raw)) {
     return 'O CNPJ do certificado diverge do CNPJ da empresa cadastrada.'
   }

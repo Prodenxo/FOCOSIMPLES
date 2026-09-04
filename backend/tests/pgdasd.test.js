@@ -233,4 +233,11 @@ describe('serpro error message', () => {
     }, 'Bad Request')
     assert.equal(msg, 'Período em cobrança.')
   })
+
+  it('traduz Forbidden genérico da SERPRO', async () => {
+    const { humanizeSerproForbiddenMessage } = await import('../src/services/gestao/serpro-error-message.js')
+    const msg = humanizeSerproForbiddenMessage('Forbidden')
+    assert.match(msg, /Receita negou/i)
+    assert.match(msg, /certificado A1/i)
+  })
 })
