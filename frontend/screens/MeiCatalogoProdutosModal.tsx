@@ -65,6 +65,13 @@ import { useAppToastStore } from '../store/appToastStore'
 
 const PAGE_SIZE = 50
 
+/** Cadastro de produtos NF-e / NFC-e e importação ficam com o contador. */
+const NFE_CATALOG_LOCKED_BY_ACCOUNTANT = true
+
+const CONTADOR_NFE_CATALOG_MESSAGE =
+  'Para cadastrar produtos NF-e (NCM, CFOP, CSOSN, PIS e COFINS), entre em contato com seu contador. '
+  + 'Ele inclui os itens no catálogo com a configuração fiscal correta.'
+
 export type MeiCatalogoProdutosModalProps = {
   visible: boolean
   onClose: () => void
@@ -156,7 +163,12 @@ export default function MeiCatalogoProdutosModal ({
     [allowedDocTypes],
   )
 
+  const canCreateNfse = allowedDocTypes.includes('NFSE')
+  const canCreateNfeLike = allowedDocTypes.some((t) => t === 'NFE' || t === 'NFCE')
+  const showAddChoiceModal = canCreateNfse && (canCreateNfeLike || canImportSpreadsheet)
+
   const choiceBorder = isDarkMode ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)'
+  const choiceBorderDisabled = isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'
 
   const resetList = useCallback(() => {
     setItems([])
@@ -240,34 +252,56 @@ export default function MeiCatalogoProdutosModal ({
     onCatalogChanged?.()
   }, [onCatalogChanged])
 
-  const openCreate = () => {
+  const openContadorNfeInfo = () => {
+    setAddChoiceVisible(false)
+    setContadorInfoVisible(true)
+  }
+
+  const openCreateWithType = (documentType: DocumentType) => {
+    if (
+      NFE_CATALOG_LOCKED_BY_ACCOUNTANT
+      && isNfeLikeCatalogDocumentType(documentType)
+    ) {
+      openContadorNfeInfo()
+      return
+    }
     setAddChoiceVisible(false)
     setEditingId(null)
     const initial = emptyForm()
-    if (typeFilter !== 'ALL' && allowedDocTypes.includes(typeFilter)) {
-      initial.documentType = typeFilter
-    } else if (isFocoSimples && allowedDocTypes.includes('NFE')) {
-      initial.documentType = 'NFE'
-    } else {
-      initial.documentType = allowedDocTypes[0] ?? 'NFSE'
-    }
+    initial.documentType = documentType
     setForm(initial)
     setFormVisible(true)
   }
 
+  const openCreateNfse = () => {
+    openCreateWithType('NFSE')
+  }
+
   const openAddChoice = useCallback(() => {
-    if (isFocoSimples) {
+    if (NFE_CATALOG_LOCKED_BY_ACCOUNTANT && canCreateNfeLike && !canCreateNfse) {
       setContadorInfoVisible(true)
+      return
+    }
+    if (showAddChoiceModal) {
+      setAddChoiceVisible(true)
+      return
+    }
+    if (canCreateNfse) {
+      openCreateNfse()
       return
     }
     if (canImportSpreadsheet) {
       setAddChoiceVisible(true)
       return
     }
-    openCreate()
-  }, [canImportSpreadsheet, isFocoSimples])
+    openCreateWithType(allowedDocTypes[0] ?? 'NFSE')
+  }, [allowedDocTypes, canCreateNfse, canCreateNfeLike, canImportSpreadsheet, showAddChoiceModal])
 
   const openImportSheet = () => {
+    if (NFE_CATALOG_LOCKED_BY_ACCOUNTANT) {
+      openContadorNfeInfo()
+      return
+    }
     setAddChoiceVisible(false)
     setImportFileName(null)
     setImportRowCount(0)
@@ -290,6 +324,15 @@ export default function MeiCatalogoProdutosModal ({
   }
 
   const handleSaveForm = async () => {
+    if (
+      !editingId
+      && NFE_CATALOG_LOCKED_BY_ACCOUNTANT
+      && isNfeLikeCatalogDocumentType(form.documentType)
+    ) {
+      openContadorNfeInfo()
+      return
+    }
+
     let basePayload
     try {
       const editingItem = editingId ? items.find((it) => it.id === editingId) : null
@@ -398,6 +441,10 @@ export default function MeiCatalogoProdutosModal ({
   }
 
   const handleConfirmImport = async () => {
+    if (NFE_CATALOG_LOCKED_BY_ACCOUNTANT) {
+      openContadorNfeInfo()
+      return
+    }
     if (!importRows.length) {
       alertDialog('Planilha', 'Selecione uma planilha com produtos.')
       return
@@ -444,24 +491,20 @@ export default function MeiCatalogoProdutosModal ({
     }
   }
 
-  const emptyListMessage = isFocoSimples
-    ? 'Nenhum item no catálogo. Peça ao seu contador para cadastrar produtos e serviços.'
-    : canImportSpreadsheet
-      ? 'Nenhum item. Toque em + para criar produto ou importar planilha.'
+  const emptyListMessage = canCreateNfse
+    ? canImportSpreadsheet
+      ? 'Nenhum item. Toque em + para adicionar serviço NFS-e.'
       : typeFilter === 'ALL'
         ? 'Nenhum item. Toque em + para adicionar.'
         : `Nenhum item de ${typeFilter === 'NFSE' ? 'NFS-e' : typeFilter === 'NFE' ? 'NF-e' : 'NFC-e'}. Toque em + para adicionar.`
+    : 'Nenhum produto NF-e no catálogo. Peça ao seu contador para cadastrar.'
 
   const headerRight = (
     <Pressable
       onPress={openAddChoice}
       style={flow.headerAdd}
       accessibilityRole="button"
-      accessibilityLabel={
-        isFocoSimples
-          ? 'Informações sobre cadastro de produtos'
-          : 'Adicionar produto ou serviço'
-      }
+      accessibilityLabel="Adicionar produto ou serviço"
     >
       <Ionicons name="add" size={22} color={theme.primary} />
     </Pressable>
@@ -563,8 +606,7 @@ export default function MeiCatalogoProdutosModal ({
         }
       >
         <Text style={flow.hint}>
-          Para incluir um novo produto ou serviço no catálogo, entre em contato com seu contador.
-          Ele cadastra NCM, CFOP, CSOSN e os demais dados fiscais necessários para emitir notas.
+          {CONTADOR_NFE_CATALOG_MESSAGE}
         </Text>
       </MeiFormSheet>
 
@@ -574,52 +616,96 @@ export default function MeiCatalogoProdutosModal ({
         onClose={() => setAddChoiceVisible(false)}
       >
         <Text style={[flow.hint, { marginBottom: 14 }]}>
-          Produtos NF-e: cadastre NCM, CFOP, CSOSN, PIS e COFINS (configuração do contador).
+          {canCreateNfse
+            ? 'Serviços NFS-e: você cadastra aqui. Produtos NF-e: seu contador configura NCM, CFOP e tributos.'
+            : 'Produtos NF-e: cadastre NCM, CFOP, CSOSN, PIS e COFINS (configuração do contador).'}
         </Text>
-        <Pressable
-          accessibilityRole="button"
-          onPress={openCreate}
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 12,
-            padding: 14,
-            marginBottom: 10,
-            borderRadius: 12,
-            borderWidth: 1,
-            borderColor: choiceBorder,
-          }}
-        >
-          <Ionicons name="create-outline" size={22} color={theme.primary} />
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: theme.text, fontWeight: '700', fontSize: 15 }}>Criar produto</Text>
-            <Text style={{ color: theme.textSecondary, fontSize: 12, marginTop: 2 }}>
-              Formulário completo com tributos (CFOP, CSOSN, PIS, COFINS)
-            </Text>
-          </View>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          onPress={openImportSheet}
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 12,
-            padding: 14,
-            marginBottom: 10,
-            borderRadius: 12,
-            borderWidth: 1,
-            borderColor: choiceBorder,
-          }}
-        >
-          <Ionicons name="document-attach-outline" size={22} color={theme.primary} />
-          <View style={{ flex: 1 }}>
-            <Text style={{ color: theme.text, fontWeight: '700', fontSize: 15 }}>Importar planilha</Text>
-            <Text style={{ color: theme.textSecondary, fontSize: 12, marginTop: 2 }}>
-              Excel/CSV com produtos já configurados
-            </Text>
-          </View>
-        </Pressable>
+        {canCreateNfse ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={openCreateNfse}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 12,
+              padding: 14,
+              marginBottom: 10,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: choiceBorder,
+            }}
+          >
+            <Ionicons name="create-outline" size={22} color={theme.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: theme.text, fontWeight: '700', fontSize: 15 }}>Criar serviço (NFS-e)</Text>
+              <Text style={{ color: theme.textSecondary, fontSize: 12, marginTop: 2 }}>
+                Código LC 116, CNAE e discriminação do serviço
+              </Text>
+            </View>
+          </Pressable>
+        ) : null}
+        {canCreateNfeLike ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={openContadorNfeInfo}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 12,
+              padding: 14,
+              marginBottom: 10,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: NFE_CATALOG_LOCKED_BY_ACCOUNTANT ? choiceBorderDisabled : choiceBorder,
+              opacity: NFE_CATALOG_LOCKED_BY_ACCOUNTANT ? 0.72 : 1,
+            }}
+          >
+            <Ionicons
+              name="create-outline"
+              size={22}
+              color={NFE_CATALOG_LOCKED_BY_ACCOUNTANT ? theme.textSecondary : theme.primary}
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: theme.textSecondary, fontWeight: '700', fontSize: 15 }}>Criar produto (NF-e)</Text>
+              <Text style={{ color: theme.textSecondary, fontSize: 12, marginTop: 2 }}>
+                {NFE_CATALOG_LOCKED_BY_ACCOUNTANT
+                  ? 'Cadastro feito pelo contador — toque para saber como solicitar'
+                  : 'Formulário completo com tributos (CFOP, CSOSN, PIS, COFINS)'}
+              </Text>
+            </View>
+          </Pressable>
+        ) : null}
+        {canImportSpreadsheet ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={openImportSheet}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 12,
+              padding: 14,
+              marginBottom: 10,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: NFE_CATALOG_LOCKED_BY_ACCOUNTANT ? choiceBorderDisabled : choiceBorder,
+              opacity: NFE_CATALOG_LOCKED_BY_ACCOUNTANT ? 0.72 : 1,
+            }}
+          >
+            <Ionicons
+              name="document-attach-outline"
+              size={22}
+              color={NFE_CATALOG_LOCKED_BY_ACCOUNTANT ? theme.textSecondary : theme.primary}
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: theme.textSecondary, fontWeight: '700', fontSize: 15 }}>Importar planilha</Text>
+              <Text style={{ color: theme.textSecondary, fontSize: 12, marginTop: 2 }}>
+                {NFE_CATALOG_LOCKED_BY_ACCOUNTANT
+                  ? 'Importação de produtos NF-e — fale com seu contador'
+                  : 'Excel/CSV com produtos já configurados'}
+              </Text>
+            </View>
+          </Pressable>
+        ) : null}
       </MeiFormSheet>
 
       <MeiFormSheet
@@ -695,9 +781,17 @@ export default function MeiCatalogoProdutosModal ({
         <MeiFormSectionLabel>Tipo de documento fiscal</MeiFormSectionLabel>
         <MeiTypeChips
           value={form.documentType as MeiDocType}
-          allowedTypes={allowedDocTypes}
+          allowedTypes={
+            !editingId && NFE_CATALOG_LOCKED_BY_ACCOUNTANT
+              ? allowedDocTypes.filter((t) => t === 'NFSE')
+              : allowedDocTypes
+          }
           onChange={(dt) => {
             if (editingId) return
+            if (NFE_CATALOG_LOCKED_BY_ACCOUNTANT && isNfeLikeCatalogDocumentType(dt)) {
+              openContadorNfeInfo()
+              return
+            }
             setForm((f) => ({
               ...f,
               documentType: dt,
