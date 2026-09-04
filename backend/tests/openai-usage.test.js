@@ -64,6 +64,7 @@ test('resolveUsagePeriodRange: hoje começa à meia-noite de Brasília', () => {
 test('resolveUsageProvider agrupa deepseek, openai e openclaw', () => {
   assert.equal(resolveUsageProvider({ source: 'openclaw', model: 'gpt-4o-mini' }), 'openclaw');
   assert.equal(resolveUsageProvider({ source: 'transcription', model: 'whisper-1' }), 'openai');
+  assert.equal(resolveUsageProvider({ source: 'whatsapp_agent', model: 'gpt-4o-mini' }), 'deepseek');
+  assert.equal(resolveUsageProvider({ source: 'preview', model: 'gpt-4o-mini' }), 'deepseek');
   assert.equal(resolveUsageProvider({ source: 'whatsapp_agent', model: 'deepseek-chat' }), 'deepseek');
-  assert.equal(resolveUsageProvider({ source: 'whatsapp_agent', model: 'gpt-4o-mini' }), 'openai');
 });

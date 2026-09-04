@@ -34,6 +34,7 @@ export type OpenaiUsageByProvider = {
   provider: 'deepseek' | 'openai' | 'openclaw' | string
   calls: number
   tokens: number
+  audioSeconds: number
   costUsd: number
   costBrl: number
 }

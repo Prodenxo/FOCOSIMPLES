@@ -24,6 +24,7 @@ export const resolveUsageProvider = ({ source, model }) => {
   const safeSource = String(source || '').trim().toLowerCase();
   if (safeSource === 'openclaw') return 'openclaw';
   if (safeSource === 'transcription') return 'openai';
+  if (safeSource === 'whatsapp_agent' || safeSource === 'preview') return 'deepseek';
   const normalized = normalizeOpenAiModel(model);
   if (normalized.startsWith('deepseek')) return 'deepseek';
   return 'openai';
@@ -317,11 +318,13 @@ export const getOpenAiUsageDashboard = async ({ period = 'month' } = {}) => {
       CASE
         WHEN source = 'openclaw' THEN 'openclaw'
         WHEN source = 'transcription' THEN 'openai'
+        WHEN source IN ('whatsapp_agent', 'preview') THEN 'deepseek'
         WHEN model ILIKE '%deepseek%' THEN 'deepseek'
         ELSE 'openai'
       END AS provider,
       COUNT(*)::int AS calls,
       COALESCE(SUM(total_tokens), 0)::bigint AS tokens,
+      COALESCE(SUM(audio_seconds), 0)::numeric AS audio_seconds,
       COALESCE(SUM(cost_usd), 0)::numeric AS cost_usd
     FROM public.openai_usage_events
     WHERE created_at >= $1 AND created_at < $2
@@ -390,6 +393,7 @@ export const getOpenAiUsageDashboard = async ({ period = 'month' } = {}) => {
       provider: row.provider,
       calls: Number(row.calls) || 0,
       tokens: Number(row.tokens) || 0,
+      audioSeconds: Number(row.audio_seconds) || 0,
       ...toMoney(row.cost_usd),
     })),
     recentLogs: recentRows.map((row) => ({
@@ -400,7 +404,6 @@ export const getOpenAiUsageDashboard = async ({ period = 'month' } = {}) => {
       tokens: Number(row.total_tokens) || 0,
       ...toMoney(row.cost_usd),
     })),
-    note:
-      'DeepSeek (robô do site) + OpenAI (áudio/transcrição) + OpenClaw (demais clientes). Estimativa USD→BRL; confira a fatura real nos painéis DeepSeek/OpenAI.',
+    note: 'Valores estimados (USD→BRL). Confira a fatura nos painéis DeepSeek e OpenAI.',
   };
 };

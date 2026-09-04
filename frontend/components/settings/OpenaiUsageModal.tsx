@@ -14,6 +14,7 @@ import { mfRadius, mfSpacing } from '../../lib/theme'
 import { useMfTheme } from '../ui/useMfTheme'
 import {
   fetchOpenaiUsage,
+  type OpenaiUsageByProvider,
   type OpenaiUsageDashboard,
   type OpenaiUsagePeriod,
 } from '../../services/openaiUsageService'
@@ -29,6 +30,16 @@ const PERIODS: { id: OpenaiUsagePeriod; label: string }[] = [
   { id: 'month', label: 'Este mês' },
 ]
 
+const CHANNELS: {
+  id: 'deepseek' | 'openai' | 'openclaw'
+  title: string
+  subtitle: string
+}[] = [
+  { id: 'deepseek', title: 'DeepSeek', subtitle: 'Robô do site' },
+  { id: 'openai', title: 'OpenAI', subtitle: 'Transcrição de áudio' },
+  { id: 'openclaw', title: 'OpenClaw', subtitle: 'Demais clientes' },
+]
+
 const formatBrl = (value: number) =>
   (Number(value) || 0).toLocaleString('pt-BR', {
     style: 'currency',
@@ -37,39 +48,42 @@ const formatBrl = (value: number) =>
     maximumFractionDigits: 2,
   })
 
-const formatTokens = (value: number) =>
-  (Number(value) || 0).toLocaleString('pt-BR')
+const formatCompact = (value: number) => {
+  const n = Number(value) || 0
+  if (n >= 1_000_000) return `${(n / 1_000_000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mi`
+  if (n >= 10_000) return `${Math.round(n / 1000)} mil`
+  return n.toLocaleString('pt-BR')
+}
 
 const formatPhone = (phone: string) => {
   const digits = String(phone || '').replace(/\D/g, '')
   if (digits.startsWith('55') && digits.length >= 12) {
-    return `+55 ${digits.slice(2, 4)} ${digits.slice(4, 9)}-${digits.slice(9)}`
+    return `(${digits.slice(2, 4)}) ${digits.slice(4, 9)}-${digits.slice(9)}`
   }
   return digits || phone
 }
 
-const sourceLabel = (source: string) => {
-  if (source === 'preview') return 'Teste na tela'
-  if (source === 'transcription') return 'Áudio (OpenAI)'
-  if (source === 'openclaw') return 'OpenClaw (clientes)'
-  return 'Robô site (DeepSeek)'
+const emptyProvider = (id: string): OpenaiUsageByProvider => ({
+  provider: id,
+  calls: 0,
+  tokens: 0,
+  audioSeconds: 0,
+  costUsd: 0,
+  costBrl: 0,
+})
+
+const channelDetail = (row: OpenaiUsageByProvider) => {
+  if (row.calls <= 0) return 'Sem uso neste período'
+  if (row.provider === 'openai' && row.audioSeconds > 0) {
+    const mins = Math.max(1, Math.round(row.audioSeconds / 60))
+    return `${mins} min de áudio · ${row.calls} ${row.calls === 1 ? 'chamada' : 'chamadas'}`
+  }
+  return `${formatCompact(row.tokens)} tokens · ${row.calls} ${row.calls === 1 ? 'chamada' : 'chamadas'}`
 }
 
-const providerLabel = (provider: string) => {
-  if (provider === 'deepseek') return 'DeepSeek'
-  if (provider === 'openclaw') return 'OpenClaw'
-  return 'OpenAI'
-}
-
-const formatWhen = (iso: string) => {
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return iso
-  return date.toLocaleString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+const buildChannels = (rows: OpenaiUsageByProvider[] | undefined) => {
+  const map = new Map((rows ?? []).map((row) => [row.provider, row]))
+  return CHANNELS.map(({ id }) => map.get(id) ?? emptyProvider(id))
 }
 
 export function OpenaiUsageModal ({ visible, onClose }: Props) {
@@ -80,10 +94,12 @@ export function OpenaiUsageModal ({ visible, onClose }: Props) {
   const [data, setData] = useState<OpenaiUsageDashboard | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showUsers, setShowUsers] = useState(false)
 
   useEffect(() => {
     if (!visible) {
       setError('')
+      setShowUsers(false)
       return
     }
     let cancelled = false
@@ -105,19 +121,19 @@ export function OpenaiUsageModal ({ visible, onClose }: Props) {
     }
   }, [visible, period])
 
+  const channels = useMemo(() => buildChannels(data?.byProvider), [data?.byProvider])
+  const topUsers = useMemo(() => (data?.byUser ?? []).slice(0, 8), [data?.byUser])
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable style={styles.sheet} onPress={() => {}}>
           <View style={styles.header}>
-            <Text style={styles.title}>Gasto do robô (IA)</Text>
+            <Text style={styles.title}>Gasto do robô</Text>
             <TouchableOpacity onPress={onClose} accessibilityLabel="Fechar">
               <Ionicons name="close" size={22} color={tokens.textSecondary} />
             </TouchableOpacity>
           </View>
-          <Text style={styles.hint}>
-            DeepSeek (robô do site), OpenAI (áudio) e OpenClaw (demais clientes). Só você vê isso.
-          </Text>
 
           <View style={styles.periods}>
             {PERIODS.map((item) => {
@@ -137,77 +153,67 @@ export function OpenaiUsageModal ({ visible, onClose }: Props) {
           </View>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
-          {loading && !data ? <Text style={styles.hint}>Carregando…</Text> : null}
+          {loading && !data ? <Text style={styles.muted}>Carregando…</Text> : null}
 
           {data ? (
             <ScrollView style={styles.body} keyboardShouldPersistTaps="handled">
               <View style={styles.hero}>
-                <Text style={styles.heroLabel}>Estimativa em real</Text>
                 <Text style={styles.heroValue}>{formatBrl(data.totals.costBrl)}</Text>
                 <Text style={styles.heroMeta}>
-                  {formatTokens(data.totals.totalTokens)} tokens · {data.totals.calls} chamadas
-                </Text>
-                <Text style={styles.heroMeta}>
-                  US$ {data.totals.costUsd.toFixed(4)} · 1 dólar ≈ {formatBrl(data.usdBrl)}
+                  {data.totals.calls} chamadas · câmbio {formatBrl(data.usdBrl)}/US$
                 </Text>
               </View>
 
-              {(data.byProvider?.length ?? 0) > 0 ? (
-                <>
-                  <Text style={styles.sectionTitle}>Por provedor</Text>
-                  {(data.byProvider ?? []).map((row) => (
-                    <View key={row.provider} style={styles.row}>
-                      <Text style={styles.rowTitle}>{providerLabel(row.provider)}</Text>
-                      <Text style={styles.rowMeta}>
-                        {formatTokens(row.tokens)} tokens · {formatBrl(row.costBrl)}
+              <Text style={styles.sectionTitle}>Onde foi o gasto</Text>
+              {channels.map((row) => {
+                const meta = CHANNELS.find((c) => c.id === row.provider)
+                const active = row.costBrl > 0 || row.calls > 0
+                return (
+                  <View
+                    key={row.provider}
+                    style={[styles.channelCard, !active ? styles.channelCardMuted : null]}
+                  >
+                    <View style={styles.channelTop}>
+                      <View style={styles.channelText}>
+                        <Text style={styles.channelTitle}>{meta?.title ?? row.provider}</Text>
+                        <Text style={styles.channelSubtitle}>{meta?.subtitle}</Text>
+                      </View>
+                      <Text style={[styles.channelCost, !active ? styles.channelCostMuted : null]}>
+                        {formatBrl(row.costBrl)}
                       </Text>
                     </View>
-                  ))}
-                </>
-              ) : null}
-
-              {data.bySource.length > 0 ? (
-                <Text style={styles.sectionTitle}>Por tipo</Text>
-              ) : null}
-              {data.bySource.map((row) => (
-                <View key={row.source} style={styles.row}>
-                  <Text style={styles.rowTitle}>{sourceLabel(row.source)}</Text>
-                  <Text style={styles.rowMeta}>
-                    {formatTokens(row.tokens)} tokens · {formatBrl(row.costBrl)}
-                  </Text>
-                </View>
-              ))}
-
-              <Text style={styles.sectionTitle}>Por pessoa</Text>
-              {data.byUser.length === 0 ? (
-                <Text style={styles.hint}>
-                  Nenhuma conversa do robô do site neste período.
-                </Text>
-              ) : (
-                data.byUser.map((row) => (
-                  <View key={`${row.phone}-${row.userId || 'x'}`} style={styles.row}>
-                    <Text style={styles.rowTitle}>{row.label}</Text>
-                    <Text style={styles.rowMeta}>
-                      {formatPhone(row.phone)} · {formatTokens(row.tokens)} tokens · {formatBrl(row.costBrl)}
-                    </Text>
+                    <Text style={styles.channelDetail}>{channelDetail(row)}</Text>
                   </View>
-                ))
-              )}
+                )
+              })}
 
-              {(data.recentLogs?.length ?? 0) > 0 ? (
+              {topUsers.length > 0 ? (
                 <>
-                  <Text style={styles.sectionTitle}>Chamadas recentes</Text>
-                  {(data.recentLogs ?? []).map((row, index) => (
-                    <View key={`${row.createdAt}-${row.source}-${index}`} style={styles.row}>
-                      <Text style={styles.rowTitle}>
-                        {formatWhen(row.createdAt)} · {sourceLabel(row.source)}
-                      </Text>
-                      <Text style={styles.rowMeta}>
-                        {row.phone ? `${formatPhone(row.phone)} · ` : ''}
-                        {formatTokens(row.tokens)} tokens · {formatBrl(row.costBrl)}
-                      </Text>
+                  <TouchableOpacity
+                    style={styles.expandRow}
+                    onPress={() => setShowUsers((v) => !v)}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.sectionTitleInline}>
+                      Quem mais usou ({topUsers.length})
+                    </Text>
+                    <Ionicons
+                      name={showUsers ? 'chevron-up' : 'chevron-down'}
+                      size={18}
+                      color={tokens.textSecondary}
+                    />
+                  </TouchableOpacity>
+                  {showUsers ? topUsers.map((row) => (
+                    <View key={`${row.phone}-${row.userId || 'x'}`} style={styles.userRow}>
+                      <View style={styles.userText}>
+                        <Text style={styles.userName} numberOfLines={1}>{row.label}</Text>
+                        <Text style={styles.userPhone} numberOfLines={1}>
+                          {formatPhone(row.phone)}
+                        </Text>
+                      </View>
+                      <Text style={styles.userCost}>{formatBrl(row.costBrl)}</Text>
                     </View>
-                  ))}
+                  )) : null}
                 </>
               ) : null}
 
@@ -233,8 +239,8 @@ function createStyles (
     },
     sheet: {
       width: '100%',
-      maxWidth: 520,
-      maxHeight: '86%',
+      maxWidth: 480,
+      maxHeight: '88%',
       alignSelf: 'center',
       backgroundColor: tokens.panelBg,
       borderRadius: mfRadius.xl,
@@ -246,27 +252,22 @@ function createStyles (
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginBottom: 6,
+      marginBottom: 12,
     },
     title: {
       fontSize: 18,
       fontWeight: '700',
       color: tokens.textPrimary,
     },
-    hint: {
-      fontSize: 13,
-      lineHeight: 18,
-      color: tokens.textSecondary,
-      marginBottom: 10,
-    },
     periods: {
       flexDirection: 'row',
       gap: 8,
-      marginBottom: 12,
+      marginBottom: 14,
     },
     chip: {
-      paddingHorizontal: 12,
-      paddingVertical: 8,
+      flex: 1,
+      alignItems: 'center',
+      paddingVertical: 9,
       borderRadius: mfRadius.md,
       borderWidth: 1,
       borderColor: tokens.inputBorder,
@@ -274,6 +275,7 @@ function createStyles (
     },
     chipActive: {
       borderColor: tokens.textPrimary,
+      backgroundColor: isDarkMode ? 'rgba(255,255,255,0.06)' : '#F8FAFC',
     },
     chipText: {
       fontSize: 13,
@@ -288,60 +290,130 @@ function createStyles (
       color: '#DC2626',
       fontSize: 13,
     },
-    body: {
-      maxHeight: 420,
-    },
-    hero: {
-      padding: 14,
-      borderRadius: mfRadius.md,
-      backgroundColor: isDarkMode ? 'rgba(255,255,255,0.04)' : tokens.inputBg,
-      marginBottom: 14,
-    },
-    heroLabel: {
-      fontSize: 12,
-      fontWeight: '600',
+    muted: {
+      fontSize: 13,
       color: tokens.textSecondary,
     },
+    body: {
+      maxHeight: 480,
+    },
+    hero: {
+      alignItems: 'center',
+      paddingVertical: 18,
+      marginBottom: 16,
+      borderRadius: mfRadius.lg,
+      backgroundColor: isDarkMode ? 'rgba(255,255,255,0.04)' : '#F8FAFC',
+      borderWidth: 1,
+      borderColor: tokens.divider,
+    },
     heroValue: {
-      fontSize: 28,
-      fontWeight: '700',
+      fontSize: 34,
+      fontWeight: '800',
       color: tokens.textPrimary,
-      marginTop: 4,
+      letterSpacing: -0.5,
     },
     heroMeta: {
       fontSize: 13,
       color: tokens.textSecondary,
-      marginTop: 4,
+      marginTop: 6,
     },
     sectionTitle: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: tokens.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.4,
+      marginBottom: 10,
+    },
+    sectionTitleInline: {
       fontSize: 14,
       fontWeight: '700',
       color: tokens.textPrimary,
+    },
+    channelCard: {
+      padding: 14,
+      borderRadius: mfRadius.md,
+      borderWidth: 1,
+      borderColor: tokens.divider,
+      backgroundColor: tokens.inputBg,
       marginBottom: 8,
-      marginTop: 4,
     },
-    row: {
-      marginBottom: 10,
-      paddingBottom: 10,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: tokens.divider,
+    channelCardMuted: {
+      opacity: 0.72,
     },
-    rowTitle: {
-      fontSize: 14,
-      fontWeight: '600',
+    channelTop: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
+    channelText: {
+      flex: 1,
+    },
+    channelTitle: {
+      fontSize: 15,
+      fontWeight: '700',
       color: tokens.textPrimary,
     },
-    rowMeta: {
+    channelSubtitle: {
       fontSize: 12,
       color: tokens.textSecondary,
       marginTop: 2,
     },
-    note: {
+    channelCost: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: tokens.textPrimary,
+    },
+    channelCostMuted: {
+      color: tokens.textSecondary,
+    },
+    channelDetail: {
       fontSize: 12,
-      lineHeight: 17,
       color: tokens.textSecondary,
       marginTop: 8,
-      marginBottom: 4,
+    },
+    expandRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: 14,
+      marginBottom: 8,
+      paddingVertical: 4,
+    },
+    userRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+      paddingVertical: 10,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: tokens.divider,
+    },
+    userText: {
+      flex: 1,
+    },
+    userName: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: tokens.textPrimary,
+    },
+    userPhone: {
+      fontSize: 12,
+      color: tokens.textSecondary,
+      marginTop: 2,
+    },
+    userCost: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: tokens.textPrimary,
+    },
+    note: {
+      fontSize: 11,
+      lineHeight: 16,
+      color: tokens.textSecondary,
+      marginTop: 14,
+      textAlign: 'center',
     },
   })
 }
