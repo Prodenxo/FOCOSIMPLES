@@ -69,8 +69,8 @@ export function FiscalEstablishmentSelectField({
           Estabelecimento fiscal *
         </Text>
         <Text style={styles.alert}>
-          Este cliente ainda não possui CNPJ em company_fiscal_profiles. A configuração fiscal ficará
-          indisponível até o cadastro do estabelecimento.
+          Este cliente ainda não tem certificado A1 válido com CNPJ e regime tributário (CRT).
+          Peça para importar o certificado digital antes de configurar os impostos do produto.
         </Text>
       </View>
     )

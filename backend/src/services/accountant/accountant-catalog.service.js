@@ -12,6 +12,7 @@ import {
   assertProductBelongsToEmpresa,
   listCanonicalEstablishmentsForTenant,
 } from './accountant-fiscal-boundary.service.js';
+import { bootstrapCompanyFiscalProfilesFromCertificates } from './accountant-fiscal-bootstrap.service.js';
 
 const stripEmpresaFromBody = (body = {}) => {
   if (body.empresaId !== undefined || body.empresa_id !== undefined) {
@@ -82,7 +83,11 @@ export const updateClientProduct = async (actorUserId, empresaId, productId, bod
  */
 export const listClientEstablishments = async (actorUserId, empresaId) => {
   await assertUserCanAccessEmpresa(actorUserId, empresaId);
-  const establishments = await listCanonicalEstablishmentsForTenant(empresaId);
+  let establishments = await listCanonicalEstablishmentsForTenant(empresaId);
+  if (establishments.length === 0) {
+    await bootstrapCompanyFiscalProfilesFromCertificates(empresaId);
+    establishments = await listCanonicalEstablishmentsForTenant(empresaId);
+  }
   if (establishments.length === 0) {
     return { establishments: [], status: 'NO_FISCAL_ESTABLISHMENT' };
   }
