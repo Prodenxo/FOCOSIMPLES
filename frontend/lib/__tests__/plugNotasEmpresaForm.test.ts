@@ -19,6 +19,8 @@ describe('buildPlugNotasEmpresaPayload', () => {
       nfseAtivo: true,
       nfeAtivo: true,
       nfceAtivo: false,
+      email: 'contato@empresa.com.br',
+      inscricaoMunicipal: '123456',
     };
     const payload = buildPlugNotasEmpresaPayload({
       cnpj: '12345678000199',
@@ -59,6 +61,55 @@ describe('buildPlugNotasEmpresaPayload', () => {
     expect(payload.inscricaoEstadual).toBe('11662285');
   });
 
+  it('exige IM quando NFS-e está ativa', () => {
+    const form = {
+      ...getDefaultPlugNotasCompanyForm(),
+      razaoSocial: 'Empresa Teste LTDA',
+      logradouro: 'Rua A',
+      numero: '1',
+      bairro: 'Centro',
+      cep: '01310100',
+      codigoCidade: '3550308',
+      descricaoCidade: 'São Paulo',
+      estado: 'SP',
+      email: 'contato@empresa.com.br',
+      nfseAtivo: true,
+      inscricaoMunicipal: '',
+    };
+    expect(getPlugNotasCompanyValidationMessage(form)).toMatch(/Inscrição Municipal/i);
+  });
+
+  it('persiste IM e RPS no payload NFS-e', () => {
+    const form = {
+      ...getDefaultPlugNotasCompanyForm(),
+      razaoSocial: 'Empresa Teste LTDA',
+      logradouro: 'Rua A',
+      numero: '1',
+      bairro: 'Centro',
+      cep: '01310100',
+      codigoCidade: '3550308',
+      descricaoCidade: 'São Paulo',
+      estado: 'SP',
+      email: 'contato@empresa.com.br',
+      inscricaoMunicipal: '123456',
+      rpsSerie: '1',
+      rpsNumero: 42,
+      rpsLote: 1,
+    };
+    const payload = buildPlugNotasEmpresaPayload({
+      cnpj: '12345678000199',
+      certificadoId: '',
+      form,
+    });
+    expect(payload.inscricaoMunicipal).toBe('123456');
+    expect(payload.rps).toEqual({ lote: 1, numeracao: [{ numero: 42, serie: '1' }] });
+    expect((payload.nfse as { config: { rps: unknown } }).config.rps).toEqual({
+      serie: '1',
+      numero: 42,
+      lote: 1,
+    });
+  });
+
   it('exige e-mail válido antes de cadastrar no emissor fiscal', () => {
     const form = {
       ...getDefaultPlugNotasCompanyForm(),
@@ -93,6 +144,7 @@ describe('buildPlugNotasEmpresaPayload', () => {
       nfseAtivo: true,
       nfeAtivo: true,
       nfceAtivo: true,
+      inscricaoMunicipal: '123456',
     };
     expect(getPlugNotasCompanyValidationMessage(form)).toMatch(/NFC-e exige CSC/i);
   });

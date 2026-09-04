@@ -417,9 +417,13 @@ export interface EmpresaFiscalData {
   /** RESELLER (comércio) ou MANUFACTURER (indústria) — espelho local */
   businessType?: EmpresaBusinessType | string | null;
   endereco?: EmpresaFiscalEndereco | null;
-  nfse?: { ativo?: boolean } | null;
+  nfse?: { ativo?: boolean; config?: { rps?: { serie?: string | number | null; numero?: number | null; lote?: number | null } } } | null;
   nfe?: { ativo?: boolean } | null;
   nfce?: { ativo?: boolean } | null;
+  rps?: {
+    lote?: number | null;
+    numeracao?: Array<{ serie?: string | null; numero?: number | null }> | null;
+  } | null;
 }
 
 export async function consultarEmpresaFiscal(cnpj: string): Promise<EmpresaFiscalData> {

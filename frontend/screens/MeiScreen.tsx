@@ -435,6 +435,29 @@ function EmpresaFiscalCard({ empresa, theme, onEdit }: { empresa: EmpresaFiscalD
             <Text style={labelStyle}>IM {empresa.inscricaoMunicipal}</Text>
           </View>
         ) : null}
+        {nfseAtivo ? (() => {
+          const rpsSerie = String(
+            empresa.rps?.numeracao?.[0]?.serie
+            ?? empresa.nfse?.config?.rps?.serie
+            ?? '',
+          ).trim();
+          const rpsNumero = empresa.rps?.numeracao?.[0]?.numero
+            ?? empresa.nfse?.config?.rps?.numero;
+          const rpsLote = empresa.rps?.lote ?? empresa.nfse?.config?.rps?.lote;
+          if (!rpsSerie && rpsNumero == null && rpsLote == null) return null;
+          const bits = [
+            rpsSerie ? `série ${rpsSerie}` : null,
+            rpsNumero != null ? `nº ${rpsNumero}` : null,
+            rpsLote != null ? `lote ${rpsLote}` : null,
+          ].filter(Boolean);
+          if (!bits.length) return null;
+          return (
+            <View style={rowStyle}>
+              <Ionicons name="receipt-outline" size={16} color={iconColor} style={{ marginTop: 2 }} />
+              <Text style={labelStyle}>RPS {bits.join(' · ')}</Text>
+            </View>
+          );
+        })() : null}
         {empresa.inscricaoEstadual && empresa.inscricaoEstadual !== 'ISENTO' ? (
           <View style={rowStyle}>
             <Ionicons name="document-text-outline" size={16} color={iconColor} style={{ marginTop: 2 }} />
@@ -4478,6 +4501,85 @@ function MeiScreenContent() {
                   />
                 </View>
 
+                {(documentosPermitidos.nfse
+                  || (!documentosPermitidos.nfe && !documentosPermitidos.nfce)) ? (
+                  <>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 16, gap: 12 }}>
+                      <View style={{ flex: 1, height: 1, backgroundColor: theme.border }} />
+                      <Text style={{ fontSize: 11, color: theme.textSecondary, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                        NFS-e
+                      </Text>
+                      <View style={{ flex: 1, height: 1, backgroundColor: theme.border }} />
+                    </View>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.label}>Inscrição Municipal (IM) {requiredMark}</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Número da IM na prefeitura"
+                        placeholderTextColor={theme.placeholder}
+                        value={plugNotasCompanyForm.inscricaoMunicipal}
+                        onChangeText={(t) => updatePlugNotasCompanyForm({ inscricaoMunicipal: t })}
+                        keyboardType="numeric"
+                      />
+                      <Text style={{ fontSize: 11, color: theme.textSecondary, marginTop: 4, lineHeight: 16 }}>
+                        Obrigatória para emitir NFS-e. Consta no alvará ou cadastro municipal.
+                      </Text>
+                    </View>
+                    <View style={styles.inputGroup}>
+                      <Text style={styles.label}>Numeração RPS {requiredMark}</Text>
+                      <Text style={{ fontSize: 11, color: theme.textSecondary, marginBottom: 8, lineHeight: 16 }}>
+                        Informe o próximo número a emitir. Se já usava outro sistema (ex.: NotaControl),
+                        coloque o último RPS emitido + 1.
+                      </Text>
+                      <View style={{ flexDirection: 'row', gap: 10 }}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.label, { fontSize: 12, marginBottom: 4 }]}>Série</Text>
+                          <TextInput
+                            style={styles.input}
+                            placeholder="1"
+                            placeholderTextColor={theme.placeholder}
+                            value={plugNotasCompanyForm.rpsSerie}
+                            onChangeText={(t) => updatePlugNotasCompanyForm({ rpsSerie: t.trim() || '1' })}
+                            maxLength={5}
+                          />
+                        </View>
+                        <View style={{ flex: 1.2 }}>
+                          <Text style={[styles.label, { fontSize: 12, marginBottom: 4 }]}>Próximo nº</Text>
+                          <TextInput
+                            style={styles.input}
+                            placeholder="1"
+                            placeholderTextColor={theme.placeholder}
+                            value={String(plugNotasCompanyForm.rpsNumero)}
+                            onChangeText={(t) => {
+                              const n = Number.parseInt(t.replace(/\D/g, ''), 10);
+                              updatePlugNotasCompanyForm({
+                                rpsNumero: Number.isFinite(n) && n >= 1 ? n : 1,
+                              });
+                            }}
+                            keyboardType="number-pad"
+                          />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.label, { fontSize: 12, marginBottom: 4 }]}>Lote</Text>
+                          <TextInput
+                            style={styles.input}
+                            placeholder="1"
+                            placeholderTextColor={theme.placeholder}
+                            value={String(plugNotasCompanyForm.rpsLote)}
+                            onChangeText={(t) => {
+                              const n = Number.parseInt(t.replace(/\D/g, ''), 10);
+                              updatePlugNotasCompanyForm({
+                                rpsLote: Number.isFinite(n) && n >= 1 ? n : 1,
+                              });
+                            }}
+                            keyboardType="number-pad"
+                          />
+                        </View>
+                      </View>
+                    </View>
+                  </>
+                ) : null}
+
                 {documentosPermitidos.nfe ? (
                   <>
                     <View style={styles.inputGroup}>
@@ -4767,7 +4869,8 @@ function MeiScreenContent() {
                   />
                   <MeiFormField
                     label="E-mail prestador"
-                    placeholder="Opcional"
+                    required
+                    placeholder="contato@empresa.com.br"
                     value={nfseForm.prestadorEmail ?? ''}
                     keyboardType="email-address"
                     autoCapitalize="none"

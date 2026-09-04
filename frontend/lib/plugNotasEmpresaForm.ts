@@ -165,6 +165,9 @@ export function getPlugNotasCompanyValidationMessage(form: PlugNotasCompanyForm)
   if (!isValidEmail(form.email)) {
     return 'Informe um e-mail válido (ex.: contato@empresa.com.br).';
   }
+  if (form.nfseAtivo && !hasRequiredText(form.inscricaoMunicipal)) {
+    return 'Informe a Inscrição Municipal (IM) para emitir NFS-e.';
+  }
   if (!form.nfseAtivo && !form.nfeAtivo && !form.nfceAtivo) {
     return 'Selecione pelo menos um tipo de nota fiscal (NFS-e, NF-e ou NFC-e).';
   }
