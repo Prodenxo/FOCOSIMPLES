@@ -1,12 +1,11 @@
-import { env } from '../config/env.js';
 import { runOpenclawAction } from './openclaw-bot.service.js';
 import { sendWhatsappMessage } from './whatsapp-outbound.service.js';
 import { appendWhatsappBackendAgentLog } from './whatsapp-backend-agent-log.service.js';
 import { recordOpenAiUsage } from './openai-usage.service.js';
 import {
-  estimateUsageFromTexts,
   hasOpenAiUsageCounts,
 } from '../lib/openai-pricing.js';
+import { callWhatsappChatLlm } from './whatsapp-chat-llm.service.js';
 import {
   WHATSAPP_BACKEND_AGENT_ACTIONS,
   buildWhatsappBackendAgentSystemPrompt,
@@ -15,7 +14,6 @@ import { matchQuickWhatsappIntent } from './whatsapp-backend-agent-intent.js';
 
 const HISTORY_LIMIT = 16;
 const MAX_TOOL_TURNS = 8;
-const OPENAI_TIMEOUT_MS = 45_000;
 const sessions = new Map();
 
 const SEND_FILE_ACTIONS = new Set([
@@ -81,41 +79,6 @@ const openaiTools = [
   },
 ];
 
-const callOpenAi = async (messages) => {
-  const apiKey = (env.OPENAI_API_KEY || process.env.OPENAI_API_KEY || '').trim();
-  if (!apiKey) {
-    throw new Error('OPENAI_API_KEY ausente');
-  }
-  const model = (env.OPENAI_WHATSAPP_MODEL || process.env.OPENAI_WHATSAPP_MODEL || 'gpt-4o-mini').trim();
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), OPENAI_TIMEOUT_MS);
-  try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      signal: ac.signal,
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.2,
-        messages,
-        tools: openaiTools,
-        tool_choice: 'auto',
-      }),
-    });
-    const payload = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      const detail = payload?.error?.message || res.statusText;
-      throw new Error(`OpenAI ${res.status}: ${detail}`);
-    }
-    return payload;
-  } finally {
-    clearTimeout(timer);
-  }
-};
-
 const parseToolArgs = (raw) => {
   if (!raw) return {};
   try {
@@ -170,38 +133,24 @@ export const handleWhatsappBackendAgent = async ({
     } catch (err) {
       lastAssistant = err instanceof Error ? err.message : String(err);
     }
-    if (lastAssistant) {
-      void recordOpenAiUsage({
-        source: logSource === 'preview' ? 'preview' : 'whatsapp_agent',
-        model: env.OPENAI_WHATSAPP_MODEL || process.env.OPENAI_WHATSAPP_MODEL || 'gpt-4o-mini',
-        phone: session.key,
-        usage: estimateUsageFromTexts({
-          promptText: trimmed,
-          completionText: lastAssistant,
-        }),
-      });
-    }
   }
 
   try {
     if (!lastAssistant) {
       for (let turn = 0; turn < MAX_TOOL_TURNS; turn += 1) {
-        const completion = await callOpenAi(messages);
+        const { payload: completion, model: chatModel } = await callWhatsappChatLlm(
+          messages,
+          openaiTools,
+        );
         const choice = completion?.choices?.[0]?.message;
-        const usage = hasOpenAiUsageCounts(completion?.usage)
-          ? completion.usage
-          : estimateUsageFromTexts({
-            promptText: messages
-              .map((item) => (typeof item?.content === 'string' ? item.content : ''))
-              .join('\n'),
-            completionText: choice?.content || '',
+        if (hasOpenAiUsageCounts(completion?.usage)) {
+          void recordOpenAiUsage({
+            source: logSource === 'preview' ? 'preview' : 'whatsapp_agent',
+            model: chatModel,
+            phone: session.key,
+            usage: completion.usage,
           });
-        void recordOpenAiUsage({
-          source: logSource === 'preview' ? 'preview' : 'whatsapp_agent',
-          model: env.OPENAI_WHATSAPP_MODEL || process.env.OPENAI_WHATSAPP_MODEL || 'gpt-4o-mini',
-          phone: session.key,
-          usage,
-        });
+        }
         if (!choice) break;
 
         const toolCalls = Array.isArray(choice.tool_calls) ? choice.tool_calls : [];
@@ -249,7 +198,7 @@ export const handleWhatsappBackendAgent = async ({
     const msg = err instanceof Error ? err.message : String(err);
     console.warn('[whatsapp-backend-agent] falhou:', msg);
     lastAssistant =
-      'Não consegui concluir agora. Tente de novo em instantes. Se persistir, ligue de novo o OpenClaw em Configurações.';
+      'Não consegui concluir agora. Tente de novo em instantes. Se persistir, confira DEEPSEEK_API_KEY no backend.';
   }
 
   if (lastAssistant) {

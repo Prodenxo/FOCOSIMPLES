@@ -763,7 +763,7 @@ export default function SettingsScreen() {
                     {!whatsappAgentPref.phoneLinked
                       ? "Salve seu WhatsApp acima para o teste valer no seu número."
                       : !whatsappAgentPref.backendReady && !whatsappAgentPref.openclawEnabled
-                        ? "Falta a chave da OpenAI no backend. O site avisa se não conseguir responder."
+                        ? "Falta DEEPSEEK_API_KEY no backend (texto). Áudio usa OpenAI separado."
                         : whatsappAgentPref.openclawEnabled
                           ? "Desligue para testar o robô novo só no seu WhatsApp."
                           : "Mande uma mensagem no seu WhatsApp para testar. Religue se algo falhar."}

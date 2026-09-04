@@ -7,6 +7,7 @@ import {
   normalizeOpenAiModel,
   roundUsd,
 } from '../lib/openai-pricing.js';
+import { resolveWhatsappChatConfig } from './whatsapp-chat-llm.service.js';
 
 const FX_CACHE_MS = 6 * 60 * 60 * 1000;
 const FALLBACK_USD_BRL = 5.5;
@@ -184,7 +185,7 @@ export const getUsdBrlRate = async () => {
 
 export const backfillOpenAiUsageFromLogs = async ({ from, to } = {}) => {
   await ensureTable();
-  const model = env.OPENAI_WHATSAPP_MODEL || process.env.OPENAI_WHATSAPP_MODEL || 'gpt-4o-mini';
+  const model = resolveWhatsappChatConfig().model;
   let rows = [];
   try {
     const result = await query(
@@ -341,6 +342,6 @@ export const getOpenAiUsageDashboard = async ({ period = 'month' } = {}) => {
       ...toMoney(row.cost_usd),
     })),
     note:
-      'Inclui as conversas do robô do site (também as que já estavam nos logs). Clientes ainda no OpenClaw não entram.',
+      'Chat DeepSeek (robô do site) + transcrição OpenAI. OpenClaw não entra. Valores são estimativa em USD→BRL.',
   };
 };

@@ -1,6 +1,6 @@
 import { query } from '../config/pg.js';
-import { env } from '../config/env.js';
 import { resolveUserIdByPhone } from './openclaw-bot.service.js';
+import { isWhatsappChatLlmConfigured } from './whatsapp-chat-llm.service.js';
 
 const ENGINES = new Set(['openclaw', 'backend']);
 
@@ -11,8 +11,7 @@ export const normalizeWhatsappEngine = (value) => {
   return ENGINES.has(engine) ? engine : 'openclaw';
 };
 
-export const isWhatsappBackendAgentConfigured = () =>
-  Boolean((env.OPENAI_API_KEY || process.env.OPENAI_API_KEY || '').trim());
+export const isWhatsappBackendAgentConfigured = () => isWhatsappChatLlmConfigured();
 
 const ensureTable = async () => {
   if (tableReady) return;

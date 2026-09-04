@@ -327,8 +327,12 @@ export const env = {
   /** Transcrição de notas de voz Z-API → texto antes do relay OpenClaw. */
   WHATSAPP_AUDIO_TRANSCRIPTION_ENABLED:
     process.env.WHATSAPP_AUDIO_TRANSCRIPTION_ENABLED || "true",
+  /** Chat do robô WhatsApp (texto): deepseek (padrão) ou openai. */
+  WHATSAPP_CHAT_PROVIDER: (process.env.WHATSAPP_CHAT_PROVIDER || "deepseek").trim(),
+  WHATSAPP_CHAT_MODEL: (process.env.WHATSAPP_CHAT_MODEL || "deepseek-chat").trim(),
+  DEEPSEEK_API_KEY: (process.env.DEEPSEEK_API_KEY || "").trim(),
+  /** Legado: só usado se WHATSAPP_CHAT_PROVIDER=openai. */
   OPENAI_API_KEY: (process.env.OPENAI_API_KEY || "").trim(),
-  /** Modelo do canário WhatsApp (backend no lugar do OpenClaw). */
   OPENAI_WHATSAPP_MODEL: (process.env.OPENAI_WHATSAPP_MODEL || "gpt-4o-mini").trim(),
   /** Câmbio fixo USD→BRL no painel de gasto. Vazio = cotação do dia. */
   OPENAI_USD_BRL: (process.env.OPENAI_USD_BRL || "").trim(),

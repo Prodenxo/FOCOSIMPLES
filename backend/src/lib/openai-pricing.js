@@ -4,6 +4,8 @@ export const OPENAI_CHAT_USD_PER_MILLION = {
   'gpt-4.1-mini': { input: 0.4, output: 1.6 },
   'gpt-4.1': { input: 2, output: 8 },
   'gpt-4o': { input: 2.5, output: 10 },
+  'deepseek-chat': { input: 0.14, output: 0.28 },
+  'deepseek-reasoner': { input: 0.55, output: 2.19 },
 };
 
 /** USD por minuto de áudio. */
@@ -18,6 +20,8 @@ export const normalizeOpenAiModel = (raw) => {
   if (model.includes('gpt-4.1-mini')) return 'gpt-4.1-mini';
   if (model.includes('gpt-4.1')) return 'gpt-4.1';
   if (model.includes('gpt-4o-mini-transcribe')) return 'gpt-4o-mini-transcribe';
+  if (model.includes('deepseek-reasoner')) return 'deepseek-reasoner';
+  if (model.includes('deepseek-chat') || model.includes('deepseek')) return 'deepseek-chat';
   if (model.includes('gpt-4o-mini')) return 'gpt-4o-mini';
   if (model.includes('gpt-4o')) return 'gpt-4o';
   if (model.includes('whisper')) return 'whisper-1';
