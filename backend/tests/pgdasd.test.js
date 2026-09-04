@@ -7,6 +7,7 @@ import { inspectPgdasdSerproConfig } from '../src/services/pgdasd/client.js'
 import {
   shouldFallbackToDasExtrato,
   todayYmdSaoPaulo,
+  isSemDebitoSerproMessage,
 } from '../src/services/simples-das.service.js'
 
 describe('pgdasd consultar map', () => {
@@ -146,6 +147,25 @@ describe('pgdasd consultar map', () => {
     assert.equal(periods[0].numeroDas, '07202620299718700')
     assert.equal(periods[0].status, 'a_pagar')
   })
+
+  it('indiceDas vazio na declaração não vira a_pagar', () => {
+    const periods = mapDeclaracoesToPeriods({
+      periodos: [
+        {
+          periodoApuracao: '202607',
+          operacoes: [
+            {
+              tipoOperacao: 'Declaração Original',
+              indiceDeclaracao: { numeroDeclaracao: '99' },
+              indiceDas: {},
+            },
+          ],
+        },
+      ],
+    })
+    assert.equal(periods[0].status, 'sem_debito')
+    assert.equal(periods[0].hasDas, false)
+  })
 })
 
 describe('pgdasd faturamento notas', () => {
@@ -239,5 +259,12 @@ describe('serpro error message', () => {
     const msg = humanizeSerproForbiddenMessage('Forbidden')
     assert.match(msg, /Receita negou/i)
     assert.match(msg, /certificado A1/i)
+  })
+})
+
+describe('simples-das sem debito', () => {
+  it('detecta mensagem sem valor devido', () => {
+    assert.equal(isSemDebitoSerproMessage('MSG_E0139: não haver valor devido', ''), true)
+    assert.equal(isSemDebitoSerproMessage('Forbidden', ''), false)
   })
 })

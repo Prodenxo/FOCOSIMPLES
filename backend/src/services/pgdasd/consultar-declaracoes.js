@@ -142,6 +142,16 @@ const normalizeNumeroDas = (raw) => {
   return String(raw).trim()
 }
 
+const indiceDasHasNumero = (indiceDas) => {
+  if (!indiceDas || typeof indiceDas !== 'object') return false
+  return [
+    indiceDas.numeroDas,
+    indiceDas.NumeroDas,
+    indiceDas.numeroDocumento,
+    indiceDas.NumeroDocumento,
+  ].map(normalizeNumeroDas).some(Boolean)
+}
+
 export const pickNumeroDasFromOperacoes = (operacoes = []) => {
   let bestPaid = null
   let bestAny = null
@@ -199,9 +209,11 @@ export const resolvePeriodStatusFromOperacoes = (operacoes = []) => {
 
     const indiceDas = op.indiceDas || op.IndiceDas || null
     if (indiceDas && typeof indiceDas === 'object') {
-      hasDasGerado = true
       if (indiceDas.dasPago === true || indiceDas.DasPago === true) {
         hasDasPago = true
+        hasDasGerado = true
+      } else if (isDasGenerationTipo(tipo) || indiceDasHasNumero(indiceDas)) {
+        hasDasGerado = true
       }
     }
 

@@ -3806,7 +3806,7 @@ function MeiScreenContent() {
                           </Text>
                         ) : p.status === 'sem_debito' ? (
                           <Text style={styles.dasPeriodReason} numberOfLines={2}>
-                            Declaração ok — use Gerar DAS ou retifique no PGDAS-D se houve faturamento
+                            Declarado sem imposto a pagar neste mês
                           </Text>
                         ) : (p.status === 'erro' || p.status === 'indisponivel') ? (
                           <Text style={styles.dasPeriodReason} numberOfLines={2}>
@@ -3821,20 +3821,9 @@ function MeiScreenContent() {
                       </Text>
                       <View style={{ width: 92, alignItems: 'center' }}>
                         {p.status === 'sem_debito' ? (
-                          <TouchableOpacity
-                            style={styles.dasTableAction}
-                            onPress={() => void handleDownloadGuide(p)}
-                            disabled={downloadLoading}
-                            accessibilityLabel={`Gerar DAS de ${p.competencia}`}
-                          >
-                            {downloadLoading ? (
-                              <ActivityIndicator size="small" color={theme.primary} />
-                            ) : (
-                              <Text style={[styles.dasTableCell, { color: theme.primary, fontSize: 11, fontWeight: '600' }]}>
-                                Gerar DAS
-                              </Text>
-                            )}
-                          </TouchableOpacity>
+                          <Text style={[styles.dasTableCell, { color: theme.textSecondary, fontSize: 11 }]}>
+                            —
+                          </Text>
                         ) : (
                         <TouchableOpacity
                           style={styles.dasTableAction}

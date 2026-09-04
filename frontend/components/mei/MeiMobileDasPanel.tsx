@@ -149,7 +149,7 @@ export function MeiMobileDasPanel ({
       return sorted.filter((p) => p.status === 'a_pagar' || p.status === 'a_declarar')
     }
     if (statusFilter === 'pago') {
-      return sorted.filter((p) => p.status === 'pago' || p.status === 'sem_debito')
+      return sorted.filter((p) => p.status === 'pago')
     }
     return sorted
   }, [displayPeriods, statusFilter])
@@ -296,7 +296,7 @@ export function MeiMobileDasPanel ({
               const vencida = isMeiPeriodVencida(p)
               // Pago também pode baixar (reimpressão / PDF já quitado na Receita).
               const canDownload =
-                (p.status === 'a_pagar' || p.status === 'pago' || p.status === 'sem_debito' || p.status === 'a_declarar')
+                (p.status === 'a_pagar' || p.status === 'pago' || p.status === 'a_declarar')
                 && Boolean(onDownloadPeriod)
               const statusColor =
                 p.status === 'pago'

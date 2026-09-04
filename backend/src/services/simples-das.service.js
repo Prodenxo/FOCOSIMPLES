@@ -79,6 +79,44 @@ export const shouldFallbackToDasExtrato = ({
   dataConsolidacao = null,
 } = {}) => !regenerate && !normalizeDataConsolidacao(dataConsolidacao)
 
+export const isSemDebitoSerproMessage = (message = '', code = '') => {
+  const text = String(message || '')
+  const normalizedCode = String(code || '')
+  return normalizedCode === 'PGDASD_SEM_DEBITO'
+    || /MSG_E0139|sem\s+valor\s+devido|n[aã]o\s+haver\s+valor\s+devido|n[aã]o\s+foi\s+gerado\s+das|declarado\s+sem\s+valor\s+devido/i.test(text)
+}
+
+const resolvePeriodStatusFromLocalRow = (remoteRow, localRow) => {
+  const localStatus = String(localRow?.status || '')
+  const localMsg = String(localRow?.error_message || '')
+  if (
+    localStatus === 'sem_debito'
+    || isSemDebitoSerproMessage(localMsg, localRow?.detalhamento_json?.code)
+  ) {
+    return 'sem_debito'
+  }
+  return remoteRow?.status || localStatus || 'a_pagar'
+}
+
+const persistSemDebitoPeriod = async ({
+  userId,
+  contribuinteCnpj,
+  periodo,
+  message,
+}) => {
+  await upsertDasSimples({
+    userId,
+    cnpj: contribuinteCnpj,
+    periodoApuracao: periodo,
+    status: 'sem_debito',
+    pdfBase64: null,
+    numeroDocumento: null,
+    valorTotal: 0,
+    errorMessage: message || 'Período declarado sem valor devido.',
+    detalhamento: { fonte: 'PGDASD_SEM_DEBITO' },
+  })
+}
+
 /**
  * CNPJ da operação = certificado da empresa autenticada.
  * Hint do frontend só é aceito se coincidir com o CNPJ do cert / empresa.
@@ -202,27 +240,30 @@ export const listSimplesDasPeriods = async (userId, { cnpj, ano, refresh = false
     if (!periodo) continue
     const prev = byPeriodo.get(periodo)
     if (!prev) {
-      // Sem retorno remoto: usa só cache local de PDF (status neutro a_pagar se tiver PDF).
+      const status = resolvePeriodStatusFromLocalRow(null, row)
       byPeriodo.set(periodo, {
         competencia: row.competencia,
         periodoApuracao: periodo,
         guideId: row.id || `pgdasd-${periodo}`,
-        status: row.pdf_base64 ? 'a_pagar' : (String(row.status) === 'pago' ? 'pago' : 'a_pagar'),
+        status,
         errorMessage: row.error_message || null,
         valorTotal: row.valor_total ?? null,
         numeroDocumento: row.numero_documento || null,
         hasLocalPdf: isUsableDasPdfCache(row),
+        hasDas: status === 'sem_debito' ? false : Boolean(row.numero_documento),
       })
       continue
     }
-    // Status vem da Receita (CONSDECLARACAO). Local só enriquece PDF/valores.
-    // guideId estável = pgdasd-AAAAMM (nunca UUID do banco — quebra o download).
+    const mergedStatus = resolvePeriodStatusFromLocalRow(prev, row)
     byPeriodo.set(periodo, {
       ...prev,
       guideId: `pgdasd-${periodo}`,
+      status: mergedStatus,
+      errorMessage: row.error_message || prev.errorMessage || null,
       valorTotal: row.valor_total ?? prev.valorTotal ?? null,
       numeroDocumento: row.numero_documento || prev.numeroDocumento || null,
       hasLocalPdf: isUsableDasPdfCache(row),
+      hasDas: mergedStatus === 'sem_debito' ? false : prev.hasDas,
     })
   }
 
@@ -282,6 +323,12 @@ const baixarExtratoDasDoPeriodo = async ({
   })
 
   if (!ids.numeroDas) {
+    await persistSemDebitoPeriod({
+      userId,
+      contribuinteCnpj,
+      periodo,
+      message: 'Período declarado sem valor devido. A Receita não emite DAS quando não há imposto a pagar.',
+    })
     throw badRequest(
       'Período declarado sem valor devido. A Receita não emite DAS quando não há imposto a pagar.',
       { code: 'PGDASD_SEM_DEBITO' },
@@ -360,6 +407,17 @@ const attemptRegenerateDasVencido = async ({
     }
   }
 
+  if (failures.length > 0 && failures.every((msg) => isSemDebitoSerproMessage(msg))) {
+    const message = failures[0]
+    await persistSemDebitoPeriod({
+      userId,
+      contribuinteCnpj,
+      periodo,
+      message,
+    })
+    throw badRequest(message, { code: 'PGDASD_SEM_DEBITO' })
+  }
+
   throw badRequest(
     failures.join(' ') || 'Não foi possível atualizar a guia vencida na Receita.',
     { code: 'PGDASD_DAS_REGENERATE_FAILED' },
@@ -420,8 +478,7 @@ export const gerarSimplesDas = async (userId, payload = {}) => {
   } catch (err) {
     const code = err?.errors?.code || err?.code
     const msg = String(err?.message || '')
-    const isSemDebito = code === 'PGDASD_SEM_DEBITO'
-      || /MSG_E0139|n[aã]o\s+haver\s+valor\s+devido|sem\s+valor\s+devido|n[aã]o\s+foi\s+gerado\s+das/i.test(msg)
+    const isSemDebito = isSemDebitoSerproMessage(msg, code)
     if (isSemDebito && allowExtrato) {
       try {
         return await baixarExtratoDasDoPeriodo({
@@ -430,12 +487,31 @@ export const gerarSimplesDas = async (userId, payload = {}) => {
           periodo,
         })
       } catch (fallbackErr) {
+        await persistSemDebitoPeriod({
+          userId,
+          contribuinteCnpj,
+          periodo,
+          message: fallbackErr?.message
+            || 'Período declarado sem valor devido. Não há DAS a emitir ou baixar nesta competência.',
+        })
         throw badRequest(
           fallbackErr?.message
             || 'Período declarado sem valor devido. Não há DAS a emitir ou baixar nesta competência.',
           { code: 'PGDASD_SEM_DEBITO' },
         )
       }
+    }
+    if (isSemDebito) {
+      await persistSemDebitoPeriod({
+        userId,
+        contribuinteCnpj,
+        periodo,
+        message: msg || 'Período declarado sem valor devido.',
+      })
+      throw badRequest(
+        msg || 'Período declarado sem valor devido. Não há DAS a emitir nesta competência.',
+        { code: 'PGDASD_SEM_DEBITO' },
+      )
     }
     throw err
   }
