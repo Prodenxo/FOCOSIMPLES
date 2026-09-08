@@ -4,7 +4,8 @@
  * (SituacaoTributariaIbsCbs / ClassificacaoTributariaIbsCbs — doc API ibscbsNfse).
  */
 
-import { normalizeCodigoNbs } from './nfse-codigo-nbs.js';
+import { normalizeCodigoNbs, normalizeCodigoTributacaoMunicipal } from './nfse-codigo-nbs.js';
+import { requiresNfseObraForServicoCodigo } from './nfse-obra-defaults.js';
 
 /** NFS-e regular — emissão padrão de serviço. */
 export const NFSE_FIN_NFSE_REGULAR = 0;
@@ -278,16 +279,19 @@ export const requiresIssnetRtcNfseNacional = requiresIssnetRtcEmitSchema;
 
 /**
  * Tabela ISSNETONLINE30 — CodigoTributacaoMunicipio × alíquota ISS (doc TecnoSpeed).
+ * Só infere quando a alíquota bate exatamente com a tabela municipal; não força `001`
+ * (E0314 quando o município de incidência não administra esse complemento).
  * @param {unknown} aliquota
- * @returns {string}
+ * @returns {string|null}
  */
 export const resolveCodigoTributacaoIssnetFromAliquota = (aliquota) => {
   const parsed = Number(aliquota);
-  if (!Number.isFinite(parsed)) return '001';
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  if (Math.abs(parsed - 2) < 0.01) return '001';
   if (Math.abs(parsed - 2.5) < 0.01) return '004';
   if (Math.abs(parsed - 3) < 0.01) return '007';
   if (Math.abs(parsed - 5) < 0.01) return '006';
-  return '001';
+  return null;
 };
 
 /**
@@ -467,10 +471,14 @@ export const enrichNfseReformaCabecalhoInEmitPayload = (payload, options = {}) =
       ...servicoRest
     } = item;
     const iss = servicoRest.iss && typeof servicoRest.iss === 'object' ? servicoRest.iss : {};
-    const codigoTributacao = servicoRest.codigoTributacao
-      ?? resolveCodigoTributacaoIssnetFromAliquota(iss.aliquota);
+    const { codigoTributacao: codigoTributacaoInput, ...servicoBase } = servicoRest;
+    const explicitCodigoTributacao = normalizeCodigoTributacaoMunicipal(codigoTributacaoInput);
+    const inferFromAliquota = requiresNfseObraForServicoCodigo(servicoBase.codigo)
+      ? null
+      : resolveCodigoTributacaoIssnetFromAliquota(iss.aliquota);
+    const codigoTributacao = explicitCodigoTributacao ?? inferFromAliquota;
     return {
-      ...servicoRest,
+      ...servicoBase,
       ...(codigoTributacao ? { codigoTributacao } : {}),
       ibscbs,
     };

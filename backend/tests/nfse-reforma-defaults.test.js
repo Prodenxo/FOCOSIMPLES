@@ -61,9 +61,26 @@ test('buildMinimalServicoIbscbs: formato PlugNotas com valores.tributacao e indD
   assert.equal(ibscbs.destinatario.indicador, 0);
 });
 
-test('resolveCodigoTributacaoIssnetFromAliquota: 2% → 001', () => {
+test('resolveCodigoTributacaoIssnetFromAliquota: tabela ISSNET conhecida', () => {
   assert.equal(resolveCodigoTributacaoIssnetFromAliquota(2), '001');
   assert.equal(resolveCodigoTributacaoIssnetFromAliquota(5), '006');
+  assert.equal(resolveCodigoTributacaoIssnetFromAliquota(0), null);
+  assert.equal(resolveCodigoTributacaoIssnetFromAliquota(null), null);
+  assert.equal(resolveCodigoTributacaoIssnetFromAliquota(4), null);
+});
+
+test('enrichNfseReformaCabecalhoInEmitPayload: alíquota 0 não força codigoTributacao', () => {
+  const out = enrichNfseReformaCabecalhoInEmitPayload({
+    servico: [{ codigo: '070602', iss: { aliquota: 0 } }],
+  }, { simplesNacional: true, nfseNacional: false, codigoIbge: '3543402' });
+  assert.equal(out.servico[0].codigoTributacao, undefined);
+});
+
+test('enrichNfseReformaCabecalhoInEmitPayload: obra 07.xx não infere codigoTributacao pela alíquota', () => {
+  const out = enrichNfseReformaCabecalhoInEmitPayload({
+    servico: [{ codigo: '070602', iss: { aliquota: 2 } }],
+  }, { simplesNacional: true, nfseNacional: false, codigoIbge: '3543402' });
+  assert.equal(out.servico[0].codigoTributacao, undefined);
 });
 
 test('enrichNfseReformaCabecalhoInEmitPayload: ISSNETONLINE30 Ribeirão Preto', () => {

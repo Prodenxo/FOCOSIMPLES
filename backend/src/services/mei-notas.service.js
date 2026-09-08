@@ -66,6 +66,7 @@ import {
 } from './nfse-iss-defaults.js';
 import {
   attachNfseObraToServico,
+  enrichNfseCidadePrestacaoFromObra,
   requiresNfseObraForServicoCodigo,
   validateNfseObraPayload,
 } from './nfse-obra-defaults.js';
@@ -1544,6 +1545,7 @@ const emitNfseWithAutoRpsRecovery = async (
     }
 
     emitPayload.idIntegracao = buildMeiIdIntegracao(userId);
+    emitPayload = enrichNfseCidadePrestacaoFromObra(emitPayload);
     emitPayload = enrichNfseReformaCabecalhoInEmitPayload(emitPayload, {
       simplesNacional: prep.simplesNacional !== false,
       nfseNacional: prep.nfseNacional === true,
@@ -2369,6 +2371,7 @@ export const emitirNota = async (userId, input) => {
       }
     }
     if (documentType === DOCUMENT_TYPE_NFSE) {
+      emitPayload = enrichNfseCidadePrestacaoFromObra(emitPayload);
       emitPayload = enrichNfseReformaCabecalhoInEmitPayload(emitPayload, {
         simplesNacional: nfseEmitPrep?.empresaJson?.simplesNacional !== false,
         nfseNacional: nfseEmitPrep?.nfseNacional === true,

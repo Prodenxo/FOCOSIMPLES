@@ -179,3 +179,52 @@ export const attachNfseObraToServico = (servico, servicoInput, emitInput, tomado
   if (!obra) return servico;
   return { ...servico, obra };
 };
+
+/**
+ * Para serviços de obra (LC 116 07.xx), o ISS incide no município da execução.
+ * Preenche `cidadePrestacao` a partir de `servico[].obra.endereco` quando ausente.
+ *
+ * @param {Record<string, unknown>|null|undefined} payload
+ * @returns {Record<string, unknown>|null|undefined}
+ */
+export const enrichNfseCidadePrestacaoFromObra = (payload) => {
+  if (!payload || typeof payload !== 'object') return payload;
+
+  const existing = payload.cidadePrestacao;
+  if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
+    const codigoExistente = String(existing.codigo || existing.codigoCidade || '')
+      .replace(/\D/g, '')
+      .slice(0, 7);
+    if (codigoExistente.length === 7) return payload;
+  }
+
+  const servicos = Array.isArray(payload.servico)
+    ? payload.servico
+    : payload.servico && typeof payload.servico === 'object'
+      ? [payload.servico]
+      : [];
+
+  for (const servico of servicos) {
+    if (!servico || typeof servico !== 'object') continue;
+    const endereco = servico.obra?.endereco;
+    if (!endereco || typeof endereco !== 'object') continue;
+
+    const codigo = String(endereco.codigoCidade || '').replace(/\D/g, '').slice(0, 7);
+    if (codigo.length !== 7) continue;
+
+    const estadoRaw = endereco.estado ?? endereco.uf;
+    const estado = estadoRaw ? String(estadoRaw).trim().toUpperCase().slice(0, 2) : undefined;
+    const descricao = normalizeOptionalText(endereco.descricaoCidade, 60);
+
+    return {
+      ...payload,
+      cidadePrestacao: {
+        codigo,
+        ...(descricao ? { descricao } : {}),
+        ...(estado ? { estado } : {}),
+      },
+    };
+  }
+
+  return payload;
+};

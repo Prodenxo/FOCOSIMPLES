@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   attachNfseObraToServico,
   buildNfseObraPayload,
+  enrichNfseCidadePrestacaoFromObra,
   requiresNfseObraForServicoCodigo,
   validateNfseObraPayload,
 } from '../src/services/nfse-obra-defaults.js';
@@ -75,4 +76,22 @@ test('attachNfseObraToServico — ignora serviços fora da lista', () => {
   const servico = { codigo: '140101', discriminacao: 'Teste' };
   const next = attachNfseObraToServico(servico, servico, {}, null);
   assert.equal(next.obra, undefined);
+});
+
+test('enrichNfseCidadePrestacaoFromObra — preenche município da execução', () => {
+  const out = enrichNfseCidadePrestacaoFromObra({
+    servico: [{
+      codigo: '070602',
+      obra: {
+        endereco: {
+          codigoCidade: '3550308',
+          descricaoCidade: 'São Paulo',
+          estado: 'SP',
+        },
+      },
+    }],
+  });
+  assert.equal(out.cidadePrestacao?.codigo, '3550308');
+  assert.equal(out.cidadePrestacao?.descricao, 'São Paulo');
+  assert.equal(out.cidadePrestacao?.estado, 'SP');
 });
