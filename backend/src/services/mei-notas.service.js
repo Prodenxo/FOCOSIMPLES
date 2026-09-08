@@ -32,7 +32,6 @@ import {
   resolveNfseRpsLocalMaxFromHistory,
 } from './plugnotas/plugnotas-empresa-rps-heal.js';
 import {
-  enrichNfseReformaCabecalhoInEmitPayload,
   readCodigoIbgeFromEmpresa,
   requiresIssnetRtcEmitSchema,
   validateNfseCatalogProdutoMetadata,
@@ -62,7 +61,6 @@ import {
   resolveRegimeApuracaoTributaria,
 } from './nfse-codigo-nbs.js';
 import {
-  enrichNfseIssInEmitPayload,
   readNfseNacionalFromEmpresa,
   resolveNfseIssForServico,
 } from './nfse-iss-defaults.js';
@@ -73,6 +71,8 @@ import {
   resolveNfseObraEndereco,
   validateNfseObraEndereco,
 } from './nfse-obra-defaults.js';
+import { assembleNfsePlugnotasEmitPayload } from './nfse-emit-payload-assembler.js';
+import { redactPayload } from './plugnotas/plugnotas-emit-400-log.js';
 import {
   extractNfeItemQuantidade,
   extractNfeItemValorUnitario,
@@ -653,6 +653,52 @@ const buildPayloadFromInput = (input, userId) => {
     prestadorDoc,
     tomadorDoc,
   };
+};
+
+/** Log do payload NFS-e imediatamente antes do POST PlugNotas (`.env`: NFSE_EMIT_DEBUG_PAYLOAD=1). */
+const shouldLogNfseEmitPayload = () => {
+  const flag = String(process.env.NFSE_EMIT_DEBUG_PAYLOAD || '').trim().toLowerCase();
+  return flag === '1' || flag === 'true' || flag === 'yes';
+};
+
+const logNfseEmitPayloadIfDebug = (emitPayload, context = {}) => {
+  if (!shouldLogNfseEmitPayload()) return;
+  console.info('[nfse-emit-debug] payload final (redacted):', JSON.stringify({
+    ...context,
+    payload: redactPayload(emitPayload),
+  }, null, 2));
+};
+
+/**
+ * Monta o JSON que seria enviado ao PlugNotas (sem reservar RPS / sem POST).
+ * Útil para scripts CLI e diagnóstico de E160/E0370.
+ *
+ * @param {Record<string, unknown>} input
+ * @param {string} [userId]
+ * @param {{ codigoIbge?: string, nfseNacional?: boolean, simplesNacional?: boolean }} [prepOverrides]
+ */
+export const buildNfseEmitPayloadPreview = (input, userId = 'preview', prepOverrides = {}) => {
+  const { payload } = buildPayloadFromInput(input, userId);
+  const servicosInput = Array.isArray(input?.servicos)
+    ? input.servicos
+    : (input?.servico ? [input.servico] : []);
+  const codigoIbge = String(
+    prepOverrides.codigoIbge
+    ?? readCodigoIbgeFromEmpresa({ endereco: input?.prestador?.endereco ?? input?.prestadorEndereco })
+    ?? input?.prestadorEndereco?.codigoCidade
+    ?? '',
+  ).replace(/\D/g, '').slice(0, 7);
+  const issnetOnline30 = requiresIssnetRtcEmitSchema(codigoIbge);
+  return assembleNfsePlugnotasEmitPayload(payload, {
+    obraContext: {
+      servicosInput,
+      emitInput: input,
+    },
+    simplesNacional: prepOverrides.simplesNacional !== false,
+    nfseNacional: prepOverrides.nfseNacional === true,
+    codigoIbge,
+    issnetOnline30,
+  });
 };
 
 const computeNfeItensTotal = (itens) => {
@@ -1587,12 +1633,18 @@ const emitNfseWithAutoRpsRecovery = async (
     }
 
     emitPayload.idIntegracao = buildMeiIdIntegracao(userId);
-    emitPayload = enrichNfseCidadePrestacaoFromObra(emitPayload, prep.obraContext ?? {});
-    emitPayload = enrichNfseObraOnEmitPayload(emitPayload, prep.obraContext ?? {});
-    emitPayload = enrichNfseReformaCabecalhoInEmitPayload(emitPayload, {
+    emitPayload = assembleNfsePlugnotasEmitPayload(emitPayload, {
+      obraContext: prep.obraContext ?? {},
       simplesNacional: prep.simplesNacional !== false,
       nfseNacional: prep.nfseNacional === true,
       codigoIbge: prep.codigoIbge,
+      issnetOnline30: prep.issnetOnline30 === true,
+      applyIss: false,
+    });
+    logNfseEmitPayloadIfDebug(emitPayload, {
+      attempt: attempt + 1,
+      cnpjPrestador: cnpjPrestadorNfse,
+      idIntegracao: emitPayload.idIntegracao,
     });
     response = await adapter.emitir(emitPayload);
 
@@ -2427,20 +2479,15 @@ export const emitirNota = async (userId, input) => {
             emitInput: input,
           },
         };
-        emitPayload = enrichNfseIssInEmitPayload(emitPayload, {
-          nfseNacional: nfseNacionalEmit,
-          simplesNacional: empresaJsonCache?.simplesNacional !== false,
-          issnetOnline30,
-        });
       }
     }
     if (documentType === DOCUMENT_TYPE_NFSE) {
-      emitPayload = enrichNfseCidadePrestacaoFromObra(emitPayload, nfseEmitPrep?.obraContext ?? {});
-      emitPayload = enrichNfseObraOnEmitPayload(emitPayload, nfseEmitPrep?.obraContext ?? {});
-      emitPayload = enrichNfseReformaCabecalhoInEmitPayload(emitPayload, {
+      emitPayload = assembleNfsePlugnotasEmitPayload(emitPayload, {
+        obraContext: nfseEmitPrep?.obraContext ?? {},
         simplesNacional: nfseEmitPrep?.empresaJson?.simplesNacional !== false,
         nfseNacional: nfseEmitPrep?.nfseNacional === true,
         codigoIbge: nfseEmitPrep?.codigoIbge,
+        issnetOnline30: nfseEmitPrep?.issnetOnline30 === true,
       });
     }
     if (documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE) {

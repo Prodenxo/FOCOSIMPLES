@@ -99,6 +99,20 @@ test('buildCidadePrestacaoFromObraEndereco — monta raiz com endereço completo
   assert.equal(cidade?.estado, 'SP');
   assert.equal(cidade?.cep, '01310100');
   assert.equal(cidade?.logradouro, 'Av Paulista');
+  assert.equal(cidade?.tipoLogradouro, 'Rua');
+  assert.equal(cidade?.tipoBairro, 'Bairro');
+});
+
+test('buildCidadePrestacaoFromObraEndereco — preserva tipoLogradouro informado', () => {
+  const cidade = buildCidadePrestacaoFromObraEndereco({
+    codigoCidade: '3543402',
+    logradouro: 'Rua A',
+    bairro: 'Centro',
+    tipoLogradouro: 'Avenida',
+    tipoBairro: 'Jardim',
+  });
+  assert.equal(cidade?.tipoLogradouro, 'Avenida');
+  assert.equal(cidade?.tipoBairro, 'Jardim');
 });
 
 test('attachNfseObraToServico — ignora serviços fora da lista', () => {

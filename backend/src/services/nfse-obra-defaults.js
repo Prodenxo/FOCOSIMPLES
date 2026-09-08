@@ -4,8 +4,14 @@
  * @see TecnoSpeed plugnotas-php Nfse/Servico/Obra.php
  */
 
-/** CNO ausente — 12 dígitos (formato XSD); evita E160 com `codigo: "0"`. */
-export const NFSE_OBRA_CODIGO_SEM_CADASTRO = '000000000000';
+/**
+ * CNO ausente — emissores ISSNET/nacional aceitam "000" para obra sem cadastro (doc Proenza/Nibo).
+ * Evita E160 com `000000000000` (12 zeros) ou `"0"`.
+ */
+export const NFSE_OBRA_CODIGO_SEM_CADASTRO = '000';
+
+const DEFAULT_TIPO_LOGRADOURO = 'Rua';
+const DEFAULT_TIPO_BAIRRO = 'Bairro';
 
 /** Subitens LC 116 que exigem informações de obra (E0370). */
 export const NFSE_OBRA_REQUIRED_LC116_KEYS = Object.freeze(new Set([
@@ -114,14 +120,28 @@ export const resolveNfseObraEndereco = (servicoInput, emitInput, tomadorEndereco
 };
 
 /**
+ * @param {unknown} value
+ * @returns {string|null}
+ */
+const normalizeCnoOrCodigoObra = (value) => {
+  const trimmed = normalizeOptionalText(value, 30);
+  if (!trimmed) return null;
+  const digits = trimmed.replace(/\D/g, '');
+  if (!digits) return trimmed;
+  if (digits.length === 12) return digits;
+  if (digits.length <= 3) return digits.padStart(3, '0');
+  return digits.slice(0, 12);
+};
+
+/**
  * @param {Record<string, unknown>|null|undefined} obraSource
  * @returns {string}
  */
 export const resolveNfseObraCodigoForEmit = (obraSource = {}) => {
-  const codigoObra = normalizeOptionalText(obraSource.codigoObra ?? obraSource.codigo, 30);
-  const cno = normalizeOptionalText(obraSource.cno, 30);
+  const cno = normalizeCnoOrCodigoObra(obraSource.cno);
+  const codigoObra = normalizeCnoOrCodigoObra(obraSource.codigoObra ?? obraSource.codigo);
   const cei = normalizeOptionalText(obraSource.cei, 30);
-  return codigoObra || cno || cei || NFSE_OBRA_CODIGO_SEM_CADASTRO;
+  return cno || codigoObra || cei || NFSE_OBRA_CODIGO_SEM_CADASTRO;
 };
 
 /**
@@ -228,6 +248,13 @@ export const buildCidadePrestacaoFromObraEndereco = (endereco) => {
   const complemento = normalizeOptionalText(endereco.complemento, 156);
   const tipoLogradouro = normalizeOptionalText(endereco.tipoLogradouro, 60);
 
+  const withTipoLogradouro = logradouro && !tipoLogradouro
+    ? DEFAULT_TIPO_LOGRADOURO
+    : tipoLogradouro;
+  const withTipoBairro = bairro && !normalizeOptionalText(endereco.tipoBairro, 60)
+    ? DEFAULT_TIPO_BAIRRO
+    : normalizeOptionalText(endereco.tipoBairro, 60);
+
   return {
     codigo,
     ...(descricao ? { descricao } : {}),
@@ -237,7 +264,8 @@ export const buildCidadePrestacaoFromObraEndereco = (endereco) => {
     ...(numero ? { numero } : {}),
     ...(bairro ? { bairro } : {}),
     ...(complemento ? { complemento } : {}),
-    ...(tipoLogradouro ? { tipoLogradouro } : {}),
+    ...(withTipoLogradouro ? { tipoLogradouro: withTipoLogradouro } : {}),
+    ...(withTipoBairro ? { tipoBairro: withTipoBairro } : {}),
   };
 };
 

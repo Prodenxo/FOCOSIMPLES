@@ -5324,13 +5324,25 @@ function MeiScreenContent() {
                       )}
                       <MeiFormField
                         label="CNO (opcional)"
-                        hint="Cadastro Nacional de Obras — se não tiver, deixe em branco e confirme com o contador."
+                        hint="Sem CNO? Deixe em branco — o sistema envia 000 (aceito pelo padrão nacional). Se tiver, informe os 12 dígitos."
                         value={nfseForm.servico?.obra?.cno ?? ''}
                         onChangeText={(t) => setNfseForm((f) => ({
                           ...f,
                           servico: {
                             ...f.servico,
                             obra: { ...(f.servico?.obra ?? getDefaultNfseObraForm()), cno: t },
+                          },
+                        }))}
+                      />
+                      <MeiFormField
+                        label="ART (opcional)"
+                        hint="Anotação de Responsabilidade Técnica — use se o contador orientar."
+                        value={nfseForm.servico?.obra?.art ?? ''}
+                        onChangeText={(t) => setNfseForm((f) => ({
+                          ...f,
+                          servico: {
+                            ...f.servico,
+                            obra: { ...(f.servico?.obra ?? getDefaultNfseObraForm()), art: t },
                           },
                         }))}
                       />
