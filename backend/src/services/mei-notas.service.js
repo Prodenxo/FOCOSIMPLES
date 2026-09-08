@@ -1518,7 +1518,9 @@ const emitNfseWithAutoRpsRecovery = async (
     }
 
     emitPayload.idIntegracao = buildMeiIdIntegracao(userId);
-    emitPayload = enrichNfseReformaCabecalhoInEmitPayload(emitPayload);
+    emitPayload = enrichNfseReformaCabecalhoInEmitPayload(emitPayload, {
+      simplesNacional: prep.simplesNacional !== false,
+    });
     response = await adapter.emitir(emitPayload);
 
     const integracaoPoll = extractIntegracaoId(response) || emitPayload.idIntegracao;
@@ -2321,6 +2323,7 @@ export const emitirNota = async (userId, input) => {
         ]);
         nfseEmitPrep = {
           empresaJson: empresaJsonCache,
+          simplesNacional: empresaJsonCache?.simplesNacional !== false,
           initialLocalMax: Math.max(initialLocalMax ?? 0, authoritativeMax),
           periodoMax: authoritativeMax,
         };
@@ -2331,7 +2334,9 @@ export const emitirNota = async (userId, input) => {
       }
     }
     if (documentType === DOCUMENT_TYPE_NFSE) {
-      emitPayload = enrichNfseReformaCabecalhoInEmitPayload(emitPayload);
+      emitPayload = enrichNfseReformaCabecalhoInEmitPayload(emitPayload, {
+        simplesNacional: nfseEmitPrep?.empresaJson?.simplesNacional !== false,
+      });
     }
     if (documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE) {
       cnpjEmitenteNfe = prestadorDoc

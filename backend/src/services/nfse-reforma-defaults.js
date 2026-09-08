@@ -163,9 +163,12 @@ const resolveOperacaoPessoalValue = (value) => {
   return Number.isFinite(parsed) ? parsed : NFSE_IND_FINAL_NAO;
 };
 
+/** Regime de apuração IBS/CBS no SN (NT 009 / regApIBSCBSSN): 1 = pelo Simples (DAS). */
+export const NFSE_REG_AP_IBSCBS_SN_SIMPLES = 1;
+
 /**
  * @param {Record<string, unknown>|null|undefined} ibscbsInput
- * @param {{ finNFSe?: number, operacaoPessoal?: number, cIndOp?: string, servico?: Record<string, unknown> }} options
+ * @param {{ finNFSe?: number, operacaoPessoal?: number, cIndOp?: string, servico?: Record<string, unknown>, simplesNacional?: boolean }} options
  * @returns {Record<string, unknown>}
  */
 export const buildMinimalServicoIbscbs = (ibscbsInput = {}, options = {}) => {
@@ -194,14 +197,24 @@ export const buildMinimalServicoIbscbs = (ibscbsInput = {}, options = {}) => {
     ...servico,
     ibscbs: source,
     situacaoTributariaIbsCbs: source.situacaoTributariaIbsCbs ?? options.situacaoTributariaIbsCbs,
-    cstIbsCbs: source.cst ?? options.situacaoTributariaIbsCbs,
+    cstIbsCbs: source.cstIbsCbs ?? source.cst ?? options.situacaoTributariaIbsCbs,
     classificacaoTributariaIbsCbs,
     cClassTrib: classificacaoTributariaIbsCbs,
   });
 
+  const normalizedSourceCst = normalizeSituacaoTributariaIbsCbs(
+    source.cst ?? source.cstIbsCbs ?? source.situacaoTributariaIbsCbs,
+  );
+  const cstFinal = normalizedSourceCst ?? situacaoTributariaIbsCbs;
+
   const destinatarioSource = source.destinatario && typeof source.destinatario === 'object' && !Array.isArray(source.destinatario)
     ? source.destinatario
     : {};
+
+  const simplesNacional = options.simplesNacional !== false;
+  const regApIBSCBSSN = Number.isFinite(Number(source.regApIBSCBSSN))
+    ? Number(source.regApIBSCBSSN)
+    : (simplesNacional ? NFSE_REG_AP_IBSCBS_SN_SIMPLES : undefined);
 
   return {
     ...source,
@@ -211,11 +224,13 @@ export const buildMinimalServicoIbscbs = (ibscbsInput = {}, options = {}) => {
     indFinal: source.indFinal ?? operacaoPessoal,
     cIndOp,
     codigoOperacao: source.codigoOperacao ?? cIndOp,
-    situacaoTributariaIbsCbs,
-    cst: source.cst ?? situacaoTributariaIbsCbs,
+    situacaoTributariaIbsCbs: cstFinal,
+    cst: cstFinal,
+    cstIbsCbs: cstFinal,
     classificacaoTributariaIbsCbs,
     cClassTrib: source.cClassTrib ?? classificacaoTributariaIbsCbs,
     classCode: source.classCode ?? classificacaoTributariaIbsCbs,
+    ...(regApIBSCBSSN ? { regApIBSCBSSN, regApTribSN: regApIBSCBSSN } : {}),
     indDest: source.indDest ?? destinatarioSource.indicador ?? 0,
     destinatario: {
       indicador: destinatarioSource.indicador ?? source.indDest ?? 0,
@@ -272,10 +287,14 @@ export const validateNfseCatalogProdutoMetadata = (metadata = {}) => {
  * Preenche campos RTC mínimos no cabeçalho e em cada servico.ibscbs antes do POST PlugNotas.
  *
  * @param {Record<string, unknown>|null|undefined} payload
+ * @param {{ simplesNacional?: boolean }} [options]
  * @returns {Record<string, unknown>|null|undefined}
  */
-export const enrichNfseReformaCabecalhoInEmitPayload = (payload) => {
+export const enrichNfseReformaCabecalhoInEmitPayload = (payload, options = {}) => {
   if (!payload || typeof payload !== 'object') return payload;
+
+  const simplesNacional = options.simplesNacional !== false
+    && payload.simplesNacional !== false;
 
   const finNFSe = resolveFinNfseValue(payload);
   const operacaoPessoal = resolveOperacaoPessoalValue(
@@ -293,13 +312,18 @@ export const enrichNfseReformaCabecalhoInEmitPayload = (payload) => {
     const itemIbscbs = item.ibscbs && typeof item.ibscbs === 'object' && !Array.isArray(item.ibscbs)
       ? item.ibscbs
       : {};
+    const ibscbs = buildMinimalServicoIbscbs(itemIbscbs, {
+      finNFSe,
+      operacaoPessoal,
+      servico: item,
+      simplesNacional,
+    });
     return {
       ...item,
-      ibscbs: buildMinimalServicoIbscbs(itemIbscbs, {
-        finNFSe,
-        operacaoPessoal,
-        servico: item,
-      }),
+      situacaoTributariaIbsCbs: ibscbs.situacaoTributariaIbsCbs,
+      classificacaoTributariaIbsCbs: ibscbs.classificacaoTributariaIbsCbs,
+      cClassTrib: ibscbs.cClassTrib,
+      ibscbs,
     };
   });
 
@@ -316,6 +340,7 @@ export const enrichNfseReformaCabecalhoInEmitPayload = (payload) => {
       operacaoPessoal,
       cIndOp: primaryCIndOp,
       servico: servicoEnriched[0] ?? {},
+      simplesNacional,
     },
   );
 
