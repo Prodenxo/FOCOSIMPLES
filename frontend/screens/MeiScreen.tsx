@@ -5324,7 +5324,7 @@ function MeiScreenContent() {
                       )}
                       <MeiFormField
                         label="CNO (opcional)"
-                        hint="Sem CNO? Deixe em branco — o sistema envia 000 (aceito pelo padrão nacional). Se tiver, informe os 12 dígitos."
+                        hint="Sem CNO? Deixe em branco — o endereço da obra é enviado no lugar. Se tiver CNO, informe os 12 dígitos."
                         value={nfseForm.servico?.obra?.cno ?? ''}
                         onChangeText={(t) => setNfseForm((f) => ({
                           ...f,

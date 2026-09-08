@@ -37,7 +37,10 @@ export const assembleNfsePlugnotasEmitPayload = (basePayload, prep = {}) => {
     ...(prep.obraContext ?? {}),
     issnetOnline30: prep.issnetOnline30 === true,
   });
-  emitPayload = enrichNfseObraOnEmitPayload(emitPayload, prep.obraContext ?? {});
+  emitPayload = enrichNfseObraOnEmitPayload(emitPayload, {
+    ...(prep.obraContext ?? {}),
+    issnetOnline30: prep.issnetOnline30 === true,
+  });
   emitPayload = enrichNfseReformaCabecalhoInEmitPayload(emitPayload, {
     simplesNacional: prep.simplesNacional !== false,
     nfseNacional: prep.nfseNacional === true,

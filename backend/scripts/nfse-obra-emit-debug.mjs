@@ -108,7 +108,7 @@ Modos:
   diff      — mostra só campos críticos (obra, cidadePrestacao, ibscbs, cabeçalho RTC)
 
 Flags:
-  --cno=000              CNO da obra (vazio = placeholder "000")
+  --cno=123456789012     CNO real (12 dígitos); omitir = sem codigo no ISSNET RTC
   --cei=                 CEI opcional
   --art=                 ART opcional
   --valor=2              Valor do serviço
@@ -157,7 +157,7 @@ const pickCritical = (full) => {
 console.log('Modo:', mode);
 console.log('Prestador:', prestadorCnpj, '| Tomador:', tomadorCnpj);
 console.log('Serviço:', codigoServico, '| IBGE:', codigoIbge);
-console.log('Obra CNO/CEI/ART:', obraCno || '(auto 000)', obraCei || '-', obraArt || '-');
+console.log('Obra CNO/CEI/ART:', obraCno || '(sem CNO — endereço da obra)', obraCei || '-', obraArt || '-');
 console.log('---');
 
 if (mode === 'diff') {
@@ -176,9 +176,8 @@ if (mode === 'diff') {
   }
   console.warn('AVISO: emissão real na PlugNotas.');
   console.log('Payload crítico:', JSON.stringify(pickCritical(payload), null, 2));
-  const body = [{ ...payload, idIntegracao: `obra-debug-${Date.now()}` }];
   try {
-    const response = await emitirNfse(body);
+    const response = await emitirNfse({ ...payload, idIntegracao: `obra-debug-${Date.now()}` });
     console.log('\nResposta PlugNotas:');
     console.log(JSON.stringify(response, null, 2));
   } catch (err) {

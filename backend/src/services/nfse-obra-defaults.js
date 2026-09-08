@@ -1,6 +1,7 @@
 /**
  * NFS-e Nacional / ISSNET: grupo `obra` obrigatório (rejeição E0370) para itens LC 116 de construção civil.
- * PlugNotas JSON: `servico[].obra` aceita apenas art, codigo e cei — endereço vai em `cidadePrestacao` (raiz).
+ * ISSNET RTC007 / DPS 1.01: endereço plano em `servico[].obra` (grupo `end` no XSD); não enviar `codigo` placeholder (E160 — cObra removido do schema).
+ * Demais municípios: PlugNotas JSON aceita art, codigo e cei em `servico[].obra`.
  * @see TecnoSpeed plugnotas-php Nfse/Servico/Obra.php
  */
 
@@ -134,33 +135,82 @@ const normalizeCnoOrCodigoObra = (value) => {
 };
 
 /**
- * @param {Record<string, unknown>|null|undefined} obraSource
- * @returns {string}
+ * Endereço da obra no formato plano aceito pelo DPS 1.01 / ISSNET RTC (grupo `end` obrigatório).
+ * @param {Record<string, unknown>|null|undefined} enderecoInput
+ * @returns {Record<string, string>|null}
  */
-export const resolveNfseObraCodigoForEmit = (obraSource = {}) => {
-  const cno = normalizeCnoOrCodigoObra(obraSource.cno);
-  const codigoObra = normalizeCnoOrCodigoObra(obraSource.codigoObra ?? obraSource.codigo);
-  const cei = normalizeOptionalText(obraSource.cei, 30);
-  return cno || codigoObra || cei || NFSE_OBRA_CODIGO_SEM_CADASTRO;
+export const buildNfseObraEnderecoFlatForIssnetRtc = (enderecoInput) => {
+  const built = buildNfseObraEndereco(enderecoInput);
+  if (!built?.cep || !built?.logradouro || !built?.numero || !built?.bairro) return null;
+  return {
+    cep: built.cep,
+    logradouro: built.logradouro,
+    numero: built.numero,
+    bairro: built.bairro,
+    ...(built.complemento ? { complemento: built.complemento } : {}),
+    ...(built.codigoCidade ? { codigoCidade: built.codigoCidade } : {}),
+    ...(built.estado ? { estado: built.estado } : {}),
+  };
 };
 
 /**
- * Campos aceitos pela API PlugNotas em `servico[].obra` (sem endereço — evita E160 no XSD).
- * Sempre inclui `codigo` para o grupo não ser omitido pelo prune / PlugNotas (E0370).
+ * @param {Record<string, unknown>|null|undefined} obraSource
+ * @returns {string|null}
+ */
+export const resolveNfseObraCodigoExplicit = (obraSource = {}) => {
+  const cno = normalizeCnoOrCodigoObra(obraSource.cno);
+  const codigoObra = normalizeCnoOrCodigoObra(obraSource.codigoObra ?? obraSource.codigo);
+  const cei = normalizeOptionalText(obraSource.cei, 30);
+  const explicit = cno || codigoObra || cei;
+  if (!explicit || explicit === NFSE_OBRA_CODIGO_SEM_CADASTRO || explicit === '000000000000') {
+    return null;
+  }
+  return explicit;
+};
+
+/**
+ * @param {Record<string, unknown>|null|undefined} obraSource
+ * @returns {string}
+ */
+export const resolveNfseObraCodigoForEmit = (obraSource = {}) => (
+  resolveNfseObraCodigoExplicit(obraSource) || NFSE_OBRA_CODIGO_SEM_CADASTRO
+);
+
+/**
+ * Monta `servico[].obra` conforme o emissor.
  *
  * @param {Record<string, unknown>|null|undefined} servicoInput
  * @param {Record<string, unknown>|null|undefined} emitInput
+ * @param {{
+ *   issnetOnline30?: boolean,
+ *   obraEndereco?: Record<string, string>|null,
+ *   tomadorEndereco?: Record<string, unknown>|null,
+ * }} [options]
  * @returns {Record<string, string>|null}
  */
-export const buildNfseObraPayload = (servicoInput, emitInput) => {
+export const buildNfseObraPayload = (servicoInput, emitInput, options = {}) => {
   const codigo = servicoInput?.codigo ?? servicoInput?.codigoServico;
   if (!requiresNfseObraForServicoCodigo(codigo)) return null;
 
   const obraSource = readObraSource(servicoInput) || readObraSource(emitInput) || {};
-  const cei = normalizeOptionalText(obraSource.cei, 30);
   const art = normalizeOptionalText(obraSource.art, 30);
-  const codigoCadastro = resolveNfseObraCodigoForEmit(obraSource);
+  const cei = normalizeOptionalText(obraSource.cei, 30);
+  const explicitCodigo = resolveNfseObraCodigoExplicit(obraSource);
 
+  if (options.issnetOnline30) {
+    const endereco = options.obraEndereco
+      ?? resolveNfseObraEndereco(servicoInput, emitInput, options.tomadorEndereco);
+    const endFlat = buildNfseObraEnderecoFlatForIssnetRtc(endereco);
+    if (!endFlat && !art && !cei && !explicitCodigo) return null;
+    return {
+      ...(endFlat || {}),
+      ...(art ? { art } : {}),
+      ...(cei ? { cei } : {}),
+      ...(explicitCodigo ? { codigo: explicitCodigo } : {}),
+    };
+  }
+
+  const codigoCadastro = explicitCodigo || NFSE_OBRA_CODIGO_SEM_CADASTRO;
   return {
     codigo: codigoCadastro,
     ...(art ? { art } : {}),
@@ -308,9 +358,9 @@ export const resolveCidadePrestacaoForObraPayload = (
  * @param {Record<string, unknown>|null|undefined} emitInput
  * @returns {Record<string, unknown>}
  */
-export const attachNfseObraToServico = (servico, servicoInput, emitInput) => {
+export const attachNfseObraToServico = (servico, servicoInput, emitInput, options = {}) => {
   if (!requiresNfseObraForServicoCodigo(servico?.codigo)) return servico;
-  const obra = buildNfseObraPayload(servicoInput, emitInput);
+  const obra = buildNfseObraPayload(servicoInput, emitInput, options);
   if (!obra) return servico;
   return { ...servico, obra };
 };
@@ -337,13 +387,19 @@ export const enrichNfseObraOnEmitPayload = (payload, options = {}) => {
 
   if (!servicos.length) return payload;
 
+  const issnetOnline30 = options.issnetOnline30 === true;
+
   const enriched = servicos.map((servico, index) => {
     if (!servico || typeof servico !== 'object') return servico;
     const servicoInput = servicosInput[index] || {};
     const inputRoot = emitInput || servicoInput;
     const endereco = resolveNfseObraEndereco(servicoInput, inputRoot, tomadorEndereco);
     const localIncidencia = buildServicoLocalIncidenciaFromEndereco(endereco);
-    const withObra = attachNfseObraToServico(servico, servicoInput, inputRoot);
+    const withObra = attachNfseObraToServico(servico, servicoInput, inputRoot, {
+      issnetOnline30,
+      obraEndereco: endereco,
+      tomadorEndereco,
+    });
     if (!localIncidencia) return withObra;
     return {
       ...withObra,
