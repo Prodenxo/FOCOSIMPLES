@@ -63,11 +63,16 @@ export const applyNfseNationalContractPolicy = (payload) => {
     return contractInput;
   }
 
+  const nacionalExplicitlyOff = nextConfig[PLUGNOTAS_NFSE_CONFIG_NACIONAL_KEY] === false;
   const configWithDefaults = {
     producao: true,
     ...nextConfig,
-    [PLUGNOTAS_NFSE_CONFIG_NACIONAL_KEY]: PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON,
-    [PLUGNOTAS_NFSE_CONFIG_CONSULTA_NACIONAL_KEY]: PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON
+    [PLUGNOTAS_NFSE_CONFIG_NACIONAL_KEY]: nacionalExplicitlyOff
+      ? false
+      : (nextConfig[PLUGNOTAS_NFSE_CONFIG_NACIONAL_KEY] ?? PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON),
+    [PLUGNOTAS_NFSE_CONFIG_CONSULTA_NACIONAL_KEY]: nacionalExplicitlyOff
+      ? false
+      : (nextConfig[PLUGNOTAS_NFSE_CONFIG_CONSULTA_NACIONAL_KEY] ?? PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON),
   };
 
   next.config = configWithDefaults;

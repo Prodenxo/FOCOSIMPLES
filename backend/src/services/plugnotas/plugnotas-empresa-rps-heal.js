@@ -436,10 +436,17 @@ const buildMinimalNfseConfigForRpsPatch = (existingConfig, configRps) => {
   const base = existingConfig && typeof existingConfig === 'object' && !Array.isArray(existingConfig)
     ? existingConfig
     : {};
-  return {
+  const next = {
     producao: base.producao !== false,
     rps: configRps,
   };
+  if (Object.prototype.hasOwnProperty.call(base, 'nfseNacional')) {
+    next.nfseNacional = base.nfseNacional;
+  }
+  if (Object.prototype.hasOwnProperty.call(base, 'consultaNfseNacional')) {
+    next.consultaNfseNacional = base.consultaNfseNacional;
+  }
+  return next;
 };
 
 /**
@@ -907,6 +914,10 @@ export async function ensureEmpresaPlugnotasRpsForNfseEmit(cnpjInput, empresaJso
 
   const empresa = unwrapPlugnotasEmpresaRecord(empresaJson);
   const nfseAtivo = empresa?.nfse?.ativo !== false;
+  const existingConfig = empresa?.nfse?.config && typeof empresa.nfse.config === 'object'
+    ? empresa.nfse.config
+    : {};
+  const nacionalOn = existingConfig.nfseNacional !== false;
 
   await atualizarEmpresaPlugNotas({
     cpfCnpj: cnpj,
@@ -916,8 +927,8 @@ export async function ensureEmpresaPlugnotasRpsForNfseEmit(cnpjInput, empresaJso
       tipoContrato: 0,
       config: {
         producao: true,
-        nfseNacional: true,
-        consultaNfseNacional: true,
+        nfseNacional: nacionalOn,
+        consultaNfseNacional: nacionalOn,
         rps: { ...EMPRESA_PLUGNOTAS_NFSE_CONFIG_RPS_CANONICAL }
       }
     }
