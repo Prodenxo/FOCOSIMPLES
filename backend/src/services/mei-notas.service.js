@@ -70,7 +70,8 @@ import {
   attachNfseObraToServico,
   enrichNfseCidadePrestacaoFromObra,
   requiresNfseObraForServicoCodigo,
-  validateNfseObraPayload,
+  resolveNfseObraEndereco,
+  validateNfseObraEndereco,
 } from './nfse-obra-defaults.js';
 import {
   extractNfeItemQuantidade,
@@ -597,12 +598,15 @@ const buildPayloadFromInput = (input, userId) => {
   const servicosList = servicosInputList
     .map((servicoInput) => buildServicoFromInput(servicoInput))
     .filter(Boolean)
-    .map((servicoBuilt, index) => attachNfseObraToServico(
-      servicoBuilt,
-      servicosInputList[index],
-      input,
-      tomadorEndereco,
-    ));
+    .map((servicoBuilt, index) => {
+      const servicoInput = servicosInputList[index];
+      if (requiresNfseObraForServicoCodigo(servicoBuilt?.codigo)) {
+        const obraEndereco = resolveNfseObraEndereco(servicoInput, input, tomadorEndereco);
+        const obraEnderecoError = validateNfseObraEndereco(obraEndereco);
+        if (obraEnderecoError) throw badRequest(obraEnderecoError);
+      }
+      return attachNfseObraToServico(servicoBuilt, servicoInput, input);
+    });
 
   const prestadorBase = { ...(input?.prestador || {}) };
   delete prestadorBase.inscricaoMunicipal;
@@ -634,7 +638,14 @@ const buildPayloadFromInput = (input, userId) => {
     servico: servicosList
   });
 
-  return { payload, prestadorDoc, tomadorDoc };
+  return {
+    payload: enrichNfseCidadePrestacaoFromObra(payload, {
+      servicosInput: servicosInputList,
+      tomadorEndereco,
+    }),
+    prestadorDoc,
+    tomadorDoc,
+  };
 };
 
 const computeNfeItensTotal = (itens) => {
@@ -811,8 +822,13 @@ const validatePayload = (payload) => {
 
   for (const item of servicos) {
     if (!requiresNfseObraForServicoCodigo(item?.codigo)) continue;
-    const obraError = validateNfseObraPayload(item?.obra);
-    if (obraError) throw badRequest(obraError);
+    if (!item?.obra || typeof item.obra !== 'object') {
+      throw badRequest('Informe os dados da obra (local onde o serviço foi executado).');
+    }
+    const codigoCidade = String(payload?.cidadePrestacao?.codigo || '').replace(/\D/g, '').slice(0, 7);
+    if (codigoCidade.length !== 7) {
+      throw badRequest('Informe o município (código IBGE) do local da obra.');
+    }
   }
 
   assertNfseServicoCodigosMinLength(payload);

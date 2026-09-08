@@ -1,6 +1,7 @@
 /**
  * NFS-e Nacional / ISSNET: grupo `obra` obrigatório (rejeição E0370) para itens LC 116 de construção civil.
- * @see NT NFS-e Nacional — serv/obra
+ * PlugNotas JSON: `servico[].obra` aceita apenas art, codigo e cei — endereço vai em `cidadePrestacao` (raiz).
+ * @see TecnoSpeed plugnotas-php Nfse/Servico/Obra.php
  */
 
 /** Subitens LC 116 que exigem informações de obra (E0370). */
@@ -60,6 +61,7 @@ export const buildNfseObraEndereco = (enderecoInput = {}) => {
   const codigoCidade = normalizeOptionalText(enderecoInput.codigoCidade, 7);
   const estado = normalizeOptionalText(enderecoInput.estado || enderecoInput.uf, 2)?.toUpperCase() ?? null;
   const descricaoCidade = normalizeOptionalText(enderecoInput.descricaoCidade, 60);
+  const tipoLogradouro = normalizeOptionalText(enderecoInput.tipoLogradouro, 60);
 
   if (!cep && !logradouro && !numero && !bairro) return null;
 
@@ -72,6 +74,7 @@ export const buildNfseObraEndereco = (enderecoInput = {}) => {
     ...(codigoCidade ? { codigoCidade } : {}),
     ...(estado ? { estado } : {}),
     ...(descricaoCidade ? { descricaoCidade } : {}),
+    ...(tipoLogradouro ? { tipoLogradouro } : {}),
   };
 };
 
@@ -108,45 +111,39 @@ export const resolveNfseObraEndereco = (servicoInput, emitInput, tomadorEndereco
 };
 
 /**
+ * Campos aceitos pela API PlugNotas em `servico[].obra` (sem endereço — evita E160 no XSD).
  * @param {Record<string, unknown>|null|undefined} servicoInput
  * @param {Record<string, unknown>|null|undefined} emitInput
- * @param {Record<string, unknown>|null|undefined} tomadorEndereco
- * @returns {Record<string, unknown>|null}
+ * @returns {Record<string, string>|null}
  */
-export const buildNfseObraPayload = (servicoInput, emitInput, tomadorEndereco) => {
+export const buildNfseObraPayload = (servicoInput, emitInput) => {
   const codigo = servicoInput?.codigo ?? servicoInput?.codigoServico;
   if (!requiresNfseObraForServicoCodigo(codigo)) return null;
 
   const obraSource = readObraSource(servicoInput) || readObraSource(emitInput) || {};
-  const endereco = resolveNfseObraEndereco(servicoInput, emitInput, tomadorEndereco);
-  const cno = normalizeOptionalText(obraSource.cno, 30);
   const cei = normalizeOptionalText(obraSource.cei, 30);
   const art = normalizeOptionalText(obraSource.art, 30);
+  const cno = normalizeOptionalText(obraSource.cno, 30);
   const codigoObra = normalizeOptionalText(
     obraSource.codigoObra ?? obraSource.codigo,
     30,
   );
+  const codigoCadastro = codigoObra || cno;
 
   const payload = {
-    ...(cno ? { cno } : {}),
-    ...(cei ? { cei } : {}),
     ...(art ? { art } : {}),
-    ...(codigoObra ? { codigo: codigoObra } : {}),
-    ...(endereco ? { endereco } : {}),
+    ...(codigoCadastro ? { codigo: codigoCadastro } : {}),
+    ...(cei ? { cei } : {}),
   };
 
-  return Object.keys(payload).length ? payload : null;
+  return Object.keys(payload).length ? payload : {};
 };
 
 /**
- * @param {Record<string, unknown>|null|undefined} obra
+ * @param {Record<string, unknown>|null|undefined} endereco
  * @returns {string|null} mensagem de erro ou null
  */
-export const validateNfseObraPayload = (obra) => {
-  if (!obra || typeof obra !== 'object') {
-    return 'Informe os dados da obra (local onde o serviço foi executado).';
-  }
-  const endereco = obra.endereco;
+export const validateNfseObraEndereco = (endereco) => {
   if (!endereco || typeof endereco !== 'object') {
     return 'Informe o endereço da obra (CEP, logradouro, número e bairro).';
   }
@@ -163,6 +160,92 @@ export const validateNfseObraPayload = (obra) => {
   if (!String(endereco.bairro || '').trim()) {
     return 'Informe o bairro da obra.';
   }
+  const codigoCidade = String(endereco.codigoCidade || '').replace(/\D/g, '').slice(0, 7);
+  if (codigoCidade.length !== 7) {
+    return 'Informe o município (código IBGE) do local da obra.';
+  }
+  return null;
+};
+
+/**
+ * @param {Record<string, unknown>|null|undefined} obra
+ * @returns {string|null} mensagem de erro ou null
+ * @deprecated Valide com {@link validateNfseObraEndereco} no endereço resolvido.
+ */
+export const validateNfseObraPayload = (obra) => {
+  if (!obra || typeof obra !== 'object') {
+    return 'Informe os dados da obra (local onde o serviço foi executado).';
+  }
+  if (obra.endereco) {
+    return validateNfseObraEndereco(obra.endereco);
+  }
+  return null;
+};
+
+/**
+ * Monta `cidadePrestacao` (raiz) a partir do endereço da execução do serviço.
+ * @param {Record<string, unknown>|null|undefined} endereco
+ * @returns {Record<string, string>|null}
+ */
+export const buildCidadePrestacaoFromObraEndereco = (endereco) => {
+  if (!endereco || typeof endereco !== 'object') return null;
+
+  const codigo = String(endereco.codigoCidade || '').replace(/\D/g, '').slice(0, 7);
+  if (codigo.length !== 7) return null;
+
+  const estadoRaw = endereco.estado ?? endereco.uf;
+  const estado = estadoRaw ? String(estadoRaw).trim().toUpperCase().slice(0, 2) : undefined;
+  const descricao = normalizeOptionalText(endereco.descricaoCidade, 60);
+  const cep = String(endereco.cep || '').replace(/\D/g, '').slice(0, 8);
+  const logradouro = normalizeOptionalText(endereco.logradouro, 255);
+  const numero = normalizeOptionalText(endereco.numero, 60);
+  const bairro = normalizeOptionalText(endereco.bairro, 60);
+  const complemento = normalizeOptionalText(endereco.complemento, 156);
+  const tipoLogradouro = normalizeOptionalText(endereco.tipoLogradouro, 60);
+
+  return {
+    codigo,
+    ...(descricao ? { descricao } : {}),
+    ...(estado ? { estado } : {}),
+    ...(cep ? { cep } : {}),
+    ...(logradouro ? { logradouro } : {}),
+    ...(numero ? { numero } : {}),
+    ...(bairro ? { bairro } : {}),
+    ...(complemento ? { complemento } : {}),
+    ...(tipoLogradouro ? { tipoLogradouro } : {}),
+  };
+};
+
+/**
+ * @param {Record<string, unknown>|null|undefined} payload
+ * @param {Array<Record<string, unknown>>} [servicosInput]
+ * @param {Record<string, unknown>|null|undefined} [tomadorEndereco]
+ * @returns {Record<string, string>|null}
+ */
+export const resolveCidadePrestacaoForObraPayload = (
+  payload,
+  servicosInput = [],
+  tomadorEndereco = null,
+) => {
+  const servicos = Array.isArray(payload?.servico)
+    ? payload.servico
+    : payload?.servico && typeof payload.servico === 'object'
+      ? [payload.servico]
+      : [];
+  const inputs = Array.isArray(servicosInput) ? servicosInput : [];
+  const tomador = tomadorEndereco ?? payload?.tomador?.endereco ?? null;
+
+  for (let index = 0; index < servicos.length; index += 1) {
+    const servico = servicos[index];
+    if (!servico || typeof servico !== 'object') continue;
+    if (!requiresNfseObraForServicoCodigo(servico.codigo)) continue;
+
+    const input = inputs[index] || {};
+    const endereco = resolveNfseObraEndereco(input, input, tomador);
+    const cidade = buildCidadePrestacaoFromObraEndereco(endereco);
+    if (cidade) return cidade;
+  }
+
   return null;
 };
 
@@ -170,24 +253,24 @@ export const validateNfseObraPayload = (obra) => {
  * @param {Record<string, unknown>} servico
  * @param {Record<string, unknown>|null|undefined} servicoInput
  * @param {Record<string, unknown>|null|undefined} emitInput
- * @param {Record<string, unknown>|null|undefined} tomadorEndereco
  * @returns {Record<string, unknown>}
  */
-export const attachNfseObraToServico = (servico, servicoInput, emitInput, tomadorEndereco) => {
+export const attachNfseObraToServico = (servico, servicoInput, emitInput) => {
   if (!requiresNfseObraForServicoCodigo(servico?.codigo)) return servico;
-  const obra = buildNfseObraPayload(servicoInput, emitInput, tomadorEndereco);
+  const obra = buildNfseObraPayload(servicoInput, emitInput);
   if (!obra) return servico;
   return { ...servico, obra };
 };
 
 /**
  * Para serviços de obra (LC 116 07.xx), o ISS incide no município da execução.
- * Preenche `cidadePrestacao` a partir de `servico[].obra.endereco` quando ausente.
+ * Preenche `cidadePrestacao` na raiz quando ausente (endereço NÃO vai em servico.obra).
  *
  * @param {Record<string, unknown>|null|undefined} payload
+ * @param {{ servicosInput?: Array<Record<string, unknown>>, tomadorEndereco?: Record<string, unknown>|null }} [options]
  * @returns {Record<string, unknown>|null|undefined}
  */
-export const enrichNfseCidadePrestacaoFromObra = (payload) => {
+export const enrichNfseCidadePrestacaoFromObra = (payload, options = {}) => {
   if (!payload || typeof payload !== 'object') return payload;
 
   const existing = payload.cidadePrestacao;
@@ -198,33 +281,15 @@ export const enrichNfseCidadePrestacaoFromObra = (payload) => {
     if (codigoExistente.length === 7) return payload;
   }
 
-  const servicos = Array.isArray(payload.servico)
-    ? payload.servico
-    : payload.servico && typeof payload.servico === 'object'
-      ? [payload.servico]
-      : [];
+  const cidade = resolveCidadePrestacaoForObraPayload(
+    payload,
+    options.servicosInput,
+    options.tomadorEndereco,
+  );
+  if (!cidade) return payload;
 
-  for (const servico of servicos) {
-    if (!servico || typeof servico !== 'object') continue;
-    const endereco = servico.obra?.endereco;
-    if (!endereco || typeof endereco !== 'object') continue;
-
-    const codigo = String(endereco.codigoCidade || '').replace(/\D/g, '').slice(0, 7);
-    if (codigo.length !== 7) continue;
-
-    const estadoRaw = endereco.estado ?? endereco.uf;
-    const estado = estadoRaw ? String(estadoRaw).trim().toUpperCase().slice(0, 2) : undefined;
-    const descricao = normalizeOptionalText(endereco.descricaoCidade, 60);
-
-    return {
-      ...payload,
-      cidadePrestacao: {
-        codigo,
-        ...(descricao ? { descricao } : {}),
-        ...(estado ? { estado } : {}),
-      },
-    };
-  }
-
-  return payload;
+  return {
+    ...payload,
+    cidadePrestacao: cidade,
+  };
 };
