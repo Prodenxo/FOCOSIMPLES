@@ -12,9 +12,9 @@ describe('nfseCatalogProdutoMetadata', () => {
     expect(lookupSuggestedCodigoNbs('14.01.01')).toBe('120013110')
   })
 
-  it('valida NBS e cIndOp', () => {
+  it('valida cIndOp; NBS incompleto não bloqueia', () => {
     expect(validateNfseCatalogProdutoFormFields({ codigoNbs: '120013110', cIndOp: '050101' })).toBeNull()
-    expect(validateNfseCatalogProdutoFormFields({ codigoNbs: '123', cIndOp: '' })).toMatch(/NBS/)
+    expect(validateNfseCatalogProdutoFormFields({ codigoNbs: '1010720', cIndOp: '050101' })).toBeNull()
     expect(validateNfseCatalogProdutoFormFields({ codigoNbs: '', cIndOp: '123' })).toMatch(/cIndOp/)
   })
 

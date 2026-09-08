@@ -22,20 +22,10 @@ export type NfseCatalogProdutoFormFields = {
   cIndOp: string
 }
 
-export const NFSE_CINDOP_OPTIONS: Array<{ value: string; label: string }> = [
-  {
-    value: '050101',
-    label: '050101 — serviço no estabelecimento do prestador (ex.: oficina)',
-  },
-  {
-    value: '050102',
-    label: '050102 — serviço no endereço do tomador (ex.: mecânico vai até o cliente)',
-  },
-  {
-    value: '100301',
-    label: '100301 — prestação genérica / remota (consultoria, etc.)',
-  },
-]
+/** Texto de ajuda — código vem da LC 214 (Anexo VII), conforme orientação do contador. */
+export const NFSE_CINDOP_FIELD_HINT =
+  'Código de 6 dígitos da LC 214 (Anexo VII), conforme o tipo de serviço e onde ele é prestado. '
+  + 'Use o código indicado pelo contador ou pela prefeitura — não há lista fixa no sistema.'
 
 export function emptyNfseCatalogProdutoFormFields(): NfseCatalogProdutoFormFields {
   return { codigoNbs: '', cIndOp: '' }
@@ -93,14 +83,11 @@ export function lookupSuggestedCodigoNbs(codigoLc116: string): string | null {
 export function validateNfseCatalogProdutoFormFields(
   fields: NfseCatalogProdutoFormFields,
 ): string | null {
-  const nbs = normalizeCodigoNbsInput(fields.codigoNbs)
-  if (fields.codigoNbs.trim() && (nbs.length !== 9 || nbs[0] !== '1')) {
-    return 'NBS deve ter 9 dígitos numéricos (começando com 1).'
-  }
   const cIndOp = normalizeCIndOpInput(fields.cIndOp)
   if (fields.cIndOp.trim() && cIndOp.length !== 6) {
     return 'Indicador de operação (cIndOp) deve ter 6 dígitos.'
   }
+  // NBS incompleto não bloqueia — na gravação valores inválidos são ignorados.
   return null
 }
 

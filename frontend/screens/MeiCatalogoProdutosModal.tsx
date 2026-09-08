@@ -32,7 +32,7 @@ import {
   emptyNfseCatalogProdutoFormFields,
   lookupSuggestedCodigoNbs,
   nfseCatalogProdutoFormFieldsFromMetadata,
-  NFSE_CINDOP_OPTIONS,
+  NFSE_CINDOP_FIELD_HINT,
   type NfseCatalogProdutoFormFields,
 } from '../lib/nfseCatalogProdutoMetadata'
 import { useAuthStore } from '../store/authStore'
@@ -1011,7 +1011,7 @@ export default function MeiCatalogoProdutosModal ({
         <MeiFormField
           label="NBS (9 dígitos)"
           placeholder="Ex.: 120013110"
-          hint="Nomenclatura Brasileira de Serviços — classifica o tipo de serviço. Diferente do código LC 116."
+          hint="Nomenclatura Brasileira de Serviços — 9 dígitos, começando com 1. Use o código indicado pelo contador (diferente do código LC 116)."
           value={form.nfse.codigoNbs}
           onChangeText={(t) =>
             setForm((f) => ({
@@ -1019,15 +1019,24 @@ export default function MeiCatalogoProdutosModal ({
               nfse: { ...f.nfse, codigoNbs: t.replace(/\D/g, '').slice(0, 9) },
             }))
           }
+          onBlur={() => {
+            const nbs = form.nfse.codigoNbs.trim()
+            if (nbs.length === 9 && nbs[0] === '1') return
+            const suggested = lookupSuggestedCodigoNbs(form.codigo)
+            if (suggested) {
+              setForm((f) => ({
+                ...f,
+                nfse: { ...f.nfse, codigoNbs: suggested },
+              }))
+            }
+          }}
           keyboardType="number-pad"
           maxLength={9}
         />
         <MeiFormField
           label="Indicador de operação (cIndOp)"
-          placeholder="Ex.: 050101"
-          hint={
-            NFSE_CINDOP_OPTIONS.map((o) => o.label).join('\n')
-          }
+          placeholder="6 dígitos — conforme LC 214"
+          hint={NFSE_CINDOP_FIELD_HINT}
           value={form.nfse.cIndOp}
           onChangeText={(t) =>
             setForm((f) => ({
@@ -1038,30 +1047,6 @@ export default function MeiCatalogoProdutosModal ({
           keyboardType="number-pad"
           maxLength={6}
         />
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-          {NFSE_CINDOP_OPTIONS.map((opt) => (
-            <Pressable
-              key={opt.value}
-              accessibilityRole="button"
-              onPress={() =>
-                setForm((f) => ({
-                  ...f,
-                  nfse: { ...f.nfse, cIndOp: opt.value },
-                }))
-              }
-              style={{
-                paddingHorizontal: 10,
-                paddingVertical: 6,
-                borderRadius: 8,
-                borderWidth: 1,
-                borderColor: form.nfse.cIndOp === opt.value ? theme.primary : choiceBorder,
-                backgroundColor: form.nfse.cIndOp === opt.value ? `${theme.primary}18` : 'transparent',
-              }}
-            >
-              <Text style={{ color: theme.text, fontSize: 12, fontWeight: '600' }}>{opt.value}</Text>
-            </Pressable>
-          ))}
-        </View>
           </>
         ) : null}
           </>
