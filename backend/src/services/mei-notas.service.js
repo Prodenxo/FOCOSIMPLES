@@ -663,7 +663,7 @@ const shouldLogNfseEmitPayload = () => {
 
 const logNfseEmitPayloadIfDebug = (emitPayload, context = {}) => {
   if (!shouldLogNfseEmitPayload()) return;
-  console.info('[nfse-emit-debug] schema=issnet-rtc007-obra-v2 payload final (redacted):', JSON.stringify({
+  console.info('[nfse-emit-debug] schema=issnet-rtc007-obra-v3 payload final (redacted):', JSON.stringify({
     ...context,
     payload: redactPayload(emitPayload),
   }, null, 2));

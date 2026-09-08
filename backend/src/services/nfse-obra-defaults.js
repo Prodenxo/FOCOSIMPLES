@@ -1,6 +1,7 @@
 /**
  * NFS-e Nacional / ISSNET: grupo `obra` obrigatório (rejeição E0370) para itens LC 116 de construção civil.
- * ISSNET RTC007 / DPS 1.01: endereço plano em `servico[].obra` (grupo `end` no XSD); não enviar `codigo` placeholder (E160 — cObra removido do schema).
+ * ISSNET RTC007 / DPS 1.01: `servico[].obra.endereco` + `cidadePrestacao` sem campos ABRASF (tipoLogradouro/tipoBairro).
+ * Não enviar `obra.codigo` placeholder — cObra removido do XSD (E160).
  * Demais municípios: PlugNotas JSON aceita art, codigo e cei em `servico[].obra`.
  * @see TecnoSpeed plugnotas-php Nfse/Servico/Obra.php
  */
@@ -150,6 +151,40 @@ export const buildNfseObraEnderecoFlatForIssnetRtc = (enderecoInput) => {
     ...(built.complemento ? { complemento: built.complemento } : {}),
     ...(built.codigoCidade ? { codigoCidade: built.codigoCidade } : {}),
     ...(built.estado ? { estado: built.estado } : {}),
+    ...(built.descricaoCidade ? { descricaoCidade: built.descricaoCidade } : {}),
+  };
+};
+
+/**
+ * @param {Record<string, unknown>|null|undefined} enderecoInput
+ * @returns {{ endereco: Record<string, string> }|null}
+ */
+export const buildNfseObraNestedForIssnetRtc = (enderecoInput) => {
+  const endFlat = buildNfseObraEnderecoFlatForIssnetRtc(enderecoInput);
+  if (!endFlat) return null;
+  return { endereco: endFlat };
+};
+
+/**
+ * `cidadePrestacao` compatível com DPS 1.01 — sem tipoLogradouro/tipoBairro (ABRASF → E160).
+ * @param {Record<string, unknown>|null|undefined} endereco
+ * @returns {Record<string, string|boolean>|null}
+ */
+export const buildCidadePrestacaoForIssnetRtcFromObraEndereco = (endereco) => {
+  const built = buildNfseObraEndereco(endereco);
+  if (!built?.codigoCidade) return null;
+  const codigo = String(built.codigoCidade).replace(/\D/g, '').slice(0, 7);
+  if (codigo.length !== 7) return null;
+  return {
+    codigo,
+    ...(built.descricaoCidade ? { descricao: built.descricaoCidade } : {}),
+    ...(built.estado ? { estado: built.estado } : {}),
+    ...(built.cep ? { cep: built.cep } : {}),
+    ...(built.logradouro ? { logradouro: built.logradouro } : {}),
+    ...(built.numero ? { numero: built.numero } : {}),
+    ...(built.bairro ? { bairro: built.bairro } : {}),
+    ...(built.complemento ? { complemento: built.complemento } : {}),
+    utilizarDadosTomador: false,
   };
 };
 
@@ -200,10 +235,10 @@ export const buildNfseObraPayload = (servicoInput, emitInput, options = {}) => {
   if (options.issnetOnline30) {
     const endereco = options.obraEndereco
       ?? resolveNfseObraEndereco(servicoInput, emitInput, options.tomadorEndereco);
-    const endFlat = buildNfseObraEnderecoFlatForIssnetRtc(endereco);
-    if (!endFlat && !art && !cei && !explicitCodigo) return null;
+    const nested = buildNfseObraNestedForIssnetRtc(endereco);
+    if (!nested && !art && !cei && !explicitCodigo) return null;
     return {
-      ...(endFlat || {}),
+      ...(nested || {}),
       ...(art ? { art } : {}),
       ...(cei ? { cei } : {}),
       ...(explicitCodigo ? { codigo: explicitCodigo } : {}),
@@ -427,10 +462,77 @@ export const payloadHasNfseObraServico = (payload) => {
 };
 
 /**
- * ISSNETONLINE30 / DPS 1.01: endereço da obra NÃO vai em `cidadePrestacao` (ABRASF).
- * Local da execução → `servico.codigoCidadeIncidencia` + `servico.obra`.
- * `cidadePrestacao` com logradouro/CEP quebra o XSD → E160.
+ * ISSNET RTC007: remove campos ABRASF de `cidadePrestacao` que quebram o XSD DPS (E160).
  *
+ * @param {Record<string, unknown>|null|undefined} payload
+ * @returns {Record<string, unknown>|null|undefined}
+ */
+export const sanitizeCidadePrestacaoForIssnetRtc = (payload) => {
+  if (!payload || typeof payload !== 'object') return payload;
+  const existing = payload.cidadePrestacao;
+  if (!existing || typeof existing !== 'object' || Array.isArray(existing)) return payload;
+  const {
+    tipoLogradouro: _tl,
+    tipoBairro: _tb,
+    ...rest
+  } = existing;
+  return { ...payload, cidadePrestacao: rest };
+};
+
+/**
+ * @param {Record<string, unknown>|null|undefined} payload
+ * @param {{ servicosInput?: Array<Record<string, unknown>>, tomadorEndereco?: Record<string, unknown>|null }} [options]
+ * @returns {Record<string, string|boolean>|null}
+ */
+export const resolveCidadePrestacaoForIssnetRtcObraPayload = (
+  payload,
+  options = {},
+) => {
+  const servicos = Array.isArray(payload?.servico)
+    ? payload.servico
+    : payload?.servico && typeof payload.servico === 'object'
+      ? [payload.servico]
+      : [];
+  const inputs = Array.isArray(options.servicosInput) ? options.servicosInput : [];
+  const tomador = options.tomadorEndereco ?? payload?.tomador?.endereco ?? null;
+
+  for (let index = 0; index < servicos.length; index += 1) {
+    const servico = servicos[index];
+    if (!servico || typeof servico !== 'object') continue;
+    if (!requiresNfseObraForServicoCodigo(servico.codigo)) continue;
+
+    const input = inputs[index] || {};
+    const endereco = resolveNfseObraEndereco(input, input, tomador);
+    const cidade = buildCidadePrestacaoForIssnetRtcFromObraEndereco(endereco);
+    if (cidade) return cidade;
+  }
+
+  return null;
+};
+
+/**
+ * ISSNET RTC007 obra: envia `cidadePrestacao` DPS-safe (local da execução) para a PlugNotas
+ * não preencher com endereço ABRASF do prestador (E160).
+ *
+ * @param {Record<string, unknown>|null|undefined} payload
+ * @param {{ servicosInput?: Array<Record<string, unknown>>, tomadorEndereco?: Record<string, unknown>|null }} [options]
+ * @returns {Record<string, unknown>|null|undefined}
+ */
+export const enrichNfseIssnetRtcCidadePrestacaoFromObra = (payload, options = {}) => {
+  if (!payload || typeof payload !== 'object') return payload;
+  if (!payloadHasNfseObraServico(payload)) return payload;
+
+  const cidade = resolveCidadePrestacaoForIssnetRtcObraPayload(payload, options);
+  if (!cidade) return sanitizeCidadePrestacaoForIssnetRtc(payload);
+
+  return sanitizeCidadePrestacaoForIssnetRtc({
+    ...payload,
+    cidadePrestacao: cidade,
+  });
+};
+
+/**
+ * @deprecated Use {@link enrichNfseIssnetRtcCidadePrestacaoFromObra} — omitir cidadePrestacao faz a PlugNotas usar prestador (E160).
  * @param {Record<string, unknown>|null|undefined} payload
  * @returns {Record<string, unknown>|null|undefined}
  */
@@ -453,7 +555,7 @@ export const enrichNfseCidadePrestacaoFromObra = (payload, options = {}) => {
   if (!payload || typeof payload !== 'object') return payload;
 
   if (options.issnetOnline30 && payloadHasNfseObraServico(payload)) {
-    return stripCidadePrestacaoForIssnetRtcObra(payload);
+    return enrichNfseIssnetRtcCidadePrestacaoFromObra(payload, options);
   }
 
   const existing = payload.cidadePrestacao;

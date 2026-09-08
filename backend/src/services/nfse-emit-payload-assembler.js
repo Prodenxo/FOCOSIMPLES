@@ -7,7 +7,7 @@ import { enrichNfseIssInEmitPayload } from './nfse-iss-defaults.js';
 import {
   enrichNfseCidadePrestacaoFromObra,
   enrichNfseObraOnEmitPayload,
-  stripCidadePrestacaoForIssnetRtcObra,
+  sanitizeCidadePrestacaoForIssnetRtc,
 } from './nfse-obra-defaults.js';
 import { enrichNfseReformaCabecalhoInEmitPayload } from './nfse-reforma-defaults.js';
 
@@ -48,7 +48,7 @@ export const assembleNfsePlugnotasEmitPayload = (basePayload, prep = {}) => {
   });
 
   if (prep.issnetOnline30) {
-    emitPayload = stripCidadePrestacaoForIssnetRtcObra(emitPayload);
+    emitPayload = sanitizeCidadePrestacaoForIssnetRtc(emitPayload);
   }
 
   return emitPayload;

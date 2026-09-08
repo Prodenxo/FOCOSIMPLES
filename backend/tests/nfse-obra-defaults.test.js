@@ -3,14 +3,16 @@ import assert from 'node:assert/strict';
 
 import {
   attachNfseObraToServico,
+  buildCidadePrestacaoForIssnetRtcFromObraEndereco,
   buildCidadePrestacaoFromObraEndereco,
   buildNfseObraPayload,
   enrichNfseCidadePrestacaoFromObra,
+  enrichNfseIssnetRtcCidadePrestacaoFromObra,
   enrichNfseObraOnEmitPayload,
   NFSE_OBRA_CODIGO_SEM_CADASTRO,
   requiresNfseObraForServicoCodigo,
   resolveNfseObraCodigoForEmit,
-  stripCidadePrestacaoForIssnetRtcObra,
+  sanitizeCidadePrestacaoForIssnetRtc,
   validateNfseObraEndereco,
 } from '../src/services/nfse-obra-defaults.js';
 
@@ -122,7 +124,7 @@ test('attachNfseObraToServico — ignora serviços fora da lista', () => {
   assert.equal(next.obra, undefined);
 });
 
-test('buildNfseObraPayload — ISSNET RTC: endereço plano, sem codigo placeholder', () => {
+test('buildNfseObraPayload — ISSNET RTC: endereco aninhado, sem codigo placeholder', () => {
   const obra = buildNfseObraPayload(
     {
       codigo: '070602',
@@ -142,10 +144,9 @@ test('buildNfseObraPayload — ISSNET RTC: endereço plano, sem codigo placehold
     },
   );
   assert.equal(obra?.codigo, undefined);
-  assert.equal(obra?.cep, '14000000');
-  assert.equal(obra?.logradouro, 'Rua A');
-  assert.equal(obra?.bairro, 'Centro');
-  assert.equal(obra?.codigoCidade, '3543402');
+  assert.equal(obra?.endereco?.cep, '14000000');
+  assert.equal(obra?.endereco?.logradouro, 'Rua A');
+  assert.equal(obra?.cep, undefined);
 });
 
 test('buildNfseObraPayload — ISSNET RTC: CNO real informado pelo usuário', () => {
@@ -168,7 +169,7 @@ test('buildNfseObraPayload — ISSNET RTC: CNO real informado pelo usuário', ()
     },
   );
   assert.equal(obra?.codigo, '123456789012');
-  assert.equal(obra?.cep, '14000000');
+  assert.equal(obra?.endereco?.cep, '14000000');
 });
 
 test('enrichNfseObraOnEmitPayload — ISSNET RTC anexa endereço da obra', () => {
@@ -189,8 +190,8 @@ test('enrichNfseObraOnEmitPayload — ISSNET RTC anexa endereço da obra', () =>
     servicosInput: [{ codigo: '070602', obra: { usarEnderecoTomador: true } }],
   });
   assert.equal(out.servico[0].obra?.codigo, undefined);
-  assert.equal(out.servico[0].obra?.cep, '14000000');
-  assert.equal(out.servico[0].obra?.logradouro, 'Rua A');
+  assert.equal(out.servico[0].obra?.endereco?.cep, '14000000');
+  assert.equal(out.servico[0].obra?.endereco?.logradouro, 'Rua A');
   assert.equal(out.servico[0].codigoCidadeIncidencia, '3543402');
 });
 
@@ -236,8 +237,8 @@ test('enrichNfseCidadePrestacaoFromObra — usa input da obra e endereço do tom
   assert.equal(out.cidadePrestacao?.logradouro, 'Av Paulista');
 });
 
-test('stripCidadePrestacaoForIssnetRtcObra — remove cidadePrestacao ABRASF (E160)', () => {
-  const out = stripCidadePrestacaoForIssnetRtcObra({
+test('sanitizeCidadePrestacaoForIssnetRtc — obra com endereco aninhado', () => {
+  const out = sanitizeCidadePrestacaoForIssnetRtc({
     cidadePrestacao: {
       codigo: '3543402',
       logradouro: 'Rua A',
@@ -246,18 +247,73 @@ test('stripCidadePrestacaoForIssnetRtcObra — remove cidadePrestacao ABRASF (E1
     servico: [{
       codigo: '070602',
       obra: {
+        endereco: {
+          cep: '14000000',
+          logradouro: 'Rua A',
+          numero: '1',
+          bairro: 'Centro',
+        },
+      },
+    }],
+  });
+  assert.equal(out.cidadePrestacao?.logradouro, 'Rua A');
+  assert.equal(out.servico[0].obra.endereco.cep, '14000000');
+});
+
+test('buildCidadePrestacaoForIssnetRtcFromObraEndereco — sem tipoLogradouro/tipoBairro', () => {
+  const cidade = buildCidadePrestacaoForIssnetRtcFromObraEndereco({
+    codigoCidade: '3543402',
+    descricaoCidade: 'Ribeirão Preto',
+    estado: 'SP',
+    cep: '14000000',
+    logradouro: 'Rua A',
+    numero: '10',
+    bairro: 'Centro',
+  });
+  assert.equal(cidade?.codigo, '3543402');
+  assert.equal(cidade?.logradouro, 'Rua A');
+  assert.equal(cidade?.utilizarDadosTomador, false);
+  assert.equal(cidade?.tipoLogradouro, undefined);
+  assert.equal(cidade?.tipoBairro, undefined);
+});
+
+test('enrichNfseIssnetRtcCidadePrestacaoFromObra — preenche local da execução', () => {
+  const out = enrichNfseIssnetRtcCidadePrestacaoFromObra({
+    servico: [{ codigo: '070602' }],
+    tomador: {
+      endereco: {
+        codigoCidade: '3543402',
+        descricaoCidade: 'Ribeirão Preto',
+        estado: 'SP',
         cep: '14000000',
         logradouro: 'Rua A',
         numero: '1',
         bairro: 'Centro',
       },
-    }],
+    },
+  }, {
+    servicosInput: [{ codigo: '070602', obra: { usarEnderecoTomador: true } }],
   });
-  assert.equal(out.cidadePrestacao, undefined);
-  assert.equal(out.servico[0].obra.cep, '14000000');
+  assert.equal(out.cidadePrestacao?.codigo, '3543402');
+  assert.equal(out.cidadePrestacao?.logradouro, 'Rua A');
+  assert.equal(out.cidadePrestacao?.tipoLogradouro, undefined);
 });
 
-test('enrichNfseCidadePrestacaoFromObra — ISSNET RTC obra não envia cidadePrestacao', () => {
+test('sanitizeCidadePrestacaoForIssnetRtc — remove campos ABRASF', () => {
+  const out = sanitizeCidadePrestacaoForIssnetRtc({
+    cidadePrestacao: {
+      codigo: '3543402',
+      tipoLogradouro: 'Rua',
+      tipoBairro: 'Bairro',
+      logradouro: 'Rua A',
+    },
+    servico: [{ codigo: '070602' }],
+  });
+  assert.equal(out.cidadePrestacao?.tipoLogradouro, undefined);
+  assert.equal(out.cidadePrestacao?.logradouro, 'Rua A');
+});
+
+test('enrichNfseCidadePrestacaoFromObra — ISSNET RTC obra envia cidadePrestacao DPS-safe', () => {
   const out = enrichNfseCidadePrestacaoFromObra({
     servico: [{ codigo: '070602' }],
     tomador: {
@@ -275,5 +331,7 @@ test('enrichNfseCidadePrestacaoFromObra — ISSNET RTC obra não envia cidadePre
     issnetOnline30: true,
     servicosInput: [{ codigo: '070602', obra: { usarEnderecoTomador: true } }],
   });
-  assert.equal(out.cidadePrestacao, undefined);
+  assert.equal(out.cidadePrestacao?.codigo, '3543402');
+  assert.equal(out.cidadePrestacao?.logradouro, 'Rua A');
+  assert.equal(out.cidadePrestacao?.tipoLogradouro, undefined);
 });
