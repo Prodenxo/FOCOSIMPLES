@@ -24,6 +24,26 @@ export const NFSE_SITUACAO_TRIBUTARIA_IBSCBS_DEFAULT = '000';
 /** Classificação tributária IBS/CBS genérica para serviço. */
 export const NFSE_CLASSIFICACAO_TRIBUTARIA_IBSCBS_DEFAULT = '000001';
 
+/** PlugNotas: obrigatório ao enviar campos IBS/CBS (Reforma Tributária). */
+export const NFSE_VERSAO_ESQUEMA_RTC = 'RTC';
+
+/** Chaves permitidas em `servico[].ibscbs` pela API PlugNotas (ibscbsNfse). */
+const PLUGNOTAS_IBSCBS_ALLOWED_KEYS = new Set([
+  'finalidadeNFSe',
+  'operacaoPessoal',
+  'codigoOperacao',
+  'tipoOperacao',
+  'indicadorOperacao',
+  'tipoEnteGovernamental',
+  'descTipoEnteGovernamental',
+  'pagamentoParceladoAntecipado',
+  'municipioIncidenciaIbsCbs',
+  'referenciasNFSe',
+  'destinatario',
+  'imovel',
+  'valores',
+]);
+
 /**
  * @param {unknown} codigo
  * @returns {string}
@@ -176,6 +196,44 @@ const resolveOperacaoPessoalValue = (value) => {
 export const NFSE_REG_AP_IBSCBS_SN_SIMPLES = 1;
 
 /**
+ * Monta `ibscbs` no formato aceito pela PlugNotas (evita tags inválidas no XML ISSNET).
+ *
+ * @param {Record<string, unknown>} built
+ * @returns {Record<string, unknown>}
+ */
+export const sanitizeIbscbsForPlugnotasEmit = (built = {}) => {
+  const out = {};
+  for (const key of PLUGNOTAS_IBSCBS_ALLOWED_KEYS) {
+    if (built[key] !== undefined && built[key] !== null) {
+      out[key] = built[key];
+    }
+  }
+  return out;
+};
+
+/**
+ * @param {Record<string, unknown>|null|undefined} destinatarioSource
+ * @param {Record<string, unknown>} source
+ * @returns {Record<string, unknown>|undefined}
+ */
+const resolveDestinatarioForPlugnotasEmit = (destinatarioSource, source) => {
+  const indicador = destinatarioSource.indicador ?? source.indDest;
+  const hasExtraFields = Boolean(
+    destinatarioSource.cpfCnpj
+    || destinatarioSource.razaoSocial
+    || destinatarioSource.endereco
+    || destinatarioSource.email,
+  );
+  if (indicador === 1 || hasExtraFields) {
+    return {
+      indicador: indicador === 1 ? 1 : 0,
+      ...destinatarioSource,
+    };
+  }
+  return undefined;
+};
+
+/**
  * @param {Record<string, unknown>|null|undefined} ibscbsInput
  * @param {{ finNFSe?: number, operacaoPessoal?: number, cIndOp?: string, servico?: Record<string, unknown>, simplesNacional?: boolean }} options
  * @returns {Record<string, unknown>}
@@ -220,11 +278,6 @@ export const buildMinimalServicoIbscbs = (ibscbsInput = {}, options = {}) => {
     ? source.destinatario
     : {};
 
-  const simplesNacional = options.simplesNacional !== false;
-  const regApIBSCBSSN = Number.isFinite(Number(source.regApIBSCBSSN))
-    ? Number(source.regApIBSCBSSN)
-    : (simplesNacional ? NFSE_REG_AP_IBSCBS_SN_SIMPLES : undefined);
-
   const existingValores = source.valores && typeof source.valores === 'object' && !Array.isArray(source.valores)
     ? source.valores
     : {};
@@ -232,26 +285,13 @@ export const buildMinimalServicoIbscbs = (ibscbsInput = {}, options = {}) => {
     ? existingValores.tributacao
     : {};
 
-  return {
-    ...source,
-    finNFSe,
+  const destinatario = resolveDestinatarioForPlugnotasEmit(destinatarioSource, source);
+
+  const built = {
     finalidadeNFSe: source.finalidadeNFSe ?? source.finalidadeNfse ?? finNFSe,
     operacaoPessoal,
-    indFinal: source.indFinal ?? operacaoPessoal,
-    cIndOp,
     codigoOperacao: source.codigoOperacao ?? cIndOp,
-    situacaoTributariaIbsCbs: cstFinal,
-    cst: cstFinal,
-    cstIbsCbs: cstFinal,
-    classificacaoTributariaIbsCbs,
-    cClassTrib: source.cClassTrib ?? classificacaoTributariaIbsCbs,
-    classCode: source.classCode ?? classificacaoTributariaIbsCbs,
-    ...(regApIBSCBSSN ? { regApIBSCBSSN, regApTribSN: regApIBSCBSSN } : {}),
-    indDest: source.indDest ?? destinatarioSource.indicador ?? 0,
-    destinatario: {
-      indicador: destinatarioSource.indicador ?? source.indDest ?? 0,
-      ...destinatarioSource,
-    },
+    ...(destinatario ? { destinatario } : {}),
     valores: {
       ...existingValores,
       tributacao: {
@@ -261,6 +301,15 @@ export const buildMinimalServicoIbscbs = (ibscbsInput = {}, options = {}) => {
       },
     },
   };
+
+  for (const key of PLUGNOTAS_IBSCBS_ALLOWED_KEYS) {
+    if (key in built) continue;
+    if (source[key] !== undefined && source[key] !== null) {
+      built[key] = source[key];
+    }
+  }
+
+  return sanitizeIbscbsForPlugnotasEmit(built);
 };
 
 /**
@@ -342,39 +391,33 @@ export const enrichNfseReformaCabecalhoInEmitPayload = (payload, options = {}) =
       servico: item,
       simplesNacional,
     });
+    const {
+      situacaoTributariaIbsCbs: _st,
+      classificacaoTributariaIbsCbs: _ct,
+      cClassTrib: _cc,
+      ibscbs: _oldIbscbs,
+      ...servicoRest
+    } = item;
     return {
-      ...item,
-      situacaoTributariaIbsCbs: ibscbs.situacaoTributariaIbsCbs,
-      classificacaoTributariaIbsCbs: ibscbs.classificacaoTributariaIbsCbs,
-      cClassTrib: ibscbs.cClassTrib,
+      ...servicoRest,
       ibscbs,
     };
   });
 
-  const primaryCIndOp = servicoEnriched.length
-    ? resolveCIndOpForServico(servicoEnriched[0])
-    : NFSE_CINDOP_SERVICO_GERAL;
-
-  const rootIbscbs = buildMinimalServicoIbscbs(
-    payload.ibscbs && typeof payload.ibscbs === 'object' && !Array.isArray(payload.ibscbs)
-      ? payload.ibscbs
-      : {},
-    {
-      finNFSe,
-      operacaoPessoal,
-      cIndOp: primaryCIndOp,
-      servico: servicoEnriched[0] ?? {},
-      simplesNacional,
-    },
-  );
+  const {
+    ibscbs: _rootIbscbs,
+    finNFSe: _fin,
+    finNfse: _fin2,
+    finalidadeNFSe: _finalidade,
+    finalidadeNfse: _finalidade2,
+    indFinal: _indFinal,
+    cIndOp: _cIndOp,
+    ...payloadRest
+  } = payload;
 
   return {
-    ...payload,
-    finNFSe,
-    finalidadeNFSe: payload.finalidadeNFSe ?? payload.finalidadeNfse ?? finNFSe,
-    indFinal: operacaoPessoal,
-    cIndOp: payload.cIndOp ?? primaryCIndOp,
-    ibscbs: rootIbscbs,
+    ...payloadRest,
+    versaoEsquema: payload.versaoEsquema ?? NFSE_VERSAO_ESQUEMA_RTC,
     ...(servicoEnriched.length ? { servico: servicoEnriched } : {}),
   };
 };

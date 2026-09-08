@@ -7,6 +7,7 @@ import {
   NFSE_CINDOP_SERVICO_GERAL,
   NFSE_CINDOP_SERVICO_NO_ESTABELECIMENTO,
   NFSE_FIN_NFSE_REGULAR,
+  NFSE_VERSAO_ESQUEMA_RTC,
   resolveCIndOpForServico,
   resolveFinNfseValue,
   validateNfseCatalogProdutoMetadata,
@@ -42,7 +43,7 @@ test('resolveCIndOpForServico: respeita valor explícito', () => {
   );
 });
 
-test('buildMinimalServicoIbscbs: finNFSe + cIndOp + CST + classificação + SN', () => {
+test('buildMinimalServicoIbscbs: formato PlugNotas com valores.tributacao', () => {
   const ibscbs = buildMinimalServicoIbscbs({}, {
     finNFSe: 0,
     servico: { codigo: '140101' },
@@ -50,33 +51,31 @@ test('buildMinimalServicoIbscbs: finNFSe + cIndOp + CST + classificação + SN',
     simplesNacional: true,
   });
 
-  assert.equal(ibscbs.finNFSe, 0);
-  assert.equal(ibscbs.cIndOp, '050101');
-  assert.equal(ibscbs.situacaoTributariaIbsCbs, '000');
-  assert.equal(ibscbs.cst, '000');
-  assert.equal(ibscbs.cstIbsCbs, '000');
-  assert.equal(ibscbs.classificacaoTributariaIbsCbs, '000001');
+  assert.equal(ibscbs.finalidadeNFSe, 0);
+  assert.equal(ibscbs.codigoOperacao, '050101');
   assert.equal(ibscbs.valores.tributacao.cst, '000');
   assert.equal(ibscbs.valores.tributacao.cct, '000001');
-  assert.equal(ibscbs.regApIBSCBSSN, 1);
-  assert.equal(ibscbs.destinatario.indicador, 0);
+  assert.equal(ibscbs.regApIBSCBSSN, undefined);
+  assert.equal(ibscbs.finNFSe, undefined);
+  assert.equal(ibscbs.destinatario, undefined);
 });
 
 test('buildMinimalServicoIbscbs: ignora cst inválido no input', () => {
   const ibscbs = buildMinimalServicoIbscbs({ cst: 'x' }, { servico: { codigo: '140101' } });
-  assert.equal(ibscbs.situacaoTributariaIbsCbs, '000');
+  assert.equal(ibscbs.valores.tributacao.cst, '000');
 });
 
-test('enrichNfseReformaCabecalhoInEmitPayload: CST e classificação em servico[].ibscbs.valores.tributacao', () => {
+test('enrichNfseReformaCabecalhoInEmitPayload: versaoEsquema RTC + ibscbs limpo', () => {
   const out = enrichNfseReformaCabecalhoInEmitPayload({
     servico: [{ codigo: '140101', cnae: '4520001' }],
   }, { simplesNacional: true });
-  assert.equal(out.servico[0].situacaoTributariaIbsCbs, '000');
-  assert.equal(out.servico[0].ibscbs.situacaoTributariaIbsCbs, '000');
-  assert.equal(out.servico[0].ibscbs.classificacaoTributariaIbsCbs, '000001');
+  assert.equal(out.versaoEsquema, NFSE_VERSAO_ESQUEMA_RTC);
+  assert.equal(out.ibscbs, undefined);
+  assert.equal(out.finNFSe, undefined);
+  assert.equal(out.servico[0].situacaoTributariaIbsCbs, undefined);
   assert.equal(out.servico[0].ibscbs.valores.tributacao.cst, '000');
   assert.equal(out.servico[0].ibscbs.valores.tributacao.cct, '000001');
-  assert.equal(out.servico[0].ibscbs.regApIBSCBSSN, 1);
+  assert.equal(out.servico[0].ibscbs.codigoOperacao, NFSE_CINDOP_SERVICO_NO_ESTABELECIMENTO);
 });
 
 test('buildMinimalServicoIbscbs: preserva valores.tributacao existentes', () => {
@@ -92,15 +91,13 @@ test('buildMinimalServicoIbscbs: preserva valores.tributacao existentes', () => 
   assert.ok(Array.isArray(ibscbs.valores.operacao.documentosReferenciados));
 });
 
-test('enrichNfseReformaCabecalhoInEmitPayload: cIndOp em servico[].ibscbs', () => {
+test('enrichNfseReformaCabecalhoInEmitPayload: cIndOp vira codigoOperacao em ibscbs', () => {
   const out = enrichNfseReformaCabecalhoInEmitPayload({
     idIntegracao: 'teste',
     servico: [{ codigo: '140101', cnae: '4520001' }],
   });
-  assert.equal(out.cIndOp, NFSE_CINDOP_SERVICO_NO_ESTABELECIMENTO);
-  assert.equal(out.servico[0].ibscbs.cIndOp, NFSE_CINDOP_SERVICO_NO_ESTABELECIMENTO);
+  assert.equal(out.cIndOp, undefined);
   assert.equal(out.servico[0].ibscbs.codigoOperacao, NFSE_CINDOP_SERVICO_NO_ESTABELECIMENTO);
-  assert.equal(out.ibscbs.cIndOp, NFSE_CINDOP_SERVICO_NO_ESTABELECIMENTO);
 });
 
 test('validateNfseCatalogProdutoMetadata: rejeita NBS inválido', () => {
@@ -114,12 +111,12 @@ test('validateNfseCatalogProdutoMetadata: aceita cIndOp válido', () => {
   assert.doesNotThrow(() => validateNfseCatalogProdutoMetadata({ cIndOp: '050101' }));
 });
 
-test('enrichNfseReformaCabecalhoInEmitPayload: preserva cIndOp explícito', () => {
+test('enrichNfseReformaCabecalhoInEmitPayload: preserva codigoOperacao explícito', () => {
   const out = enrichNfseReformaCabecalhoInEmitPayload({
     servico: [{
       codigo: '140101',
-      ibscbs: { codigoOperacao: '050102', finNFSe: 0 },
+      ibscbs: { codigoOperacao: '050102', finalidadeNFSe: 0 },
     }],
   });
-  assert.equal(out.servico[0].ibscbs.cIndOp, '050102');
+  assert.equal(out.servico[0].ibscbs.codigoOperacao, '050102');
 });
