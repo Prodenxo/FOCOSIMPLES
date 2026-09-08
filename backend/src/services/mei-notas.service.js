@@ -53,6 +53,11 @@ import {
   resolveRegimeApuracaoTributaria,
 } from './nfse-codigo-nbs.js';
 import {
+  enrichNfseIssInEmitPayload,
+  readNfseNacionalFromEmpresa,
+  resolveNfseIssForServico,
+} from './nfse-iss-defaults.js';
+import {
   extractNfeItemQuantidade,
   extractNfeItemValorUnitario,
   normalizePlugnotasNfePayload,
@@ -443,7 +448,6 @@ const prune = (value) => {
 const buildServicoFromInput = (input) => {
   if (!input || typeof input !== 'object') return null;
   const issSource = input.iss && typeof input.iss === 'object' ? { ...input.iss } : {};
-  delete issSource.aliquota;
   const valor = input.valor || {};
   const codigoRaw = input.codigo || input.codigoServico || null;
   const codigoKey = normalizeNfseServicoCodigoForLength(codigoRaw);
@@ -458,7 +462,9 @@ const buildServicoFromInput = (input) => {
   });
   const codigoTributacao = resolveCodigoTributacaoForServico(input);
 
-  // MEI optante pelo Simples Nacional: não informar alíquota ISS no JSON (regra fiscal / prefeitura).
+  const nfseNacional = input?.nfseNacional !== false;
+  const simplesNacional = input?.simplesNacional !== false;
+
   return prune({
     id: input.id || null,
     codigo,
@@ -466,7 +472,7 @@ const buildServicoFromInput = (input) => {
     cnae,
     codigoNbs,
     codigoTributacao,
-    iss: prune(issSource),
+    iss: resolveNfseIssForServico(issSource, { nfseNacional, simplesNacional }),
     valor: prune({
       ...valor,
       ...(valorServico !== undefined ? { servico: toNumber(valorServico) } : {})
@@ -2290,6 +2296,10 @@ export const emitirNota = async (userId, input) => {
           initialLocalMax: Math.max(initialLocalMax ?? 0, authoritativeMax),
           periodoMax: authoritativeMax,
         };
+        emitPayload = enrichNfseIssInEmitPayload(emitPayload, {
+          nfseNacional: readNfseNacionalFromEmpresa(empresaJsonCache),
+          simplesNacional: empresaJsonCache?.simplesNacional !== false,
+        });
       }
     }
     if (documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE) {
