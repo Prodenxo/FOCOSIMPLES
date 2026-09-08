@@ -1,6 +1,7 @@
 /**
  * Campos da Reforma Tributária exigidos por municípios ISSNET (ex.: Ribeirão Preto).
- * PlugNotas mapeia via `servico[].ibscbs.*` (FAQ Reforma Tributária).
+ * PlugNotas mapeia CST/CCT para TX2 via `servico[].ibscbs.valores.tributacao.{cst,cct}`
+ * (SituacaoTributariaIbsCbs / ClassificacaoTributariaIbsCbs — doc API ibscbsNfse).
  */
 
 import { normalizeCodigoNbs } from './nfse-codigo-nbs.js';
@@ -67,9 +68,13 @@ export const resolveClassificacaoTributariaIbsCbsForServico = (servico = {}) => 
   const ibscbs = servico.ibscbs && typeof servico.ibscbs === 'object' && !Array.isArray(servico.ibscbs)
     ? servico.ibscbs
     : {};
+  const tributacao = ibscbs.valores?.tributacao && typeof ibscbs.valores.tributacao === 'object'
+    ? ibscbs.valores.tributacao
+    : {};
 
   const explicit = normalizeClassificacaoTributariaIbsCbs(
-    ibscbs.classificacaoTributariaIbsCbs
+    tributacao.cct
+    ?? ibscbs.classificacaoTributariaIbsCbs
     ?? ibscbs.cClassTrib
     ?? ibscbs.classCode
     ?? servico.classificacaoTributariaIbsCbs
@@ -88,9 +93,13 @@ export const resolveSituacaoTributariaIbsCbsForServico = (servico = {}) => {
   const ibscbs = servico.ibscbs && typeof servico.ibscbs === 'object' && !Array.isArray(servico.ibscbs)
     ? servico.ibscbs
     : {};
+  const tributacao = ibscbs.valores?.tributacao && typeof ibscbs.valores.tributacao === 'object'
+    ? ibscbs.valores.tributacao
+    : {};
 
   const explicit = normalizeSituacaoTributariaIbsCbs(
-    ibscbs.situacaoTributariaIbsCbs
+    tributacao.cst
+    ?? ibscbs.situacaoTributariaIbsCbs
     ?? ibscbs.cst
     ?? ibscbs.situationCode
     ?? servico.situacaoTributariaIbsCbs
@@ -216,6 +225,13 @@ export const buildMinimalServicoIbscbs = (ibscbsInput = {}, options = {}) => {
     ? Number(source.regApIBSCBSSN)
     : (simplesNacional ? NFSE_REG_AP_IBSCBS_SN_SIMPLES : undefined);
 
+  const existingValores = source.valores && typeof source.valores === 'object' && !Array.isArray(source.valores)
+    ? source.valores
+    : {};
+  const existingTributacao = existingValores.tributacao && typeof existingValores.tributacao === 'object'
+    ? existingValores.tributacao
+    : {};
+
   return {
     ...source,
     finNFSe,
@@ -235,6 +251,14 @@ export const buildMinimalServicoIbscbs = (ibscbsInput = {}, options = {}) => {
     destinatario: {
       indicador: destinatarioSource.indicador ?? source.indDest ?? 0,
       ...destinatarioSource,
+    },
+    valores: {
+      ...existingValores,
+      tributacao: {
+        ...existingTributacao,
+        cst: cstFinal,
+        cct: classificacaoTributariaIbsCbs,
+      },
     },
   };
 };

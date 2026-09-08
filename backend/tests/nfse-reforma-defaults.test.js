@@ -56,6 +56,8 @@ test('buildMinimalServicoIbscbs: finNFSe + cIndOp + CST + classificação + SN',
   assert.equal(ibscbs.cst, '000');
   assert.equal(ibscbs.cstIbsCbs, '000');
   assert.equal(ibscbs.classificacaoTributariaIbsCbs, '000001');
+  assert.equal(ibscbs.valores.tributacao.cst, '000');
+  assert.equal(ibscbs.valores.tributacao.cct, '000001');
   assert.equal(ibscbs.regApIBSCBSSN, 1);
   assert.equal(ibscbs.destinatario.indicador, 0);
 });
@@ -65,14 +67,29 @@ test('buildMinimalServicoIbscbs: ignora cst inválido no input', () => {
   assert.equal(ibscbs.situacaoTributariaIbsCbs, '000');
 });
 
-test('enrichNfseReformaCabecalhoInEmitPayload: CST e classificação em servico[].ibscbs', () => {
+test('enrichNfseReformaCabecalhoInEmitPayload: CST e classificação em servico[].ibscbs.valores.tributacao', () => {
   const out = enrichNfseReformaCabecalhoInEmitPayload({
     servico: [{ codigo: '140101', cnae: '4520001' }],
   }, { simplesNacional: true });
   assert.equal(out.servico[0].situacaoTributariaIbsCbs, '000');
   assert.equal(out.servico[0].ibscbs.situacaoTributariaIbsCbs, '000');
   assert.equal(out.servico[0].ibscbs.classificacaoTributariaIbsCbs, '000001');
+  assert.equal(out.servico[0].ibscbs.valores.tributacao.cst, '000');
+  assert.equal(out.servico[0].ibscbs.valores.tributacao.cct, '000001');
   assert.equal(out.servico[0].ibscbs.regApIBSCBSSN, 1);
+});
+
+test('buildMinimalServicoIbscbs: preserva valores.tributacao existentes', () => {
+  const ibscbs = buildMinimalServicoIbscbs({
+    valores: {
+      operacao: { documentosReferenciados: [] },
+      tributacao: { codigoCreditoPresumido: '10' },
+    },
+  }, { servico: { codigo: '140101' } });
+  assert.equal(ibscbs.valores.tributacao.cst, '000');
+  assert.equal(ibscbs.valores.tributacao.cct, '000001');
+  assert.equal(ibscbs.valores.tributacao.codigoCreditoPresumido, '10');
+  assert.ok(Array.isArray(ibscbs.valores.operacao.documentosReferenciados));
 });
 
 test('enrichNfseReformaCabecalhoInEmitPayload: cIndOp em servico[].ibscbs', () => {
