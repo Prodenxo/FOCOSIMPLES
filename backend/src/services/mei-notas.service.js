@@ -29,7 +29,7 @@ import {
   readRpsFromNfseEmitPayload,
   resolveNfseRpsLocalMaxFromHistory,
 } from './plugnotas/plugnotas-empresa-rps-heal.js';
-import { enrichNfseReformaCabecalhoInEmitPayload } from './nfse-reforma-defaults.js';
+import { enrichNfseReformaCabecalhoInEmitPayload, validateNfseCatalogProdutoMetadata, normalizeCIndOp } from './nfse-reforma-defaults.js';
 import {
   allocateNfseRpsForEmit,
   applyAllocatedNfseRpsToEmitPayload,
@@ -466,6 +466,16 @@ const buildServicoFromInput = (input) => {
   });
   const codigoTributacao = resolveCodigoTributacaoForServico(input);
 
+  const explicitCIndOp = normalizeCIndOp(
+    input.cIndOp
+    ?? input.codigoOperacao
+    ?? input?.ibscbs?.cIndOp
+    ?? input?.ibscbs?.codigoOperacao,
+  );
+  const ibscbsFromInput = explicitCIndOp
+    ? { cIndOp: explicitCIndOp, codigoOperacao: explicitCIndOp }
+    : undefined;
+
   const nfseNacional = input?.nfseNacional !== false;
   const simplesNacional = input?.simplesNacional !== false;
 
@@ -476,6 +486,7 @@ const buildServicoFromInput = (input) => {
     cnae,
     codigoNbs,
     codigoTributacao,
+    ...(ibscbsFromInput ? { ibscbs: ibscbsFromInput } : {}),
     iss: resolveNfseIssForServico(issSource, { nfseNacional, simplesNacional }),
     valor: prune({
       ...valor,
@@ -3495,6 +3506,12 @@ export const criarCatalogoProduto = async (userId, body = {}, options = {}) => {
         } catch (err) {
           throw badRequest(err instanceof Error ? err.message : String(err));
         }
+      } else if (documentType === DOCUMENT_TYPE_NFSE) {
+        try {
+          validateNfseCatalogProdutoMetadata(meta);
+        } catch (err) {
+          throw badRequest(err instanceof Error ? err.message : String(err));
+        }
       }
       row.metadata_json = Object.keys(meta).length ? meta : null;
     }
@@ -3584,6 +3601,12 @@ export const atualizarCatalogoProduto = async (userId, id, body = {}, options = 
           : String(existing?.discriminacao || '').trim();
         try {
           validateNfeCatalogProdutoMetadata(meta, { discriminacao: discriminacaoCtx });
+        } catch (err) {
+          throw badRequest(err instanceof Error ? err.message : String(err));
+        }
+      } else if (docType === DOCUMENT_TYPE_NFSE) {
+        try {
+          validateNfseCatalogProdutoMetadata(meta);
         } catch (err) {
           throw badRequest(err instanceof Error ? err.message : String(err));
         }

@@ -1,14 +1,67 @@
 /**
  * Campos da Reforma Tributária exigidos por municípios ISSNET (ex.: Ribeirão Preto).
- * PlugNotas mapeia finNFSe via `servico[].ibscbs.finNFSe` (FAQ Reforma Tributária).
- * finNFSe: 0 = NFS-e regular (emissão normal).
+ * PlugNotas mapeia via `servico[].ibscbs.*` (FAQ Reforma Tributária).
  */
+
+import { normalizeCodigoNbs } from './nfse-codigo-nbs.js';
 
 /** NFS-e regular — emissão padrão de serviço. */
 export const NFSE_FIN_NFSE_REGULAR = 0;
 
 /** Operação não destinada a uso/consumo pessoal (operacaoPessoal / indFinal). */
 export const NFSE_IND_FINAL_NAO = 0;
+
+/** Serviço físico sobre bem móvel no estabelecimento do prestador (oficina). */
+export const NFSE_CINDOP_SERVICO_NO_ESTABELECIMENTO = '050101';
+
+/** Prestação de serviço fora dos demais indicadores (ex.: remoto/consultoria). */
+export const NFSE_CINDOP_SERVICO_GERAL = '100301';
+
+/**
+ * @param {unknown} codigo
+ * @returns {string}
+ */
+export const normalizeLc116CodigoDigits = (codigo) => String(codigo || '').replace(/\D/g, '');
+
+/**
+ * @param {unknown} value
+ * @returns {string|null}
+ */
+export const normalizeCIndOp = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  const digits = String(value).replace(/\D/g, '').slice(0, 6);
+  return digits.length === 6 ? digits : null;
+};
+
+/**
+ * @param {Record<string, unknown>|null|undefined} servico
+ * @returns {string}
+ */
+export const resolveCIndOpForServico = (servico = {}) => {
+  const ibscbs = servico.ibscbs && typeof servico.ibscbs === 'object' && !Array.isArray(servico.ibscbs)
+    ? servico.ibscbs
+    : {};
+
+  const explicit = normalizeCIndOp(
+    ibscbs.cIndOp
+    ?? ibscbs.codigoOperacao
+    ?? servico.cIndOp
+    ?? servico.codigoOperacao,
+  );
+  if (explicit) return explicit;
+
+  const codigoKey = normalizeLc116CodigoDigits(servico.codigo);
+  if (codigoKey.startsWith('1401') || codigoKey.startsWith('140101')) {
+    return NFSE_CINDOP_SERVICO_NO_ESTABELECIMENTO;
+  }
+
+  const cnae = normalizeLc116CodigoDigits(servico.cnae);
+  if (cnae.startsWith('452') || cnae.startsWith('453') || cnae.startsWith('454')) {
+    return NFSE_CINDOP_SERVICO_NO_ESTABELECIMENTO;
+  }
+
+  return NFSE_CINDOP_SERVICO_GERAL;
+};
 
 /**
  * @param {Record<string, unknown>|null|undefined} source
@@ -41,17 +94,29 @@ const resolveOperacaoPessoalValue = (value) => {
 
 /**
  * @param {Record<string, unknown>|null|undefined} ibscbsInput
- * @param {{ finNFSe?: number, operacaoPessoal?: number }} defaults
+ * @param {{ finNFSe?: number, operacaoPessoal?: number, cIndOp?: string, servico?: Record<string, unknown> }} options
  * @returns {Record<string, unknown>}
  */
-export const buildMinimalServicoIbscbs = (ibscbsInput = {}, defaults = {}) => {
+export const buildMinimalServicoIbscbs = (ibscbsInput = {}, options = {}) => {
   const source = ibscbsInput && typeof ibscbsInput === 'object' ? { ...ibscbsInput } : {};
+  const servico = options.servico && typeof options.servico === 'object' ? options.servico : {};
+
   const finNFSe = resolveFinNfseValue({
-    finNFSe: source.finNFSe ?? source.finNfse ?? source.finalidadeNFSe ?? defaults.finNFSe,
+    finNFSe: source.finNFSe ?? source.finNfse ?? source.finalidadeNFSe ?? options.finNFSe,
   });
   const operacaoPessoal = resolveOperacaoPessoalValue(
-    source.operacaoPessoal ?? source.indFinal ?? defaults.operacaoPessoal,
+    source.operacaoPessoal ?? source.indFinal ?? options.operacaoPessoal,
   );
+  const cIndOp = resolveCIndOpForServico({
+    ...servico,
+    ibscbs: source,
+    cIndOp: source.cIndOp ?? options.cIndOp,
+    codigoOperacao: source.codigoOperacao ?? options.cIndOp,
+  });
+
+  const destinatarioSource = source.destinatario && typeof source.destinatario === 'object' && !Array.isArray(source.destinatario)
+    ? source.destinatario
+    : {};
 
   return {
     ...source,
@@ -59,11 +124,46 @@ export const buildMinimalServicoIbscbs = (ibscbsInput = {}, defaults = {}) => {
     finalidadeNFSe: source.finalidadeNFSe ?? source.finalidadeNfse ?? finNFSe,
     operacaoPessoal,
     indFinal: source.indFinal ?? operacaoPessoal,
+    cIndOp,
+    codigoOperacao: source.codigoOperacao ?? cIndOp,
+    indDest: source.indDest ?? destinatarioSource.indicador ?? 0,
+    destinatario: {
+      indicador: destinatarioSource.indicador ?? source.indDest ?? 0,
+      ...destinatarioSource,
+    },
   };
 };
 
 /**
- * Preenche finNFSe no cabeçalho e em cada servico.ibscbs antes do POST PlugNotas.
+ * Valida metadados NFS-e no catálogo (NBS + cIndOp) — preenchidos pelo contador.
+ *
+ * @param {Record<string, unknown>|null|undefined} metadata
+ * @throws {Error}
+ */
+export const validateNfseCatalogProdutoMetadata = (metadata = {}) => {
+  const source = metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+    ? metadata
+    : {};
+
+  const rawNbs = source.codigoNbs ?? source.codigo_nbs;
+  if (rawNbs !== undefined && rawNbs !== null && String(rawNbs).trim() !== '') {
+    const nbs = normalizeCodigoNbs(rawNbs);
+    if (!nbs) {
+      throw new Error('NBS deve ter 9 dígitos numéricos (começando com 1).');
+    }
+  }
+
+  const rawCIndOp = source.cIndOp ?? source.codigoOperacao;
+  if (rawCIndOp !== undefined && rawCIndOp !== null && String(rawCIndOp).trim() !== '') {
+    const cIndOp = normalizeCIndOp(rawCIndOp);
+    if (!cIndOp) {
+      throw new Error('Indicador de operação (cIndOp) deve ter 6 dígitos.');
+    }
+  }
+};
+
+/**
+ * Preenche campos RTC mínimos no cabeçalho e em cada servico.ibscbs antes do POST PlugNotas.
  *
  * @param {Record<string, unknown>|null|undefined} payload
  * @returns {Record<string, unknown>|null|undefined}
@@ -74,13 +174,6 @@ export const enrichNfseReformaCabecalhoInEmitPayload = (payload) => {
   const finNFSe = resolveFinNfseValue(payload);
   const operacaoPessoal = resolveOperacaoPessoalValue(
     payload.indFinal ?? payload.indFinalNfse ?? payload?.ibscbs?.operacaoPessoal,
-  );
-
-  const rootIbscbs = buildMinimalServicoIbscbs(
-    payload.ibscbs && typeof payload.ibscbs === 'object' && !Array.isArray(payload.ibscbs)
-      ? payload.ibscbs
-      : {},
-    { finNFSe, operacaoPessoal },
   );
 
   const servicos = Array.isArray(payload.servico)
@@ -96,15 +189,36 @@ export const enrichNfseReformaCabecalhoInEmitPayload = (payload) => {
       : {};
     return {
       ...item,
-      ibscbs: buildMinimalServicoIbscbs(itemIbscbs, { finNFSe, operacaoPessoal }),
+      ibscbs: buildMinimalServicoIbscbs(itemIbscbs, {
+        finNFSe,
+        operacaoPessoal,
+        servico: item,
+      }),
     };
   });
+
+  const primaryCIndOp = servicoEnriched.length
+    ? resolveCIndOpForServico(servicoEnriched[0])
+    : NFSE_CINDOP_SERVICO_GERAL;
+
+  const rootIbscbs = buildMinimalServicoIbscbs(
+    payload.ibscbs && typeof payload.ibscbs === 'object' && !Array.isArray(payload.ibscbs)
+      ? payload.ibscbs
+      : {},
+    {
+      finNFSe,
+      operacaoPessoal,
+      cIndOp: primaryCIndOp,
+      servico: servicoEnriched[0] ?? {},
+    },
+  );
 
   return {
     ...payload,
     finNFSe,
     finalidadeNFSe: payload.finalidadeNFSe ?? payload.finalidadeNfse ?? finNFSe,
     indFinal: operacaoPessoal,
+    cIndOp: payload.cIndOp ?? primaryCIndOp,
     ibscbs: rootIbscbs,
     ...(servicoEnriched.length ? { servico: servicoEnriched } : {}),
   };

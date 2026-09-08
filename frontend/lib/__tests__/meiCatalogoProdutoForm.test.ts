@@ -50,6 +50,7 @@ describe('meiCatalogoProdutoForm', () => {
     )
     expect(payload.codigo).toBe('140101')
     expect(payload.cnae).toBe('4211102')
+    expect(payload.metadata_json).toEqual({})
   })
 
   it('aceita catálogo sem alíquota (MEI/Simples)', () => {
@@ -76,6 +77,25 @@ describe('meiCatalogoProdutoForm', () => {
       parseDecimal,
     )
     expect(payload.aliquota).toBeUndefined()
+    expect(payload.metadata_json).toEqual({})
+  })
+
+  it('persiste NBS e cIndOp no metadata_json NFS-e', () => {
+    const payload = buildProdutoCatalogPayload(
+      {
+        codigo: '14.01.01',
+        cnae: '4520001',
+        discriminacao: 'Manutenção veicular',
+        aliquotaStr: '',
+        valorSugeridoStr: '',
+        nfse: { codigoNbs: '120013110', cIndOp: '050101' },
+      },
+      parseDecimal,
+    )
+    expect(payload.metadata_json).toMatchObject({
+      codigoNbs: '120013110',
+      cIndOp: '050101',
+    })
   })
 
   it('aceita produto NF-e e grava tributos completos no metadata', () => {

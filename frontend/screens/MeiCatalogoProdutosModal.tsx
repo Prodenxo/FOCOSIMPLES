@@ -17,6 +17,7 @@ import {
   CODIGO_SERVICO_HINT,
   CODIGO_SERVICO_LABEL,
   normalizeCnaeInput,
+  normalizeCodigoServicoInput,
 } from '../lib/meiCatalogoProdutoForm'
 import {
   catalogProdutoNeedsNfeCompletion,
@@ -25,6 +26,14 @@ import {
   nfeCatalogProdutoFormFieldsFromMetadata,
   type NfeCatalogProdutoFormFields,
 } from '../lib/nfeCatalogProdutoMetadata'
+import {
+  catalogProdutoNeedsNfseReformaCompletion,
+  emptyNfseCatalogProdutoFormFields,
+  lookupSuggestedCodigoNbs,
+  nfseCatalogProdutoFormFieldsFromMetadata,
+  NFSE_CINDOP_OPTIONS,
+  type NfseCatalogProdutoFormFields,
+} from '../lib/nfseCatalogProdutoMetadata'
 import { parseDecimalInput } from '../lib/meiNfseForms'
 import { resolveAppOrigin } from '../lib/appOrigin'
 import type { DocumentType, NfseCatalogProduto } from '../services/meiNotasService'
@@ -88,6 +97,7 @@ type FormState = {
   valorSugerido: string
   documentType: DocumentType
   nfe: NfeCatalogProdutoFormFields
+  nfse: NfseCatalogProdutoFormFields
 }
 
 const emptyForm = (): FormState => ({
@@ -98,6 +108,7 @@ const emptyForm = (): FormState => ({
   valorSugerido: '',
   documentType: 'NFSE',
   nfe: emptyNfeCatalogProdutoFormFields(),
+  nfse: emptyNfseCatalogProdutoFormFields(),
 })
 
 const catalogDocTypeLabel = (documentType?: string | null): string | undefined => {
@@ -319,6 +330,7 @@ export default function MeiCatalogoProdutosModal ({
       valorSugerido: item.valor_sugerido != null ? String(item.valor_sugerido).replace('.', ',') : '',
       documentType: (item.document_type as DocumentType) || 'NFSE',
       nfe: nfeCatalogProdutoFormFieldsFromMetadata(item.metadata_json),
+      nfse: nfseCatalogProdutoFormFieldsFromMetadata(item.metadata_json),
     })
     setFormVisible(true)
   }
@@ -345,6 +357,7 @@ export default function MeiCatalogoProdutosModal ({
           valorSugeridoStr: form.valorSugerido,
           documentType: form.documentType,
           nfe: form.nfe,
+          nfse: form.nfse,
         },
         parseDecimalInput,
         editingItem?.metadata_json as Record<string, unknown> | null | undefined,
@@ -568,11 +581,13 @@ export default function MeiCatalogoProdutosModal ({
               )
               const missingCodigo = !String(item.codigo || '').trim()
               const needsNcm = isNfeLike && catalogProdutoNeedsNfeCompletion(item)
+              const needsReforma = !isNfeLike && catalogProdutoNeedsNfseReformaCompletion(item)
               const tipo = catalogDocTypeLabel(item.document_type)
               const metaBits = [
                 tipo,
                 item.cnae ? `CNAE ${item.cnae}` : null,
                 !isNfeLike && (needsCodigo || missingCodigo) ? 'Completar código LC 116' : null,
+                needsReforma ? 'Contador: configurar IBS/CBS' : null,
                 needsNcm ? 'Completar cadastro fiscal' : null,
               ].filter(Boolean)
               return (
@@ -926,6 +941,15 @@ export default function MeiCatalogoProdutosModal ({
           placeholder="Ex.: 14.01.01 ou 140101"
           value={form.codigo}
           onChangeText={(t) => setForm((f) => ({ ...f, codigo: t }))}
+          onBlur={() => {
+            const suggested = lookupSuggestedCodigoNbs(form.codigo)
+            if (suggested && !form.nfse.codigoNbs.trim()) {
+              setForm((f) => ({
+                ...f,
+                nfse: { ...f.nfse, codigoNbs: suggested },
+              }))
+            }
+          }}
         />
         <MeiFormField
           label={CNAE_LABEL}
@@ -968,6 +992,65 @@ export default function MeiCatalogoProdutosModal ({
           onChangeText={(t) => setForm((f) => ({ ...f, valorSugerido: t }))}
           keyboardType="decimal-pad"
         />
+        <MeiFormSectionLabel>Reforma Tributária (contador)</MeiFormSectionLabel>
+        <MeiFormBanner>
+          Campos IBS/CBS exigidos por algumas prefeituras (ex.: Ribeirão Preto). O contador
+          configura uma vez; na emissão o cliente só escolhe o serviço.
+        </MeiFormBanner>
+        <MeiFormField
+          label="NBS (9 dígitos)"
+          placeholder="Ex.: 120013110"
+          hint="Nomenclatura Brasileira de Serviços — classifica o tipo de serviço. Diferente do código LC 116."
+          value={form.nfse.codigoNbs}
+          onChangeText={(t) =>
+            setForm((f) => ({
+              ...f,
+              nfse: { ...f.nfse, codigoNbs: t.replace(/\D/g, '').slice(0, 9) },
+            }))
+          }
+          keyboardType="number-pad"
+          maxLength={9}
+        />
+        <MeiFormField
+          label="Indicador de operação (cIndOp)"
+          placeholder="Ex.: 050101"
+          hint={
+            NFSE_CINDOP_OPTIONS.map((o) => o.label).join('\n')
+          }
+          value={form.nfse.cIndOp}
+          onChangeText={(t) =>
+            setForm((f) => ({
+              ...f,
+              nfse: { ...f.nfse, cIndOp: t.replace(/\D/g, '').slice(0, 6) },
+            }))
+          }
+          keyboardType="number-pad"
+          maxLength={6}
+        />
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+          {NFSE_CINDOP_OPTIONS.map((opt) => (
+            <Pressable
+              key={opt.value}
+              accessibilityRole="button"
+              onPress={() =>
+                setForm((f) => ({
+                  ...f,
+                  nfse: { ...f.nfse, cIndOp: opt.value },
+                }))
+              }
+              style={{
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: form.nfse.cIndOp === opt.value ? theme.primary : choiceBorder,
+                backgroundColor: form.nfse.cIndOp === opt.value ? `${theme.primary}18` : 'transparent',
+              }}
+            >
+              <Text style={{ color: theme.text, fontSize: 12, fontWeight: '600' }}>{opt.value}</Text>
+            </Pressable>
+          ))}
+        </View>
           </>
         )}
       </MeiFormSheet>

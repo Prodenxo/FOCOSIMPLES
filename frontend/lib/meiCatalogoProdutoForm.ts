@@ -8,6 +8,12 @@ import {
   type NfeCatalogProdutoFormFields,
   validateNfeCatalogProdutoFormFields,
 } from './nfeCatalogProdutoMetadata'
+import {
+  buildNfseCatalogProdutoMetadata,
+  emptyNfseCatalogProdutoFormFields,
+  type NfseCatalogProdutoFormFields,
+  validateNfseCatalogProdutoFormFields,
+} from './nfseCatalogProdutoMetadata'
 
 export const NFSE_SERVICO_CODIGO_MIN_LENGTH = 6
 export const CNAE_DIGITS_LENGTH = 7
@@ -52,6 +58,7 @@ export interface ProdutoCatalogFormInput {
   valorSugeridoStr: string
   documentType?: DocumentType
   nfe?: NfeCatalogProdutoFormFields
+  nfse?: NfseCatalogProdutoFormFields
 }
 
 export function validateProdutoCatalogForm (
@@ -107,6 +114,10 @@ export function validateProdutoCatalogForm (
     if (v === null || v < 0) return 'Valor sugerido inválido.'
   }
 
+  const nfseFields = input.nfse ?? emptyNfseCatalogProdutoFormFields()
+  const nfseErr = validateNfseCatalogProdutoFormFields(nfseFields)
+  if (nfseErr) return nfseErr
+
   return null
 }
 
@@ -144,5 +155,9 @@ export function buildProdutoCatalogPayload (
     discriminacao: input.discriminacao.trim(),
     ...(aliquotaOpt !== null && aliquotaOpt !== undefined ? { aliquota: aliquotaOpt } : {}),
     ...(valorOpt !== null && valorOpt !== undefined ? { valor_sugerido: valorOpt } : {}),
+    metadata_json: buildNfseCatalogProdutoMetadata(
+      existingMetadata,
+      input.nfse ?? emptyNfseCatalogProdutoFormFields(),
+    ),
   }
 }

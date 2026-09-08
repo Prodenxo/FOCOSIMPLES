@@ -189,6 +189,7 @@ import {
 } from '../lib/empresaBusinessType';
 import { mapCatalogProdutoToNfeItem } from '../lib/mapCatalogProdutoToNfeItem';
 import { isCatalogProdutoUsableForNfeLike, catalogProdutoNeedsNfeCompletion, resolveCatalogProdutoNcm } from '../lib/nfeCatalogProdutoMetadata';
+import { applyCatalogProdutoToNfseServico, catalogProdutoNeedsNfseReformaCompletion } from '../lib/nfseCatalogProdutoMetadata';
 import NfeEmitItemLeigoCard from '../components/mei/NfeEmitItemLeigoCard';
 import { getDefaultNfeDestinatarioEndereco } from '../lib/meiNfeDestinatarioEndereco';
 import { fetchNfsePrestadorPrefill } from '../services/meiPrestadorPrefillService';
@@ -2827,18 +2828,21 @@ function MeiScreenContent() {
 
   const handleSelectCatalogProduto = (item: NfseCatalogProduto) => {
     if (emitirNotaType === 'NFSE') {
-      const codigoCatalogo = String(item.codigo ?? '').trim();
+      const servicoPrefill = applyCatalogProdutoToNfseServico(item);
+      const codigoCatalogo = servicoPrefill.codigo;
       setNfseForm((f) => ({
         ...f,
         servico: {
           ...f.servico,
-          codigo: codigoCatalogo,
-          cnae: item.cnae ?? '',
-          discriminacao: item.discriminacao ?? '',
-          aliquota: item.aliquota != null ? String(item.aliquota) : '',
-          valorServico: item.valor_sugerido != null ? String(item.valor_sugerido) : '',
+          ...servicoPrefill,
         },
       }));
+      if (catalogProdutoNeedsNfseReformaCompletion(item)) {
+        showToast(
+          'Este serviço ainda não tem NBS/cIndOp configurados pelo contador. A emissão pode ser rejeitada em algumas cidades.',
+          'error',
+        );
+      }
       if (!codigoCatalogo || codigoCatalogo.replace(/[^0-9A-Za-z]/g, '').length < 6) {
         showToast(
           'Este serviço ainda não tem código LC 116 completo (mín. 6 caracteres, ex.: 17.19.01). Complete o campo Código serviço.',

@@ -101,6 +101,10 @@ export interface NfseServicoInput {
   /** Opcional — MEI/Simples Nacional: o backend não repassa alíquota ISS na NFS-e. */
   aliquota?: string | number;
   valorServico: string | number;
+  /** NBS — Nomenclatura Brasileira de Serviços (Reforma / NFS-e Nacional). */
+  codigoNbs?: string;
+  /** Indicador de operação IBS/CBS (6 dígitos) — configurado no catálogo pelo contador. */
+  cIndOp?: string;
 }
 
 export interface EmitirNfseInput {
