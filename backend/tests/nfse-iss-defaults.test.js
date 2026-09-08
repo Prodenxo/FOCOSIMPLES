@@ -20,6 +20,16 @@ test('resolveNfseIssForServico: defaults Simples municipal (tipo 1 + alíquota 2
   });
 });
 
+test('resolveNfseIssForServico: ISSNETONLINE30 Simples (tipo 6 + alíquota 2)', () => {
+  const iss = resolveNfseIssForServico({}, {
+    simplesNacional: true,
+    nfseNacional: false,
+    issnetOnline30: true,
+  });
+  assert.equal(iss.tipoTributacao, 6);
+  assert.equal(iss.aliquota, 2);
+});
+
 test('resolveNfseIssForServico: defaults Simples nacional (tipo 6 + alíquota 2)', () => {
   const iss = resolveNfseIssForServico({}, { simplesNacional: true, nfseNacional: true });
   assert.equal(iss.tipoTributacao, 6);
@@ -66,6 +76,7 @@ test('readNfseNacionalFromEmpresa: false quando config desliga nacional', () => 
 test('resolveDefaultTipoTributacao e resolveNfseIssAliquota', () => {
   assert.equal(resolveDefaultTipoTributacao({ nfseNacional: false }), 1);
   assert.equal(resolveDefaultTipoTributacao({ nfseNacional: true }), 6);
+  assert.equal(resolveDefaultTipoTributacao({ nfseNacional: false, issnetOnline30: true }), 6);
   assert.equal(resolveNfseIssAliquota({}, { nfseNacional: false }), 2);
   assert.equal(resolveNfseIssAliquota({ aliquota: 0 }, { nfseNacional: false }), 0);
 });

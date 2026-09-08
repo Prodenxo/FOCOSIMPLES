@@ -21,16 +21,19 @@ export const parseNfseIssAliquota = (value) => {
 };
 
 /**
- * @param {{ nfseNacional?: boolean, simplesNacional?: boolean }} [options]
+ * @param {{ nfseNacional?: boolean, simplesNacional?: boolean, issnetOnline30?: boolean }} [options]
  * @returns {number}
  */
 export const resolveDefaultTipoTributacao = ({
   nfseNacional = true,
   simplesNacional = true,
+  issnetOnline30 = false,
 } = {}) => {
   if (simplesNacional !== false) {
-    // Nacional ADN: 6 (Simples). Municipal ISSNET/ABRASF: 1 (tributável no município).
-    return nfseNacional === false ? 1 : 6;
+    if (issnetOnline30 || nfseNacional !== false) {
+      return 6;
+    }
+    return 1;
   }
   return 1;
 };
@@ -54,17 +57,17 @@ export const resolveNfseIssAliquota = (issInput = {}, options = {}) => {
 
 /**
  * @param {Record<string, unknown>|null|undefined} issInput
- * @param {{ nfseNacional?: boolean, simplesNacional?: boolean }} [options]
+ * @param {{ nfseNacional?: boolean, simplesNacional?: boolean, issnetOnline30?: boolean }} [options]
  * @returns {{ tipoTributacao: number, exigibilidade: number, retido: boolean, aliquota: number, [key: string]: unknown }}
  */
 export const resolveNfseIssForServico = (issInput = {}, options = {}) => {
-  const { simplesNacional = true, nfseNacional = true } = options;
+  const { simplesNacional = true, nfseNacional = true, issnetOnline30 = false } = options;
   const source = issInput && typeof issInput === 'object' ? { ...issInput } : {};
 
   const tipoRaw = source.tipoTributacao;
   const tipoTributacao = Number.isFinite(Number(tipoRaw))
     ? Number(tipoRaw)
-    : resolveDefaultTipoTributacao({ nfseNacional, simplesNacional });
+    : resolveDefaultTipoTributacao({ nfseNacional, simplesNacional, issnetOnline30 });
 
   const exigRaw = source.exigibilidade;
   const exigibilidade = Number.isFinite(Number(exigRaw))
@@ -120,7 +123,7 @@ export const mergeNfseServicoIssInput = (servicoItem = {}) => {
 /**
  * Garante bloco `iss` em cada item de `servico` antes do POST PlugNotas.
  * @param {Record<string, unknown>|null|undefined} payload
- * @param {{ nfseNacional?: boolean, simplesNacional?: boolean }} [options]
+ * @param {{ nfseNacional?: boolean, simplesNacional?: boolean, issnetOnline30?: boolean }} [options]
  * @returns {Record<string, unknown>|null|undefined}
  */
 export const enrichNfseIssInEmitPayload = (payload, options = {}) => {

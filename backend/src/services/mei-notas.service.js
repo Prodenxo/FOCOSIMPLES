@@ -32,6 +32,7 @@ import {
 import {
   enrichNfseReformaCabecalhoInEmitPayload,
   readCodigoIbgeFromEmpresa,
+  requiresIssnetRtcEmitSchema,
   validateNfseCatalogProdutoMetadata,
   normalizeCIndOp,
 } from './nfse-reforma-defaults.js';
@@ -2326,6 +2327,7 @@ export const emitirNota = async (userId, input) => {
         await ensureEmpresaPlugnotasRpsForNfseEmit(cnpjPrestadorNfse, empresaJsonCache);
         const codigoIbgePrestador = readCodigoIbgeFromEmpresa(empresaJsonCache);
         const nfseNacionalEmit = readNfseNacionalFromEmpresa(empresaJsonCache);
+        const issnetOnline30 = requiresIssnetRtcEmitSchema(codigoIbgePrestador);
         const [initialLocalMax, authoritativeMax] = await Promise.all([
           queryMaxRpsNumeroEmitted(userId, cnpjPrestadorNfse),
           queryAuthoritativeNfseRpsMaxUsed(cnpjPrestadorNfse, 0),
@@ -2335,12 +2337,14 @@ export const emitirNota = async (userId, input) => {
           simplesNacional: empresaJsonCache?.simplesNacional !== false,
           nfseNacional: nfseNacionalEmit,
           codigoIbge: codigoIbgePrestador,
+          issnetOnline30,
           initialLocalMax: Math.max(initialLocalMax ?? 0, authoritativeMax),
           periodoMax: authoritativeMax,
         };
         emitPayload = enrichNfseIssInEmitPayload(emitPayload, {
           nfseNacional: nfseNacionalEmit,
           simplesNacional: empresaJsonCache?.simplesNacional !== false,
+          issnetOnline30,
         });
       }
     }

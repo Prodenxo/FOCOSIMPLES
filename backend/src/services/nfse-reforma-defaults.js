@@ -24,8 +24,11 @@ export const NFSE_SITUACAO_TRIBUTARIA_IBSCBS_DEFAULT = '000';
 /** Classificação tributária IBS/CBS genérica para serviço. */
 export const NFSE_CLASSIFICACAO_TRIBUTARIA_IBSCBS_DEFAULT = '000001';
 
-/** ISSNET municipal RTC: só versaoEsquema (versao 1.01 é exclusiva da NFS-e Nacional). */
+/** ISSNET municipal RTC: versão base IBS/CBS (legado parcial). */
 export const NFSE_VERSAO_ESQUEMA_RTC = 'RTC';
+
+/** ISSNETONLINE30 / NT007 — layout nacional via webservice municipal (Ribeirão Preto). */
+export const NFSE_VERSAO_ESQUEMA_RTC007 = 'RTC007';
 
 /** Versão de layout da NFS-e Nacional (NT 1.01 / DPS). */
 export const NFSE_VERSAO_LAYOUT_NACIONAL = '1.01';
@@ -274,6 +277,20 @@ export const requiresIssnetRtcEmitSchema = (codigoIbge) => {
 export const requiresIssnetRtcNfseNacional = requiresIssnetRtcEmitSchema;
 
 /**
+ * Tabela ISSNETONLINE30 — CodigoTributacaoMunicipio × alíquota ISS (doc TecnoSpeed).
+ * @param {unknown} aliquota
+ * @returns {string}
+ */
+export const resolveCodigoTributacaoIssnetFromAliquota = (aliquota) => {
+  const parsed = Number(aliquota);
+  if (!Number.isFinite(parsed)) return '001';
+  if (Math.abs(parsed - 2.5) < 0.01) return '004';
+  if (Math.abs(parsed - 3) < 0.01) return '007';
+  if (Math.abs(parsed - 5) < 0.01) return '006';
+  return '001';
+};
+
+/**
  * @param {Record<string, unknown>|null|undefined} ibscbsInput
  * @param {{ finNFSe?: number, operacaoPessoal?: number, cIndOp?: string, servico?: Record<string, unknown>, simplesNacional?: boolean }} options
  * @returns {Record<string, unknown>}
@@ -449,8 +466,12 @@ export const enrichNfseReformaCabecalhoInEmitPayload = (payload, options = {}) =
       ibscbs: _oldIbscbs,
       ...servicoRest
     } = item;
+    const iss = servicoRest.iss && typeof servicoRest.iss === 'object' ? servicoRest.iss : {};
+    const codigoTributacao = servicoRest.codigoTributacao
+      ?? resolveCodigoTributacaoIssnetFromAliquota(iss.aliquota);
     return {
       ...servicoRest,
+      ...(codigoTributacao ? { codigoTributacao } : {}),
       ibscbs,
     };
   });
@@ -471,7 +492,7 @@ export const enrichNfseReformaCabecalhoInEmitPayload = (payload, options = {}) =
 
   const nfseNacional = options.nfseNacional === true;
 
-  const emitente = nfseNacional && codigoIbge.length === 7
+  const emitente = codigoIbge.length === 7
     ? {
       ...(payload.emitente && typeof payload.emitente === 'object' ? payload.emitente : {}),
       tipo: Number(payload?.emitente?.tipo) === 2 ? 2 : 1,
@@ -479,18 +500,15 @@ export const enrichNfseReformaCabecalhoInEmitPayload = (payload, options = {}) =
     }
     : undefined;
 
-  const rtcHeader = nfseNacional
-    ? {
-      versao: payload.versao ?? NFSE_VERSAO_LAYOUT_NACIONAL,
-      versaoEsquema: payload.versaoEsquema ?? NFSE_VERSAO_ESQUEMA_RTC,
-    }
-    : {
-      versaoEsquema: payload.versaoEsquema ?? NFSE_VERSAO_ESQUEMA_RTC,
-    };
+  const rtcHeader = {
+    versao: payload.versao ?? NFSE_VERSAO_LAYOUT_NACIONAL,
+    versaoEsquema: payload.versaoEsquema ?? NFSE_VERSAO_ESQUEMA_RTC007,
+  };
 
   return {
     ...payloadRest,
     ...rtcHeader,
+    ...(simplesNacional && payloadRest.naturezaTributacao == null ? { naturezaTributacao: 1 } : {}),
     ...(emitente ? { emitente } : {}),
     ...(servicoEnriched.length ? { servico: servicoEnriched } : {}),
   };
