@@ -83,6 +83,18 @@ test('enrichNfseReformaCabecalhoInEmitPayload: obra 07.xx usa cIndOp 020201', ()
   assert.equal(out.servico[0].ibscbs.codigoOperacao, '020201');
 });
 
+test('enrichNfseReformaCabecalhoInEmitPayload: obra 07.xx sem municipioIncidenciaIbsCbs duplicado', () => {
+  const out = enrichNfseReformaCabecalhoInEmitPayload({
+    servico: [{
+      codigo: '070602',
+      codigoCidadeIncidencia: '3543402',
+      iss: { aliquota: 2 },
+    }],
+  }, { simplesNacional: true, nfseNacional: false, codigoIbge: '3543402' });
+  assert.equal(out.servico[0].ibscbs.municipioIncidenciaIbsCbs, undefined);
+  assert.equal(out.servico[0].codigoCidadeIncidencia, '3543402');
+});
+
 test('enrichNfseReformaCabecalhoInEmitPayload: obra 07.xx não infere codigoTributacao pela alíquota', () => {
   const out = enrichNfseReformaCabecalhoInEmitPayload({
     servico: [{ codigo: '070602', iss: { aliquota: 2 } }],

@@ -358,15 +358,47 @@ export const enrichNfseObraOnEmitPayload = (payload, options = {}) => {
 };
 
 /**
- * Para serviços de obra (LC 116 07.xx), o ISS incide no município da execução.
- * Preenche `cidadePrestacao` na raiz quando ausente (endereço NÃO vai em servico.obra).
+ * @param {Record<string, unknown>|null|undefined} payload
+ * @returns {boolean}
+ */
+export const payloadHasNfseObraServico = (payload) => {
+  const servicos = Array.isArray(payload?.servico)
+    ? payload.servico
+    : payload?.servico && typeof payload.servico === 'object'
+      ? [payload.servico]
+      : [];
+  return servicos.some((item) => item && requiresNfseObraForServicoCodigo(item.codigo));
+};
+
+/**
+ * ISSNETONLINE30 / DPS 1.01: endereço da obra NÃO vai em `cidadePrestacao` (ABRASF).
+ * Local da execução → `servico.codigoCidadeIncidencia` + `servico.obra`.
+ * `cidadePrestacao` com logradouro/CEP quebra o XSD → E160.
  *
  * @param {Record<string, unknown>|null|undefined} payload
- * @param {{ servicosInput?: Array<Record<string, unknown>>, tomadorEndereco?: Record<string, unknown>|null }} [options]
+ * @returns {Record<string, unknown>|null|undefined}
+ */
+export const stripCidadePrestacaoForIssnetRtcObra = (payload) => {
+  if (!payload || typeof payload !== 'object') return payload;
+  if (!payloadHasNfseObraServico(payload)) return payload;
+  if (!payload.cidadePrestacao) return payload;
+  const { cidadePrestacao: _removed, ...rest } = payload;
+  return rest;
+};
+/**
+ * Para serviços de obra (LC 116 07.xx), o ISS incide no município da execução.
+ * Preenche `cidadePrestacao` na raiz quando ausente — exceto ISSNET RTC (E160).
+ *
+ * @param {Record<string, unknown>|null|undefined} payload
+ * @param {{ servicosInput?: Array<Record<string, unknown>>, tomadorEndereco?: Record<string, unknown>|null, issnetOnline30?: boolean }} [options]
  * @returns {Record<string, unknown>|null|undefined}
  */
 export const enrichNfseCidadePrestacaoFromObra = (payload, options = {}) => {
   if (!payload || typeof payload !== 'object') return payload;
+
+  if (options.issnetOnline30 && payloadHasNfseObraServico(payload)) {
+    return stripCidadePrestacaoForIssnetRtcObra(payload);
+  }
 
   const existing = payload.cidadePrestacao;
   if (existing && typeof existing === 'object' && !Array.isArray(existing)) {

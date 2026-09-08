@@ -10,6 +10,7 @@ import {
   NFSE_OBRA_CODIGO_SEM_CADASTRO,
   requiresNfseObraForServicoCodigo,
   resolveNfseObraCodigoForEmit,
+  stripCidadePrestacaoForIssnetRtcObra,
   validateNfseObraEndereco,
 } from '../src/services/nfse-obra-defaults.js';
 
@@ -162,4 +163,38 @@ test('enrichNfseCidadePrestacaoFromObra — usa input da obra e endereço do tom
   assert.equal(out.cidadePrestacao?.descricao, 'São Paulo');
   assert.equal(out.cidadePrestacao?.estado, 'SP');
   assert.equal(out.cidadePrestacao?.logradouro, 'Av Paulista');
+});
+
+test('stripCidadePrestacaoForIssnetRtcObra — remove cidadePrestacao ABRASF (E160)', () => {
+  const out = stripCidadePrestacaoForIssnetRtcObra({
+    cidadePrestacao: {
+      codigo: '3543402',
+      logradouro: 'Rua A',
+      cep: '14000000',
+    },
+    servico: [{ codigo: '070602', obra: { codigo: '000' } }],
+  });
+  assert.equal(out.cidadePrestacao, undefined);
+  assert.equal(out.servico[0].obra.codigo, '000');
+});
+
+test('enrichNfseCidadePrestacaoFromObra — ISSNET RTC obra não envia cidadePrestacao', () => {
+  const out = enrichNfseCidadePrestacaoFromObra({
+    servico: [{ codigo: '070602' }],
+    tomador: {
+      endereco: {
+        codigoCidade: '3543402',
+        descricaoCidade: 'Ribeirão Preto',
+        estado: 'SP',
+        cep: '14000000',
+        logradouro: 'Rua A',
+        numero: '1',
+        bairro: 'Centro',
+      },
+    },
+  }, {
+    issnetOnline30: true,
+    servicosInput: [{ codigo: '070602', obra: { usarEnderecoTomador: true } }],
+  });
+  assert.equal(out.cidadePrestacao, undefined);
 });

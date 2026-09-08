@@ -490,6 +490,7 @@ export const enrichNfseReformaCabecalhoInEmitPayload = (payload, options = {}) =
       ?? '',
     ).replace(/\D/g, '').slice(0, 7);
     const municipioIncidenciaIbsCbs = codigoCidadeIncidencia.length === 7
+      && !requiresNfseObraForServicoCodigo(servicoBase.codigo)
       ? codigoCidadeIncidencia
       : undefined;
     const ibscbsWithMunicipio = municipioIncidenciaIbsCbs && !ibscbs.municipioIncidenciaIbsCbs
