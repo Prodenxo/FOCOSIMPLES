@@ -448,6 +448,9 @@ const prune = (value) => {
 const buildServicoFromInput = (input) => {
   if (!input || typeof input !== 'object') return null;
   const issSource = input.iss && typeof input.iss === 'object' ? { ...input.iss } : {};
+  if (input.aliquota !== undefined && input.aliquota !== null && input.aliquota !== '' && issSource.aliquota === undefined) {
+    issSource.aliquota = input.aliquota;
+  }
   const valor = input.valor || {};
   const codigoRaw = input.codigo || input.codigoServico || null;
   const codigoKey = normalizeNfseServicoCodigoForLength(codigoRaw);

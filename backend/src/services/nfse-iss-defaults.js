@@ -1,10 +1,24 @@
 /**
  * Defaults do bloco `servico.iss` exigido pelo PlugNotas (municipal e nacional).
- * Optantes Simples Nacional não enviam alíquota ISS (regra fiscal / prefeitura).
+ * Emissão municipal (ISSNET/ABRASF) exige `iss.aliquota` mesmo para Simples Nacional.
  */
 
 /** Exigibilidade: 1 = exigível (padrão ABRASF / PlugNotas). */
 export const NFSE_ISS_EXIGIBILIDADE_EXIGIVEL = 1;
+
+/** Fallback quando o usuário/catálogo não informou alíquota (validação JSON PlugNotas). */
+export const NFSE_ISS_ALIQUOTA_DEFAULT = 2;
+
+/**
+ * @param {unknown} value
+ * @returns {number|null}
+ */
+export const parseNfseIssAliquota = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return parsed;
+};
 
 /**
  * @param {{ nfseNacional?: boolean, simplesNacional?: boolean }} [options]
@@ -24,7 +38,24 @@ export const resolveDefaultTipoTributacao = ({
 /**
  * @param {Record<string, unknown>|null|undefined} issInput
  * @param {{ nfseNacional?: boolean, simplesNacional?: boolean }} [options]
- * @returns {{ tipoTributacao: number, exigibilidade: number, retido: boolean, [key: string]: unknown }}
+ * @returns {number}
+ */
+export const resolveNfseIssAliquota = (issInput = {}, options = {}) => {
+  const explicit = parseNfseIssAliquota(issInput?.aliquota);
+  if (explicit !== null) return explicit;
+
+  const { nfseNacional = true } = options;
+  // Municipal sempre exige alíquota no JSON; nacional SN também usa no exemplo PlugNotas.
+  if (nfseNacional === false || options.simplesNacional !== false) {
+    return NFSE_ISS_ALIQUOTA_DEFAULT;
+  }
+  return NFSE_ISS_ALIQUOTA_DEFAULT;
+};
+
+/**
+ * @param {Record<string, unknown>|null|undefined} issInput
+ * @param {{ nfseNacional?: boolean, simplesNacional?: boolean }} [options]
+ * @returns {{ tipoTributacao: number, exigibilidade: number, retido: boolean, aliquota: number, [key: string]: unknown }}
  */
 export const resolveNfseIssForServico = (issInput = {}, options = {}) => {
   const { simplesNacional = true, nfseNacional = true } = options;
@@ -44,17 +75,13 @@ export const resolveNfseIssForServico = (issInput = {}, options = {}) => {
     tipoTributacao,
     exigibilidade,
     retido: source.retido === true,
+    aliquota: resolveNfseIssAliquota(source, { nfseNacional, simplesNacional }),
   };
 
   for (const key of ['processoSuspensao', 'valor', 'valorRetido']) {
     if (source[key] !== undefined && source[key] !== null && source[key] !== '') {
       iss[key] = source[key];
     }
-  }
-
-  // Simples Nacional / MEI: não informar alíquota ISS no JSON.
-  if (simplesNacional === false && source.aliquota !== undefined && source.aliquota !== null && source.aliquota !== '') {
-    iss.aliquota = source.aliquota;
   }
 
   return iss;
@@ -69,6 +96,25 @@ export const readNfseNacionalFromEmpresa = (empresaJson) => {
   const config = nfse?.config ?? nfse?.Config ?? {};
   if (config.nfseNacional === false) return false;
   return true;
+};
+
+/**
+ * @param {Record<string, unknown>|null|undefined} servicoItem
+ * @returns {Record<string, unknown>}
+ */
+export const mergeNfseServicoIssInput = (servicoItem = {}) => {
+  const iss = servicoItem.iss && typeof servicoItem.iss === 'object'
+    ? { ...servicoItem.iss }
+    : {};
+  if (
+    servicoItem.aliquota !== undefined
+    && servicoItem.aliquota !== null
+    && servicoItem.aliquota !== ''
+    && iss.aliquota === undefined
+  ) {
+    iss.aliquota = servicoItem.aliquota;
+  }
+  return iss;
 };
 
 /**
@@ -88,7 +134,7 @@ export const enrichNfseIssInEmitPayload = (payload, options = {}) => {
       if (!item || typeof item !== 'object') return item;
       return {
         ...item,
-        iss: resolveNfseIssForServico(item.iss, options),
+        iss: resolveNfseIssForServico(mergeNfseServicoIssInput(item), options),
       };
     }),
   };
