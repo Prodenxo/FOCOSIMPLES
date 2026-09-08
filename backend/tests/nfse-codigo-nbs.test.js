@@ -21,6 +21,7 @@ test('lookupDefaultCodigoNbs resolve códigos LC 116 conhecidos', () => {
   assert.equal(lookupDefaultCodigoNbs('17.06.01'), '114061100');
   assert.equal(lookupDefaultCodigoNbs('140101'), '120013110');
   assert.equal(lookupDefaultCodigoNbs('060301'), '126023000');
+  assert.equal(lookupDefaultCodigoNbs('070602'), '101072000');
   assert.equal(lookupDefaultCodigoNbs('999999'), null);
 });
 

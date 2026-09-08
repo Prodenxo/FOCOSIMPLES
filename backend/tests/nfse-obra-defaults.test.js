@@ -124,6 +124,7 @@ test('enrichNfseObraOnEmitPayload — anexa grupo obra após prune simulado', ()
   });
   assert.equal(out.servico[0].obra?.codigo, NFSE_OBRA_CODIGO_SEM_CADASTRO);
   assert.equal(out.servico[0].obra?.endereco, undefined);
+  assert.equal(out.servico[0].codigoCidadeIncidencia, '3543402');
 });
 
 test('enrichNfseCidadePrestacaoFromObra — usa input da obra e endereço do tomador', () => {

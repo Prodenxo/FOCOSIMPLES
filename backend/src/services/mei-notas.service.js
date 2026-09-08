@@ -832,7 +832,11 @@ const validatePayload = (payload) => {
     if (!item?.obra || typeof item.obra !== 'object' || !String(item.obra.codigo || '').trim()) {
       throw badRequest('Informe os dados da obra (local onde o serviço foi executado).');
     }
-    const codigoCidade = String(payload?.cidadePrestacao?.codigo || '').replace(/\D/g, '').slice(0, 7);
+    const codigoCidade = String(
+      item?.codigoCidadeIncidencia
+      ?? payload?.cidadePrestacao?.codigo
+      ?? '',
+    ).replace(/\D/g, '').slice(0, 7);
     if (codigoCidade.length !== 7) {
       throw badRequest('Informe o município (código IBGE) do local da obra.');
     }

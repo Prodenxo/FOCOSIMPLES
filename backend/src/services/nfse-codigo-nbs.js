@@ -12,6 +12,8 @@ export const NFSE_LC116_NBS_DEFAULTS = {
   '060301': '126023000',
   /** 17.06.01 — propaganda / promoção de vendas (campanhas publicitárias) */
   '170601': '114061100',
+  /** 07.06.02 — colocação de placas de gesso (com material do cliente) */
+  '070602': '101072000',
 };
 
 const LC116_KEY_LEN = 6;

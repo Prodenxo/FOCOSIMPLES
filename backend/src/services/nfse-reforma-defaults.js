@@ -19,6 +19,9 @@ export const NFSE_CINDOP_SERVICO_NO_ESTABELECIMENTO = '050101';
 /** Prestação de serviço fora dos demais indicadores (ex.: remoto/consultoria). */
 export const NFSE_CINDOP_SERVICO_GERAL = '100301';
 
+/** Execução de obra/construção no endereço do tomador (LC 116 07.xx). */
+export const NFSE_CINDOP_OBRA_NO_LOCAL = '020201';
+
 /** CST IBS/CBS — tributação padrão (PlugNotas / ISSNET RTC v1.01). */
 export const NFSE_SITUACAO_TRIBUTARIA_IBSCBS_DEFAULT = '000';
 
@@ -170,6 +173,10 @@ export const resolveCIndOpForServico = (servico = {}) => {
   const cnae = normalizeLc116CodigoDigits(servico.cnae);
   if (cnae.startsWith('452') || cnae.startsWith('453') || cnae.startsWith('454')) {
     return NFSE_CINDOP_SERVICO_NO_ESTABELECIMENTO;
+  }
+
+  if (codigoKey.startsWith('07') || codigoKey.startsWith('1414')) {
+    return NFSE_CINDOP_OBRA_NO_LOCAL;
   }
 
   return NFSE_CINDOP_SERVICO_GERAL;
@@ -477,10 +484,21 @@ export const enrichNfseReformaCabecalhoInEmitPayload = (payload, options = {}) =
       ? null
       : resolveCodigoTributacaoIssnetFromAliquota(iss.aliquota);
     const codigoTributacao = explicitCodigoTributacao ?? inferFromAliquota;
+    const codigoCidadeIncidencia = String(
+      servicoBase.codigoCidadeIncidencia
+      ?? servicoBase.codigoCidade
+      ?? '',
+    ).replace(/\D/g, '').slice(0, 7);
+    const municipioIncidenciaIbsCbs = codigoCidadeIncidencia.length === 7
+      ? codigoCidadeIncidencia
+      : undefined;
+    const ibscbsWithMunicipio = municipioIncidenciaIbsCbs && !ibscbs.municipioIncidenciaIbsCbs
+      ? { ...ibscbs, municipioIncidenciaIbsCbs }
+      : ibscbs;
     return {
       ...servicoBase,
       ...(codigoTributacao ? { codigoTributacao } : {}),
-      ibscbs,
+      ibscbs: ibscbsWithMunicipio,
     };
   });
 

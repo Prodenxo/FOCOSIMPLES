@@ -76,6 +76,13 @@ test('enrichNfseReformaCabecalhoInEmitPayload: alíquota 0 não força codigoTri
   assert.equal(out.servico[0].codigoTributacao, undefined);
 });
 
+test('enrichNfseReformaCabecalhoInEmitPayload: obra 07.xx usa cIndOp 020201', () => {
+  const out = enrichNfseReformaCabecalhoInEmitPayload({
+    servico: [{ codigo: '070602', cnae: '4330403', iss: { aliquota: 0 } }],
+  }, { simplesNacional: true, nfseNacional: false, codigoIbge: '3543402' });
+  assert.equal(out.servico[0].ibscbs.codigoOperacao, '020201');
+});
+
 test('enrichNfseReformaCabecalhoInEmitPayload: obra 07.xx não infere codigoTributacao pela alíquota', () => {
   const out = enrichNfseReformaCabecalhoInEmitPayload({
     servico: [{ codigo: '070602', iss: { aliquota: 2 } }],

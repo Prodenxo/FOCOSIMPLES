@@ -4,8 +4,8 @@
  * @see TecnoSpeed plugnotas-php Nfse/Servico/Obra.php
  */
 
-/** Código mínimo quando não há CNO/CEI — mantém grupo `obra` no XML (E0370) sem endereço inválido. */
-export const NFSE_OBRA_CODIGO_SEM_CADASTRO = '0';
+/** CNO ausente — 12 dígitos (formato XSD); evita E160 com `codigo: "0"`. */
+export const NFSE_OBRA_CODIGO_SEM_CADASTRO = '000000000000';
 
 /** Subitens LC 116 que exigem informações de obra (E0370). */
 export const NFSE_OBRA_REQUIRED_LC116_KEYS = Object.freeze(new Set([
@@ -192,6 +192,22 @@ export const validateNfseObraPayload = (obra) => {
 };
 
 /**
+ * Município de incidência do ISS no serviço (PlugNotas: codigoCidadeIncidencia).
+ * @param {Record<string, unknown>|null|undefined} endereco
+ * @returns {Record<string, string>|null}
+ */
+export const buildServicoLocalIncidenciaFromEndereco = (endereco) => {
+  if (!endereco || typeof endereco !== 'object') return null;
+  const codigoCidadeIncidencia = String(endereco.codigoCidade || '').replace(/\D/g, '').slice(0, 7);
+  if (codigoCidadeIncidencia.length !== 7) return null;
+  const descricaoCidadeIncidencia = normalizeOptionalText(endereco.descricaoCidade, 60);
+  return {
+    codigoCidadeIncidencia,
+    ...(descricaoCidadeIncidencia ? { descricaoCidadeIncidencia } : {}),
+  };
+};
+
+/**
  * Monta `cidadePrestacao` (raiz) a partir do endereço da execução do serviço.
  * @param {Record<string, unknown>|null|undefined} endereco
  * @returns {Record<string, string>|null}
@@ -283,6 +299,7 @@ export const enrichNfseObraOnEmitPayload = (payload, options = {}) => {
 
   const servicosInput = Array.isArray(options.servicosInput) ? options.servicosInput : [];
   const emitInput = options.emitInput && typeof options.emitInput === 'object' ? options.emitInput : null;
+  const tomadorEndereco = options.tomadorEndereco ?? payload?.tomador?.endereco ?? null;
 
   const servicos = Array.isArray(payload.servico)
     ? payload.servico
@@ -296,7 +313,14 @@ export const enrichNfseObraOnEmitPayload = (payload, options = {}) => {
     if (!servico || typeof servico !== 'object') return servico;
     const servicoInput = servicosInput[index] || {};
     const inputRoot = emitInput || servicoInput;
-    return attachNfseObraToServico(servico, servicoInput, inputRoot);
+    const endereco = resolveNfseObraEndereco(servicoInput, inputRoot, tomadorEndereco);
+    const localIncidencia = buildServicoLocalIncidenciaFromEndereco(endereco);
+    const withObra = attachNfseObraToServico(servico, servicoInput, inputRoot);
+    if (!localIncidencia) return withObra;
+    return {
+      ...withObra,
+      ...(!withObra.codigoCidadeIncidencia ? localIncidencia : {}),
+    };
   });
 
   return {
