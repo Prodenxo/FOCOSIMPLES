@@ -24,11 +24,11 @@ export const NFSE_SITUACAO_TRIBUTARIA_IBSCBS_DEFAULT = '000';
 /** Classificação tributária IBS/CBS genérica para serviço. */
 export const NFSE_CLASSIFICACAO_TRIBUTARIA_IBSCBS_DEFAULT = '000001';
 
-/** PlugNotas: obrigatório ao enviar campos IBS/CBS (Reforma Tributária). */
+/** ISSNET municipal RTC: só versaoEsquema (versao 1.01 é exclusiva da NFS-e Nacional). */
 export const NFSE_VERSAO_ESQUEMA_RTC = 'RTC';
 
-/** ISSNET exige layout 1.01 quando o grupo IBSCBS está presente (manual v1.01). */
-export const NFSE_VERSAO_LAYOUT_RTC = '1.01';
+/** Versão de layout da NFS-e Nacional (NT 1.01 / DPS). */
+export const NFSE_VERSAO_LAYOUT_NACIONAL = '1.01';
 
 /** Municípios ISSNET que exigem layout RTC v1.01 na emissão (via ISSNET municipal, não portal nacional). */
 export const NFSE_ISSNET_RTC_IBGE = Object.freeze(new Set([
@@ -406,6 +406,17 @@ export const validateNfseCatalogProdutoMetadata = (metadata = {}) => {
 export const enrichNfseReformaCabecalhoInEmitPayload = (payload, options = {}) => {
   if (!payload || typeof payload !== 'object') return payload;
 
+  const codigoIbge = String(
+    options.codigoIbge
+    ?? readCodigoIbgeFromEmpresa({ endereco: payload?.prestador?.endereco })
+    ?? payload?.prestador?.endereco?.codigoCidade
+    ?? '',
+  ).replace(/\D/g, '').slice(0, 7);
+
+  if (!requiresIssnetRtcEmitSchema(codigoIbge)) {
+    return payload;
+  }
+
   const simplesNacional = options.simplesNacional !== false
     && payload.simplesNacional !== false;
 
@@ -453,15 +464,10 @@ export const enrichNfseReformaCabecalhoInEmitPayload = (payload, options = {}) =
     indFinal: _indFinal,
     cIndOp: _cIndOp,
     emitente: _existingEmitente,
+    versao: _existingVersao,
+    versaoEsquema: _existingVersaoEsquema,
     ...payloadRest
   } = payload;
-
-  const codigoIbge = String(
-    options.codigoIbge
-    ?? readCodigoIbgeFromEmpresa({ endereco: payload?.prestador?.endereco })
-    ?? payload?.prestador?.endereco?.codigoCidade
-    ?? '',
-  ).replace(/\D/g, '').slice(0, 7);
 
   const nfseNacional = options.nfseNacional === true;
 
@@ -473,10 +479,18 @@ export const enrichNfseReformaCabecalhoInEmitPayload = (payload, options = {}) =
     }
     : undefined;
 
+  const rtcHeader = nfseNacional
+    ? {
+      versao: payload.versao ?? NFSE_VERSAO_LAYOUT_NACIONAL,
+      versaoEsquema: payload.versaoEsquema ?? NFSE_VERSAO_ESQUEMA_RTC,
+    }
+    : {
+      versaoEsquema: payload.versaoEsquema ?? NFSE_VERSAO_ESQUEMA_RTC,
+    };
+
   return {
     ...payloadRest,
-    versao: payload.versao ?? NFSE_VERSAO_LAYOUT_RTC,
-    versaoEsquema: payload.versaoEsquema ?? NFSE_VERSAO_ESQUEMA_RTC,
+    ...rtcHeader,
     ...(emitente ? { emitente } : {}),
     ...(servicoEnriched.length ? { servico: servicoEnriched } : {}),
   };

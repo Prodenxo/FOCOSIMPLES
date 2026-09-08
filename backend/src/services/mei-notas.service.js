@@ -1525,7 +1525,7 @@ const emitNfseWithAutoRpsRecovery = async (
     emitPayload.idIntegracao = buildMeiIdIntegracao(userId);
     emitPayload = enrichNfseReformaCabecalhoInEmitPayload(emitPayload, {
       simplesNacional: prep.simplesNacional !== false,
-      nfseNacional: prep.nfseNacional !== false,
+      nfseNacional: prep.nfseNacional === true,
       codigoIbge: prep.codigoIbge,
     });
     response = await adapter.emitir(emitPayload);
@@ -2347,7 +2347,7 @@ export const emitirNota = async (userId, input) => {
     if (documentType === DOCUMENT_TYPE_NFSE) {
       emitPayload = enrichNfseReformaCabecalhoInEmitPayload(emitPayload, {
         simplesNacional: nfseEmitPrep?.empresaJson?.simplesNacional !== false,
-        nfseNacional: nfseEmitPrep?.nfseNacional !== false,
+        nfseNacional: nfseEmitPrep?.nfseNacional === true,
         codigoIbge: nfseEmitPrep?.codigoIbge,
       });
     }

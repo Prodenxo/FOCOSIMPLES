@@ -8,7 +8,7 @@ import {
   NFSE_CINDOP_SERVICO_NO_ESTABELECIMENTO,
   NFSE_FIN_NFSE_REGULAR,
   NFSE_VERSAO_ESQUEMA_RTC,
-  NFSE_VERSAO_LAYOUT_RTC,
+  NFSE_VERSAO_LAYOUT_NACIONAL,
   readCodigoIbgeFromEmpresa,
   requiresIssnetRtcEmitSchema,
   resolveCIndOpForServico,
@@ -63,20 +63,26 @@ test('enrichNfseReformaCabecalhoInEmitPayload: versao 1.01 + RTC + emitente naci
   const out = enrichNfseReformaCabecalhoInEmitPayload({
     servico: [{ codigo: '140101', cnae: '4520001' }],
   }, { simplesNacional: true, nfseNacional: true, codigoIbge: '3543402' });
-  assert.equal(out.versao, NFSE_VERSAO_LAYOUT_RTC);
+  assert.equal(out.versao, NFSE_VERSAO_LAYOUT_NACIONAL);
   assert.equal(out.versaoEsquema, NFSE_VERSAO_ESQUEMA_RTC);
   assert.equal(out.emitente.codigoCidade, '3543402');
   assert.equal(out.servico[0].ibscbs.destinatario.indicador, 0);
 });
 
-test('enrichNfseReformaCabecalhoInEmitPayload: municipal ISSNET RTC sem emitente nacional', () => {
+test('enrichNfseReformaCabecalhoInEmitPayload: municipal ISSNET RTC sem versao 1.01', () => {
   const out = enrichNfseReformaCabecalhoInEmitPayload({
     servico: [{ codigo: '140101', cnae: '4520001' }],
   }, { simplesNacional: true, nfseNacional: false, codigoIbge: '3543402' });
-  assert.equal(out.versao, NFSE_VERSAO_LAYOUT_RTC);
+  assert.equal(out.versao, undefined);
   assert.equal(out.versaoEsquema, NFSE_VERSAO_ESQUEMA_RTC);
   assert.equal(out.emitente, undefined);
   assert.equal(out.servico[0].ibscbs.valores.tributacao.cst, '000');
+});
+
+test('enrichNfseReformaCabecalhoInEmitPayload: ignora cidades fora do ISSNET RTC', () => {
+  const input = { servico: [{ codigo: '140101' }], versao: '2' };
+  const out = enrichNfseReformaCabecalhoInEmitPayload(input, { codigoIbge: '3550308' });
+  assert.deepEqual(out, input);
 });
 
 test('enrichNfseReformaCabecalhoInEmitPayload: cIndOp vira codigoOperacao em ibscbs', () => {
