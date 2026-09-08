@@ -2960,7 +2960,10 @@ function MeiScreenContent() {
         }
       }
 
-      const msg = getNfseValidationMessage(formToEmit);
+      const msg = getNfseValidationMessage({
+        ...formToEmit,
+        servico: mergeObraWhenServicoRequires(formToEmit.servico, formToEmit.tomadorEndereco),
+      });
       if (msg) {
         reportEmitError(msg);
         return;

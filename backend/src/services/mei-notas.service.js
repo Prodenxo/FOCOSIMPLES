@@ -822,12 +822,22 @@ const validatePayload = (payload) => {
 
   for (const item of servicos) {
     if (!requiresNfseObraForServicoCodigo(item?.codigo)) continue;
-    if (!item?.obra || typeof item.obra !== 'object') {
-      throw badRequest('Informe os dados da obra (local onde o serviço foi executado).');
-    }
     const codigoCidade = String(payload?.cidadePrestacao?.codigo || '').replace(/\D/g, '').slice(0, 7);
     if (codigoCidade.length !== 7) {
       throw badRequest('Informe o município (código IBGE) do local da obra.');
+    }
+    const cepObra = String(payload?.cidadePrestacao?.cep || '').replace(/\D/g, '');
+    if (cepObra.length !== 8) {
+      throw badRequest('Informe o CEP da obra com 8 dígitos.');
+    }
+    if (!String(payload?.cidadePrestacao?.logradouro || '').trim()) {
+      throw badRequest('Informe o logradouro da obra.');
+    }
+    if (!String(payload?.cidadePrestacao?.numero || '').trim()) {
+      throw badRequest('Informe o número do endereço da obra.');
+    }
+    if (!String(payload?.cidadePrestacao?.bairro || '').trim()) {
+      throw badRequest('Informe o bairro da obra.');
     }
   }
 

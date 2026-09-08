@@ -258,7 +258,7 @@ export const resolveCidadePrestacaoForObraPayload = (
 export const attachNfseObraToServico = (servico, servicoInput, emitInput) => {
   if (!requiresNfseObraForServicoCodigo(servico?.codigo)) return servico;
   const obra = buildNfseObraPayload(servicoInput, emitInput);
-  if (!obra) return servico;
+  if (!obra || Object.keys(obra).length === 0) return servico;
   return { ...servico, obra };
 };
 
