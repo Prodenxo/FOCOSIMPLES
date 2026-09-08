@@ -1099,9 +1099,21 @@ const defaultGetDb = () => createSupabaseClient({ useServiceRole: true });
 /** @type {null | (() => import('@supabase/supabase-js').SupabaseClient)} */
 let getDbOverride = null;
 
+/** @type {typeof resolveCatalogUserIdsForActor} */
+let resolveCatalogUserIdsForActorRef = resolveCatalogUserIdsForActor;
+
 /** @internal Apenas testes — substitui o cliente Supabase enquanto ativo. */
 export const __setGetDbForTests = (fn) => {
   getDbOverride = typeof fn === 'function' ? fn : null;
+};
+
+/** @internal Apenas testes — escopo de catálogo por ator. */
+export const __setResolveCatalogUserIdsForActorForTests = (fn) => {
+  resolveCatalogUserIdsForActorRef = typeof fn === 'function' ? fn : resolveCatalogUserIdsForActor;
+};
+
+export const __resetResolveCatalogUserIdsForActorForTests = () => {
+  resolveCatalogUserIdsForActorRef = resolveCatalogUserIdsForActor;
 };
 
 export const __resetGetDbForTests = () => {
@@ -2946,14 +2958,24 @@ const findCatalogCliente = async (userId, id) => {
   return withDerivedCatalogActive(data);
 };
 
-const findCatalogProduto = async (userId, id) => {
+const CATALOG_PRODUTO_SELECT =
+  'id, user_id, document_type, codigo, cnae, discriminacao, aliquota, valor_sugerido, metadata_json, dedupe_key, last_used_at, created_at, updated_at';
+
+/** Produto visível na listagem do ator (mesma empresa / vínculos do catálogo). */
+const findCatalogProdutoForActor = async (userId, id) => {
+  const recordId = ensureCatalogRecordId(id);
+  const catalogUserIds = await resolveCatalogUserIdsForActorRef(userId);
   const dbClient = getDb();
-  const { data, error } = await dbClient
+  let query = dbClient
     .from(PRODUCTS_TABLE)
-    .select('id, user_id, document_type, codigo, cnae, discriminacao, aliquota, valor_sugerido, metadata_json, dedupe_key, last_used_at, created_at, updated_at')
-    .eq('id', id)
-    .eq('user_id', userId)
-    .maybeSingle();
+    .select(CATALOG_PRODUTO_SELECT)
+    .eq('id', recordId);
+  if (catalogUserIds.length === 1) {
+    query = query.eq('user_id', catalogUserIds[0]);
+  } else {
+    query = query.in('user_id', catalogUserIds);
+  }
+  const { data, error } = await query.maybeSingle();
   if (error) throw badRequest(error.message);
   if (!data) throw notFound('Item do catálogo não encontrado');
   return data;
@@ -3568,7 +3590,7 @@ export const atualizarCatalogoProduto = async (userId, id, body = {}, options = 
   const empresaId = options.empresaId ?? null;
   const existing = empresaId
     ? await findCatalogProdutoPorEmpresa(empresaId, recordId)
-    : await findCatalogProduto(userId, recordId);
+    : await findCatalogProdutoForActor(userId, recordId);
   const catalogUserId = existing.user_id;
 
   const updates = {};
@@ -3672,12 +3694,21 @@ export const eliminarCatalogoCliente = async (userId, id) => {
  */
 export const eliminarCatalogoProduto = async (userId, id) => {
   const recordId = ensureCatalogRecordId(id);
+  const catalogUserIds = await resolveCatalogUserIdsForActorRef(userId);
+  let existing = null;
+  try {
+    existing = await findCatalogProdutoForActor(userId, recordId);
+  } catch (err) {
+    if (err?.statusCode === 404) return;
+    throw err;
+  }
+  const ownerUserId = existing.user_id;
   const dbClient = getDb();
   const { data: removed, error } = await dbClient
     .from(PRODUCTS_TABLE)
     .delete()
     .eq('id', recordId)
-    .eq('user_id', userId)
+    .eq('user_id', ownerUserId)
     .select('id');
   if (error) throw badRequest(error.message);
   if (removed && removed.length > 0) return;
@@ -3688,11 +3719,10 @@ export const eliminarCatalogoProduto = async (userId, id) => {
     .eq('id', recordId)
     .maybeSingle();
   if (errLookup) throw badRequest(errLookup.message);
-  if (anyRow && anyRow.user_id !== userId) {
+  if (anyRow && !catalogUserIds.includes(anyRow.user_id)) {
     throw notFound('Item do catálogo não encontrado');
   }
-  // Linha ainda existe para este user → DELETE não surtiu efeito (bug de driver / filtro).
-  if (anyRow && anyRow.user_id === userId) {
+  if (anyRow && catalogUserIds.includes(anyRow.user_id)) {
     throw badRequest('Não foi possível excluir o item do catálogo. Tente de novo.');
   }
 };

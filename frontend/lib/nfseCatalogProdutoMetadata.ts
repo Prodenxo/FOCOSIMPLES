@@ -25,18 +25,18 @@ export type NfseCatalogProdutoFormFields = {
 /** Texto de ajuda — código vem da LC 214 (Anexo VII), conforme orientação do contador. */
 export const NFSE_CINDOP_FIELD_HINT =
   'Código de 6 dígitos da LC 214 (Anexo VII), conforme o tipo de serviço e onde ele é prestado. '
-  + 'Use o código indicado pelo contador ou pela prefeitura — não há lista fixa no sistema.'
+  + 'Consulte seu contador ou a prefeitura se tiver dúvida.'
 
 export function emptyNfseCatalogProdutoFormFields(): NfseCatalogProdutoFormFields {
   return { codigoNbs: '', cIndOp: '' }
 }
 
-/** Campos IBS/CBS no catálogo — só ao impersonar o cliente (contador configurando). */
+/** Campos IBS/CBS no catálogo NFS-e — cliente ou contador podem preencher. */
 export function canEditNfseReformaCatalogFields(
-  _role: string | null | undefined,
-  isImpersonating = false,
+  _role?: string | null,
+  _isImpersonating?: boolean,
 ): boolean {
-  return isImpersonating === true
+  return true
 }
 
 const onlyDigits = (value: string, max: number) =>

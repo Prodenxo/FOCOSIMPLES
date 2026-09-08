@@ -2837,12 +2837,9 @@ function MeiScreenContent() {
           ...servicoPrefill,
         },
       }));
-      if (
-        catalogProdutoNeedsNfseReformaCompletion(item)
-        && canEditNfseReformaCatalogFields(role, isImpersonating)
-      ) {
+      if (catalogProdutoNeedsNfseReformaCompletion(item)) {
         showToast(
-          'Este serviço ainda não tem NBS/cIndOp configurados. Preencha no catálogo antes da emissão.',
+          'Este serviço ainda não tem NBS/cIndOp. Complete no catálogo antes da emissão.',
           'error',
         );
       }

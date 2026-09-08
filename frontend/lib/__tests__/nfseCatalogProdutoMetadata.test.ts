@@ -51,8 +51,9 @@ describe('nfseCatalogProdutoMetadata', () => {
     ).toBe(false)
   })
 
-  it('canEditNfseReformaCatalogFields: só impersonação', () => {
-    expect(canEditNfseReformaCatalogFields('admin', false)).toBe(false)
+  it('canEditNfseReformaCatalogFields: cliente e contador', () => {
+    expect(canEditNfseReformaCatalogFields('admin', false)).toBe(true)
+    expect(canEditNfseReformaCatalogFields('usuario', false)).toBe(true)
     expect(canEditNfseReformaCatalogFields('usuario', true)).toBe(true)
   })
 })

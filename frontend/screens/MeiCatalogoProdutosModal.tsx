@@ -596,7 +596,7 @@ export default function MeiCatalogoProdutosModal ({
                 tipo,
                 item.cnae ? `CNAE ${item.cnae}` : null,
                 !isNfeLike && (needsCodigo || missingCodigo) ? 'Completar código LC 116' : null,
-                needsReforma ? 'Contador: configurar IBS/CBS (NFS-e)' : null,
+                needsReforma ? 'Completar NBS/cIndOp (NFS-e)' : null,
                 needsNcm ? 'Contador: completar cadastro fiscal (NF-e)' : null,
               ].filter(Boolean)
               return (
@@ -1003,15 +1003,15 @@ export default function MeiCatalogoProdutosModal ({
         />
         {canEditNfseReforma ? (
           <>
-        <MeiFormSectionLabel>Reforma Tributária (contador)</MeiFormSectionLabel>
+        <MeiFormSectionLabel>Reforma Tributária (NFS-e)</MeiFormSectionLabel>
         <MeiFormBanner>
-          Campos IBS/CBS exigidos por algumas prefeituras (ex.: Ribeirão Preto). O contador
-          configura uma vez; na emissão o cliente só escolhe o serviço.
+          Campos IBS/CBS exigidos por algumas prefeituras (ex.: Ribeirão Preto). Configure uma vez
+          no catálogo; na emissão basta escolher o serviço.
         </MeiFormBanner>
         <MeiFormField
           label="NBS (9 dígitos)"
           placeholder="Ex.: 120013110"
-          hint="Nomenclatura Brasileira de Serviços — 9 dígitos, começando com 1. Use o código indicado pelo contador (diferente do código LC 116)."
+          hint="Nomenclatura Brasileira de Serviços — 9 dígitos, começando com 1 (diferente do código LC 116)."
           value={form.nfse.codigoNbs}
           onChangeText={(t) =>
             setForm((f) => ({

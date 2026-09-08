@@ -211,6 +211,7 @@ const createCatalogSupabaseMock = () => {
 afterEach(async () => {
   const mod = await import('../src/services/mei-notas.service.js');
   mod.__resetGetDbForTests();
+  mod.__resetResolveCatalogUserIdsForActorForTests();
 });
 
 test('criarCatalogoCliente rejeita sem nome', async () => {
@@ -411,6 +412,7 @@ test('atualizarCatalogoProduto — sucesso PATCH discriminacao com stub getDb', 
   const mock = createCatalogSupabaseMock();
   const mod = await import('../src/services/mei-notas.service.js');
   mod.__setGetDbForTests(() => mock.client);
+  mod.__setResolveCatalogUserIdsForActorForTests(async (userId) => [userId]);
 
   const out = await mod.atualizarCatalogoProduto(
     mock.userId,
