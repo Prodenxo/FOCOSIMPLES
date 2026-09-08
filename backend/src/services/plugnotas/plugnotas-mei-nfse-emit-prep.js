@@ -272,6 +272,51 @@ export const ensureMeiNfsePlugnotasCadastroBeforeEmit = async (userId, cnpjInput
 };
 
 /**
+ * Monta PATCH mínimo para migrar empresa ISSNET/RTC para NFS-e Nacional (sem credenciais municipais).
+ *
+ * @param {string} cnpjInput
+ * @param {Record<string, unknown>} empresaJson
+ * @returns {Record<string, unknown>|null}
+ */
+export const buildIssnetRtcNacionalEmpresaPatch = (cnpjInput, empresaJson) => {
+  const cnpj = normalizeDoc(cnpjInput);
+  if (cnpj.length !== 14 || !empresaJson || typeof empresaJson !== 'object') {
+    return null;
+  }
+
+  const codigoIbge = readCodigoIbgeFromEmpresa(empresaJson);
+  if (!requiresIssnetRtcNfseNacional(codigoIbge)) {
+    return null;
+  }
+
+  const nfse = empresaJson.nfse && typeof empresaJson.nfse === 'object' ? empresaJson.nfse : {};
+  const config = nfse.config && typeof nfse.config === 'object' ? nfse.config : {};
+  if (config.nfseNacional !== false) {
+    return null;
+  }
+
+  const prefeituraClean = codigoIbge.length === 7
+    ? { codigoIbge }
+    : undefined;
+
+  const patch = normalizeMeiEmpresaPayload({
+    cpfCnpj: cnpj,
+    nfse: {
+      ativo: nfse.ativo !== false,
+      config: {
+        producao: config.producao ?? true,
+        ...(config.rps && typeof config.rps === 'object' ? { rps: config.rps } : {}),
+        nfseNacional: true,
+        consultaNfseNacional: true,
+        ...(prefeituraClean ? { prefeitura: prefeituraClean } : {}),
+      },
+    },
+  });
+  applyNfseNationalContractPolicy(patch);
+  return patch;
+};
+
+/**
  * Ribeirão Preto/ISSNET exige DPS nacional (schema 1.01) desde a migração RTC.
  * Se a empresa ainda estiver com nfseNacional=false, corrige no PlugNotas antes da emissão.
  *
@@ -285,30 +330,10 @@ export const ensureNfseNacionalForIssnetRtcCity = async (cnpjInput, empresaJson)
     return empresaJson ?? null;
   }
 
-  const codigoIbge = readCodigoIbgeFromEmpresa(empresaJson);
-  if (!requiresIssnetRtcNfseNacional(codigoIbge)) {
+  const patch = buildIssnetRtcNacionalEmpresaPatch(cnpj, empresaJson);
+  if (!patch) {
     return empresaJson;
   }
-
-  const nfse = empresaJson.nfse && typeof empresaJson.nfse === 'object' ? empresaJson.nfse : {};
-  const config = nfse.config && typeof nfse.config === 'object' ? nfse.config : {};
-  if (config.nfseNacional !== false) {
-    return empresaJson;
-  }
-
-  const patch = normalizeMeiEmpresaPayload({
-    cpfCnpj: cnpj,
-    nfse: {
-      ...nfse,
-      ativo: nfse.ativo !== false,
-      config: {
-        ...config,
-        nfseNacional: true,
-        consultaNfseNacional: true,
-      },
-    },
-  });
-  applyNfseNationalContractPolicy(patch);
 
   await atualizarEmpresaPlugNotas(patch);
   const refreshed = await consultarEmpresaPlugNotas(cnpj);
