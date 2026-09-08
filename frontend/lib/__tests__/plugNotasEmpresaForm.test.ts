@@ -61,6 +61,28 @@ describe('buildPlugNotasEmpresaPayload', () => {
     expect(payload.inscricaoEstadual).toBe('11662285');
   });
 
+  it('não envia inscrição estadual quando campo está vazio', () => {
+    const form = {
+      ...getDefaultPlugNotasCompanyForm(),
+      razaoSocial: 'Empresa Teste LTDA',
+      logradouro: 'Rua A',
+      numero: '1',
+      bairro: 'Centro',
+      cep: '01310100',
+      codigoCidade: '3550308',
+      descricaoCidade: 'São Paulo',
+      estado: 'SP',
+      email: 'contato@empresa.com.br',
+      inscricaoEstadual: '',
+    };
+    const payload = buildPlugNotasEmpresaPayload({
+      cnpj: '12345678000199',
+      certificadoId: '',
+      form,
+    });
+    expect(payload.inscricaoEstadual).toBeUndefined();
+  });
+
   it('exige IM quando NFS-e está ativa', () => {
     const form = {
       ...getDefaultPlugNotasCompanyForm(),

@@ -8,8 +8,47 @@ import { env } from '../../config/env.js';
  */
 export const PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA = 'ISENTO';
 
-const isFocoSimplesProduct = () =>
+export const isFocoSimplesProduct = () =>
   String(env.APP_PRODUCT || '').trim().toLowerCase() === 'focosimples';
+
+/**
+ * Normaliza IE informada pelo contador (dígitos ou ISENTO explícito).
+ * @param {unknown} value
+ * @returns {string|null}
+ */
+export const normalizeInscricaoEstadualInput = (value) => {
+  const ie = value != null ? String(value).trim() : '';
+  if (!ie) return null;
+  if (ie.toUpperCase() === PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA) {
+    return PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA;
+  }
+  const digits = ie.replace(/\D/g, '');
+  return digits || null;
+};
+
+/**
+ * Ajusta `inscricaoEstadual` no payload empresa PlugNotas.
+ * Foco Simples: nunca inventa ISENTO — só envia se o cliente informou.
+ * FocoMEI legado: IE vazia explícita → ISENTO (contrato MEI).
+ * @param {Record<string, unknown>} payload
+ */
+export const normalizeInscricaoEstadualForEmpresaPayload = (payload) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return;
+  if (!hasOwn(payload, 'inscricaoEstadual')) return;
+
+  const normalized = normalizeInscricaoEstadualInput(payload.inscricaoEstadual);
+  if (normalized) {
+    payload.inscricaoEstadual = normalized;
+    return;
+  }
+
+  if (isFocoSimplesProduct()) {
+    delete payload.inscricaoEstadual;
+    return;
+  }
+
+  payload.inscricaoEstadual = PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA;
+};
 
 /**
  * Contrato oficial NFS-e Nacional no `POST/PATCH` empresa.

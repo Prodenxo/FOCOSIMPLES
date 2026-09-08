@@ -93,7 +93,11 @@ export function empresaFiscalToCompanyForm(empresa: any): PlugNotasCompanyForm {
     razaoSocial: empresa?.razaoSocial || '',
     nomeFantasia: empresa?.nomeFantasia || '',
     inscricaoMunicipal: empresa?.inscricaoMunicipal || '',
-    inscricaoEstadual: empresa?.inscricaoEstadual || '',
+    inscricaoEstadual: (() => {
+      const ieApi = String(empresa?.inscricaoEstadual || '').trim();
+      if (!ieApi || ieApi.toUpperCase() === 'ISENTO') return '';
+      return ieApi;
+    })(),
     email: empresa?.email || '',
     regimeTributario: '1',
     simplesNacional: empresa?.simplesNacional ?? defaults.simplesNacional,
@@ -283,9 +287,14 @@ export function buildPlugNotasEmpresaPayload({
   }
   if (email) payload.email = email;
   if (im) payload.inscricaoMunicipal = im;
-  // PlugNotas/SEFAZ exigem IE só com dígitos (ou ISENTO). 11.662.28-5 → 11662285
-  const ieDigits = ie.replace(/\D/g, '');
-  payload.inscricaoEstadual = ie.toUpperCase() === 'ISENTO' ? 'ISENTO' : (ieDigits || 'ISENTO');
+  if (ie) {
+    if (ie.toUpperCase() === 'ISENTO') {
+      payload.inscricaoEstadual = 'ISENTO';
+    } else {
+      const ieDigits = ie.replace(/\D/g, '');
+      if (ieDigits) payload.inscricaoEstadual = ieDigits;
+    }
+  }
 
   return payload;
 }

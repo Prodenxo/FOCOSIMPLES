@@ -18,8 +18,10 @@ import {
 } from './plugnotas/nfse.service.js';
 import {
   advancePlugnotasNfseRpsAfterEmit,
+  ensureEmpresaPlugnotasNfseMunicipalMode,
   ensureEmpresaPlugnotasRpsForNfseEmit,
   isNfseE0014FromPlugnotasResponse,
+  isNfseE0039FromPlugnotasResponse,
   isNfseRejectedPlugnotasResponse,
   isNfseRpsDuplicateRejectionLoose,
   isPlugnotasNfseRpsNumeroJaUtilizadoError,
@@ -1567,6 +1569,21 @@ const emitNfseWithAutoRpsRecovery = async (
       });
       status = extractPlugNotasStatus(response);
       normalized = normalizeStatus(status);
+    }
+
+    if (
+      isNfseE0039FromPlugnotasResponse(response)
+      && prep.nfseNacional !== false
+      && !prep.e0039MunicipalRetried
+    ) {
+      console.warn('[plugnotas-nfse] E0039 — CNPJ não parametrizado no nacional; alternando para ISSNET municipal', {
+        cnpj: cnpjPrestadorNfse,
+        attempt: attempt + 1,
+      });
+      await ensureEmpresaPlugnotasNfseMunicipalMode(cnpjPrestadorNfse, empresaJsonCache);
+      prep.nfseNacional = false;
+      prep.e0039MunicipalRetried = true;
+      continue;
     }
 
     if (!isNfseE0014FromPlugnotasResponse(response)) {

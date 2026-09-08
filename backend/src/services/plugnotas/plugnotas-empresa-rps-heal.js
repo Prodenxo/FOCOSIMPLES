@@ -172,6 +172,32 @@ export function isPlugnotasNfseRpsNumeroJaUtilizadoError(error) {
     || message.includes('duplic');
 }
 
+/** E0039 — município emissor não parametrizado no Sistema Nacional NFS-e. */
+export const isNfseE0039MunicipioEmissorMessage = (text) => {
+  const lower = String(text || '').toLowerCase();
+  return /e0039/.test(lower)
+    || (
+      (lower.includes('município emissor') || lower.includes('municipio emissor'))
+      && (
+        lower.includes('emissores públicos nacionais')
+        || lower.includes('emissores publicos nacionais')
+        || lower.includes('sistema nacional nfs-e')
+        || lower.includes('sistema nacional nfse')
+      )
+    );
+};
+
+/** @param {unknown} response */
+export function isNfseE0039FromPlugnotasResponse(response) {
+  if (isNfseE0039MunicipioEmissorMessage(extractNfseRejectionMessage(response))) return true;
+  try {
+    const text = JSON.stringify(response).toLowerCase();
+    return /e0039/.test(text);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * @param {unknown} response
  * @param {string} [normalizedStatus]
@@ -933,4 +959,51 @@ export async function ensureEmpresaPlugnotasRpsForNfseEmit(cnpjInput, empresaJso
       }
     }
   });
+}
+
+/**
+ * Alterna empresa para emissão municipal ISSNET (`nfseNacional=false`) após E0039.
+ * Idempotente quando já está em modo municipal.
+ * @param {string} cnpjInput
+ * @param {unknown} [empresaJsonCached]
+ * @returns {Promise<boolean>} true se PATCH foi enviado
+ */
+export async function ensureEmpresaPlugnotasNfseMunicipalMode(cnpjInput, empresaJsonCached = null) {
+  const cnpj = normalizeDoc(cnpjInput);
+  if (cnpj.length !== 14) return false;
+
+  let empresaJson = empresaJsonCached;
+  if (!empresaJson) {
+    try {
+      empresaJson = await consultarEmpresaPlugNotas(cnpj);
+    } catch {
+      return false;
+    }
+  }
+
+  const empresa = unwrapPlugnotasEmpresaRecord(empresaJson);
+  const nfseAtivo = empresa?.nfse?.ativo !== false;
+  const existingConfig = empresa?.nfse?.config && typeof empresa.nfse.config === 'object'
+    ? empresa.nfse.config
+    : {};
+
+  if (existingConfig.nfseNacional === false) return false;
+
+  await atualizarEmpresaPlugNotas({
+    cpfCnpj: cnpj,
+    nfse: {
+      ativo: nfseAtivo,
+      tipoContrato: 0,
+      config: {
+        producao: existingConfig.producao !== false,
+        nfseNacional: false,
+        consultaNfseNacional: false,
+        ...(existingConfig.rps && typeof existingConfig.rps === 'object'
+          ? { rps: { ...existingConfig.rps } }
+          : { rps: { ...EMPRESA_PLUGNOTAS_NFSE_CONFIG_RPS_CANONICAL } }),
+      },
+    },
+  });
+
+  return true;
 }

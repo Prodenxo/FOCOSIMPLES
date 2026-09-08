@@ -9,7 +9,7 @@ import { badRequest } from '../../utils/errors.js';
 import {
   applyNfseMunicipalContractPolicy,
   applyNfseNationalContractPolicy,
-  PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA,
+  normalizeInscricaoEstadualForEmpresaPayload,
 } from './plugnotas-mei-empresa-policy.js';
 
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -164,15 +164,11 @@ export const resolveDocumentosAtivosForPatch = (payload) => {
 };
 
 /**
- * POST: IE vazia → ISENTO (mantém contrato MEI).
+ * POST/PATCH: normaliza IE só quando veio no corpo (Foco Simples nunca inventa ISENTO).
  * @param {Record<string, unknown>} payload
  */
 const normalizeInscricaoEstadualApenasNfse = (payload) => {
-  const ieRaw = payload.inscricaoEstadual;
-  const ieStr = ieRaw != null ? String(ieRaw).trim() : '';
-  if (!ieStr) {
-    payload.inscricaoEstadual = PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA;
-  }
+  normalizeInscricaoEstadualForEmpresaPayload(payload);
 };
 
 /**

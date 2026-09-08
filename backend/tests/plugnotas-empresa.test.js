@@ -150,7 +150,7 @@ test('empresa service cria empresa com POST /empresa', async () => {
     assert.equal(sent.nfce.ativo, false);
     assert.equal(sent.nfe.ativo, false);
     assert.equal('config' in sent.nfce, false);
-    assert.equal(sent.inscricaoEstadual, 'ISENTO');
+    assert.equal(Object.prototype.hasOwnProperty.call(sent, 'inscricaoEstadual'), false);
     assertOfficialNfseContract(sent.nfse);
     assert.equal(
       Object.prototype.hasOwnProperty.call(sent.nfse?.config || {}, 'prefeitura'),
@@ -684,7 +684,7 @@ test('POST com documentosAtivos só NFSe equivale ao default e não envia campo 
     assert.equal('config' in sent.nfce, false);
     assert.equal(sent.nfe.ativo, false);
     assertOfficialNfseContract(sent.nfse);
-    assert.equal(sent.inscricaoEstadual, 'ISENTO');
+    assert.equal(Object.prototype.hasOwnProperty.call(sent, 'inscricaoEstadual'), false);
   } finally {
     global.fetch = originalFetch;
   }
@@ -1372,7 +1372,7 @@ test('empresa service POST preserva inscricaoEstadual quando cliente informa', a
   }
 });
 
-test('empresa service PATCH com inscricaoEstadual vazia normaliza para ISENTO', async () => {
+test('empresa service PATCH com inscricaoEstadual vazia não força ISENTO no Foco Simples', async () => {
   const { atualizarEmpresaPlugNotas } = await import('../src/services/plugnotas/empresa.service.js');
   const originalFetch = global.fetch;
   const calls = [];
@@ -1392,7 +1392,7 @@ test('empresa service PATCH com inscricaoEstadual vazia normaliza para ISENTO', 
       inscricaoEstadual: '   '
     });
     const sent = JSON.parse(calls[0].body);
-    assert.equal(sent.inscricaoEstadual, 'ISENTO');
+    assert.equal(Object.prototype.hasOwnProperty.call(sent, 'inscricaoEstadual'), false);
   } finally {
     global.fetch = originalFetch;
   }

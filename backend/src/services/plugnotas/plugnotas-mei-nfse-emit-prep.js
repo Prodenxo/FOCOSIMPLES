@@ -20,9 +20,11 @@ import {
 import { resolvePrestadorEmitEmail } from './plugnotas-nfse-email-resolve.js';
 import { PLUGNOTAS_EMPRESA_NAO_CADASTRADA_CODE } from './empresa-cadastro-runtime-decision.js';
 import {
-  PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA,
   applyNfseNationalContractPolicy,
+  normalizeInscricaoEstadualInput,
   normalizeMeiEmpresaPayload,
+  PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA,
+  isFocoSimplesProduct,
 } from './plugnotas-mei-empresa-policy.js';
 
 const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
@@ -105,7 +107,6 @@ export const buildEmpresaPayloadFromEmitenteSnapshot = (
     nomeFantasia,
     regimeTributario: 1,
     simplesNacional: true,
-    inscricaoEstadual: PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA,
     endereco,
     nfse: selection.nfse
       ? { ativo: true, tipoContrato: 0, config: { producao: true } }
@@ -127,6 +128,12 @@ export const buildEmpresaPayloadFromEmitenteSnapshot = (
   if (email) payload.email = email;
   const im = String(emitente.inscricaoMunicipal || '').trim();
   if (im) payload.inscricaoMunicipal = im;
+  const ieNormalized = normalizeInscricaoEstadualInput(emitente.inscricaoEstadual);
+  if (ieNormalized) {
+    payload.inscricaoEstadual = ieNormalized;
+  } else if (!isFocoSimplesProduct()) {
+    payload.inscricaoEstadual = PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA;
+  }
 
   applyNfseNationalContractPolicy(payload);
   normalizeMeiEmpresaPayload(payload);

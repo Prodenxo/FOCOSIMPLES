@@ -4647,7 +4647,7 @@ function MeiScreenContent() {
                       autoCapitalize="characters"
                     />
                     <Text style={{ fontSize: 11, color: theme.textSecondary, marginTop: 4, lineHeight: 16 }}>
-                      Obrigatória para NF-e de produtos. Use ISENTO se não tiver inscrição estadual.
+                      Obrigatória para NF-e de produtos. Deixe em branco se o contador ainda não informou; use ISENTO só se for isento de IE.
                     </Text>
                   </View>
                   </>

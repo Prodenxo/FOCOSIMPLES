@@ -22,8 +22,8 @@ import {
   applyNfseNationalContractPolicy,
   buildMeiRegimePatchPayload,
   inspectNfseContractInput,
+  normalizeInscricaoEstadualForEmpresaPayload,
   normalizeMeiEmpresaPayload,
-  PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA,
   PLUGNOTAS_REGIME_ESPECIAL_MEI,
 } from './plugnotas-mei-empresa-policy.js';
 import { unwrapPlugnotasEmpresaRecord } from '../mei-emitente-empresa-sync.js';
@@ -110,15 +110,11 @@ const applyNfsePrefeituraIbgeIfEnabled = (payload) => {
 };
 
 /**
- * IE ausente ou em branco → `ISENTO` (MEI sem IE coletada na UI).
+ * PATCH legado “apenas NFS-e”: normaliza IE só se veio no corpo.
  * @param {Record<string, unknown>} payload
  */
 const normalizeInscricaoEstadualApenasNfse = (payload) => {
-  const ieRaw = payload.inscricaoEstadual;
-  const ieStr = ieRaw != null ? String(ieRaw).trim() : '';
-  if (!ieStr) {
-    payload.inscricaoEstadual = PLUGNOTAS_MEI_INSCRICAO_ESTADUAL_QUANDO_VAZIA;
-  }
+  normalizeInscricaoEstadualForEmpresaPayload(payload);
 };
 
 /**
@@ -1060,8 +1056,7 @@ export const atualizarEmpresaPlugNotas = async (input) => {
   } else {
     applyEmpresaPlugnotasApenasNfseForPatch(payload);
   }
-  // Sempre garante IE (ISENTO) — NF-e/NFC-e ativos rejeitam omissão do campo
-  normalizeInscricaoEstadualApenasNfse(payload);
+  normalizeInscricaoEstadualForEmpresaPayload(payload);
 
   normalizePayloadEnderecoCodigoCidade(payload);
   if (!(docPatch.present && docPatch.selection)) {

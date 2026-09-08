@@ -8,6 +8,7 @@ import {
   empresaPlugnotasTemRpsCadastrado,
   ensureEmpresaPlugnotasRpsForNfseEmit,
   isNfseE0014FromPlugnotasResponse,
+  isNfseE0039FromPlugnotasResponse,
   isNfseRejectedPlugnotasResponse,
   isNfseRpsDuplicateRejectionLoose,
   buildNfsePeriodoWindows,
@@ -623,6 +624,18 @@ test('isNfseE0014FromPlugnotasResponse reconhece mensagem humanizada de numeraç
     }),
     true,
   );
+});
+
+test('isNfseE0039FromPlugnotasResponse reconhece município emissor não parametrizado no nacional', () => {
+  assert.equal(
+    isNfseE0039FromPlugnotasResponse({
+      retorno: {
+        mensagemRetorno: 'E0039: O município emissor informado na DPS deve estar parametrizado para utilizar os emissores públicos nacionais',
+      },
+    }),
+    true,
+  );
+  assert.equal(isNfseE0039FromPlugnotasResponse({ retorno: { mensagemRetorno: 'E0314: código municipal' } }), false);
 });
 
 test('emitNfseWithPlugnotasRpsHeal reenvia quando E0014 não traz número na resposta mas payload tem rps', async () => {
