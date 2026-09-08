@@ -6,7 +6,10 @@ import {
   buildCidadePrestacaoFromObraEndereco,
   buildNfseObraPayload,
   enrichNfseCidadePrestacaoFromObra,
+  enrichNfseObraOnEmitPayload,
+  NFSE_OBRA_CODIGO_SEM_CADASTRO,
   requiresNfseObraForServicoCodigo,
+  resolveNfseObraCodigoForEmit,
   validateNfseObraEndereco,
 } from '../src/services/nfse-obra-defaults.js';
 
@@ -35,27 +38,24 @@ test('buildNfseObraPayload — PlugNotas só aceita art/codigo/cei (sem endereco
     },
     null,
   );
-  assert.deepEqual(obra, { art: '123', codigo: '456', cei: '789' });
+  assert.deepEqual(obra, { codigo: '456', art: '123', cei: '789' });
   assert.equal(obra?.endereco, undefined);
 });
 
-test('buildNfseObraPayload — endereço explícito não entra no grupo obra', () => {
+test('buildNfseObraPayload — sem CNO usa codigo mínimo para E0370', () => {
   const obra = buildNfseObraPayload(
     {
       codigo: '070602',
-      obra: {
-        usarEnderecoTomador: false,
-        endereco: {
-          cep: '01310-100',
-          logradouro: 'Av Paulista',
-          numero: '1000',
-          bairro: 'Bela Vista',
-        },
-      },
+      obra: { usarEnderecoTomador: true },
     },
     null,
   );
-  assert.deepEqual(obra, {});
+  assert.deepEqual(obra, { codigo: NFSE_OBRA_CODIGO_SEM_CADASTRO });
+});
+
+test('resolveNfseObraCodigoForEmit — prioriza CNO/código informado', () => {
+  assert.equal(resolveNfseObraCodigoForEmit({ cno: '999' }), '999');
+  assert.equal(resolveNfseObraCodigoForEmit({}), NFSE_OBRA_CODIGO_SEM_CADASTRO);
 });
 
 test('validateNfseObraEndereco — exige endereço completo com IBGE', () => {
@@ -107,9 +107,28 @@ test('attachNfseObraToServico — ignora serviços fora da lista', () => {
   assert.equal(next.obra, undefined);
 });
 
+test('enrichNfseObraOnEmitPayload — anexa grupo obra após prune simulado', () => {
+  const out = enrichNfseObraOnEmitPayload({
+    servico: [{ codigo: '070602', discriminacao: 'Gesso' }],
+    tomador: {
+      endereco: {
+        codigoCidade: '3543402',
+        cep: '14000000',
+        logradouro: 'Rua A',
+        numero: '10',
+        bairro: 'Centro',
+      },
+    },
+  }, {
+    servicosInput: [{ codigo: '070602', obra: { usarEnderecoTomador: true } }],
+  });
+  assert.equal(out.servico[0].obra?.codigo, NFSE_OBRA_CODIGO_SEM_CADASTRO);
+  assert.equal(out.servico[0].obra?.endereco, undefined);
+});
+
 test('enrichNfseCidadePrestacaoFromObra — usa input da obra e endereço do tomador', () => {
   const out = enrichNfseCidadePrestacaoFromObra({
-    servico: [{ codigo: '070602', obra: {} }],
+    servico: [{ codigo: '070602' }],
     tomador: {
       endereco: {
         codigoCidade: '3550308',
@@ -128,5 +147,4 @@ test('enrichNfseCidadePrestacaoFromObra — usa input da obra e endereço do tom
   assert.equal(out.cidadePrestacao?.descricao, 'São Paulo');
   assert.equal(out.cidadePrestacao?.estado, 'SP');
   assert.equal(out.cidadePrestacao?.logradouro, 'Av Paulista');
-  assert.equal(out.servico[0].obra?.endereco, undefined);
 });

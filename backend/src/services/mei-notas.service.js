@@ -67,8 +67,8 @@ import {
   resolveNfseIssForServico,
 } from './nfse-iss-defaults.js';
 import {
-  attachNfseObraToServico,
   enrichNfseCidadePrestacaoFromObra,
+  enrichNfseObraOnEmitPayload,
   requiresNfseObraForServicoCodigo,
   resolveNfseObraEndereco,
   validateNfseObraEndereco,
@@ -597,16 +597,16 @@ const buildPayloadFromInput = (input, userId) => {
   const tomadorEndereco = buildTomadorEnderecoFromInput(input);
   const servicosList = servicosInputList
     .map((servicoInput) => buildServicoFromInput(servicoInput))
-    .filter(Boolean)
-    .map((servicoBuilt, index) => {
-      const servicoInput = servicosInputList[index];
-      if (requiresNfseObraForServicoCodigo(servicoBuilt?.codigo)) {
-        const obraEndereco = resolveNfseObraEndereco(servicoInput, input, tomadorEndereco);
-        const obraEnderecoError = validateNfseObraEndereco(obraEndereco);
-        if (obraEnderecoError) throw badRequest(obraEnderecoError);
-      }
-      return attachNfseObraToServico(servicoBuilt, servicoInput, input);
-    });
+    .filter(Boolean);
+
+  for (let index = 0; index < servicosList.length; index += 1) {
+    const servicoBuilt = servicosList[index];
+    if (!requiresNfseObraForServicoCodigo(servicoBuilt?.codigo)) continue;
+    const servicoInput = servicosInputList[index];
+    const obraEndereco = resolveNfseObraEndereco(servicoInput, input, tomadorEndereco);
+    const obraEnderecoError = validateNfseObraEndereco(obraEndereco);
+    if (obraEnderecoError) throw badRequest(obraEnderecoError);
+  }
 
   const prestadorBase = { ...(input?.prestador || {}) };
   delete prestadorBase.inscricaoMunicipal;
@@ -639,10 +639,17 @@ const buildPayloadFromInput = (input, userId) => {
   });
 
   return {
-    payload: enrichNfseCidadePrestacaoFromObra(payload, {
-      servicosInput: servicosInputList,
-      tomadorEndereco,
-    }),
+    payload: enrichNfseObraOnEmitPayload(
+      enrichNfseCidadePrestacaoFromObra(payload, {
+        servicosInput: servicosInputList,
+        tomadorEndereco,
+      }),
+      {
+        servicosInput: servicosInputList,
+        emitInput: input,
+        tomadorEndereco,
+      },
+    ),
     prestadorDoc,
     tomadorDoc,
   };
@@ -822,6 +829,9 @@ const validatePayload = (payload) => {
 
   for (const item of servicos) {
     if (!requiresNfseObraForServicoCodigo(item?.codigo)) continue;
+    if (!item?.obra || typeof item.obra !== 'object' || !String(item.obra.codigo || '').trim()) {
+      throw badRequest('Informe os dados da obra (local onde o serviço foi executado).');
+    }
     const codigoCidade = String(payload?.cidadePrestacao?.codigo || '').replace(/\D/g, '').slice(0, 7);
     if (codigoCidade.length !== 7) {
       throw badRequest('Informe o município (código IBGE) do local da obra.');
@@ -1573,7 +1583,8 @@ const emitNfseWithAutoRpsRecovery = async (
     }
 
     emitPayload.idIntegracao = buildMeiIdIntegracao(userId);
-    emitPayload = enrichNfseCidadePrestacaoFromObra(emitPayload);
+    emitPayload = enrichNfseCidadePrestacaoFromObra(emitPayload, prep.obraContext ?? {});
+    emitPayload = enrichNfseObraOnEmitPayload(emitPayload, prep.obraContext ?? {});
     emitPayload = enrichNfseReformaCabecalhoInEmitPayload(emitPayload, {
       simplesNacional: prep.simplesNacional !== false,
       nfseNacional: prep.nfseNacional === true,
@@ -2405,6 +2416,12 @@ export const emitirNota = async (userId, input) => {
           issnetOnline30,
           initialLocalMax: Math.max(initialLocalMax ?? 0, authoritativeMax),
           periodoMax: authoritativeMax,
+          obraContext: {
+            servicosInput: Array.isArray(input?.servicos)
+              ? input.servicos
+              : (input?.servico ? [input.servico] : []),
+            emitInput: input,
+          },
         };
         emitPayload = enrichNfseIssInEmitPayload(emitPayload, {
           nfseNacional: nfseNacionalEmit,
@@ -2414,7 +2431,8 @@ export const emitirNota = async (userId, input) => {
       }
     }
     if (documentType === DOCUMENT_TYPE_NFSE) {
-      emitPayload = enrichNfseCidadePrestacaoFromObra(emitPayload);
+      emitPayload = enrichNfseCidadePrestacaoFromObra(emitPayload, nfseEmitPrep?.obraContext ?? {});
+      emitPayload = enrichNfseObraOnEmitPayload(emitPayload, nfseEmitPrep?.obraContext ?? {});
       emitPayload = enrichNfseReformaCabecalhoInEmitPayload(emitPayload, {
         simplesNacional: nfseEmitPrep?.empresaJson?.simplesNacional !== false,
         nfseNacional: nfseEmitPrep?.nfseNacional === true,

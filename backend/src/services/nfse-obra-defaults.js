@@ -4,6 +4,9 @@
  * @see TecnoSpeed plugnotas-php Nfse/Servico/Obra.php
  */
 
+/** Código mínimo quando não há CNO/CEI — mantém grupo `obra` no XML (E0370) sem endereço inválido. */
+export const NFSE_OBRA_CODIGO_SEM_CADASTRO = '0';
+
 /** Subitens LC 116 que exigem informações de obra (E0370). */
 export const NFSE_OBRA_REQUIRED_LC116_KEYS = Object.freeze(new Set([
   '070201', '070202',
@@ -111,7 +114,20 @@ export const resolveNfseObraEndereco = (servicoInput, emitInput, tomadorEndereco
 };
 
 /**
+ * @param {Record<string, unknown>|null|undefined} obraSource
+ * @returns {string}
+ */
+export const resolveNfseObraCodigoForEmit = (obraSource = {}) => {
+  const codigoObra = normalizeOptionalText(obraSource.codigoObra ?? obraSource.codigo, 30);
+  const cno = normalizeOptionalText(obraSource.cno, 30);
+  const cei = normalizeOptionalText(obraSource.cei, 30);
+  return codigoObra || cno || cei || NFSE_OBRA_CODIGO_SEM_CADASTRO;
+};
+
+/**
  * Campos aceitos pela API PlugNotas em `servico[].obra` (sem endereço — evita E160 no XSD).
+ * Sempre inclui `codigo` para o grupo não ser omitido pelo prune / PlugNotas (E0370).
+ *
  * @param {Record<string, unknown>|null|undefined} servicoInput
  * @param {Record<string, unknown>|null|undefined} emitInput
  * @returns {Record<string, string>|null}
@@ -123,20 +139,13 @@ export const buildNfseObraPayload = (servicoInput, emitInput) => {
   const obraSource = readObraSource(servicoInput) || readObraSource(emitInput) || {};
   const cei = normalizeOptionalText(obraSource.cei, 30);
   const art = normalizeOptionalText(obraSource.art, 30);
-  const cno = normalizeOptionalText(obraSource.cno, 30);
-  const codigoObra = normalizeOptionalText(
-    obraSource.codigoObra ?? obraSource.codigo,
-    30,
-  );
-  const codigoCadastro = codigoObra || cno;
+  const codigoCadastro = resolveNfseObraCodigoForEmit(obraSource);
 
-  const payload = {
+  return {
+    codigo: codigoCadastro,
     ...(art ? { art } : {}),
-    ...(codigoCadastro ? { codigo: codigoCadastro } : {}),
-    ...(cei ? { cei } : {}),
+    ...(cei && codigoCadastro !== cei ? { cei } : {}),
   };
-
-  return Object.keys(payload).length ? payload : {};
 };
 
 /**
@@ -258,8 +267,42 @@ export const resolveCidadePrestacaoForObraPayload = (
 export const attachNfseObraToServico = (servico, servicoInput, emitInput) => {
   if (!requiresNfseObraForServicoCodigo(servico?.codigo)) return servico;
   const obra = buildNfseObraPayload(servicoInput, emitInput);
-  if (!obra || Object.keys(obra).length === 0) return servico;
+  if (!obra) return servico;
   return { ...servico, obra };
+};
+
+/**
+ * Garante `servico[].obra` após prune — endereço continua em `cidadePrestacao` (raiz).
+ *
+ * @param {Record<string, unknown>|null|undefined} payload
+ * @param {{ servicosInput?: Array<Record<string, unknown>>, emitInput?: Record<string, unknown>|null, tomadorEndereco?: Record<string, unknown>|null }} [options]
+ * @returns {Record<string, unknown>|null|undefined}
+ */
+export const enrichNfseObraOnEmitPayload = (payload, options = {}) => {
+  if (!payload || typeof payload !== 'object') return payload;
+
+  const servicosInput = Array.isArray(options.servicosInput) ? options.servicosInput : [];
+  const emitInput = options.emitInput && typeof options.emitInput === 'object' ? options.emitInput : null;
+
+  const servicos = Array.isArray(payload.servico)
+    ? payload.servico
+    : payload.servico && typeof payload.servico === 'object'
+      ? [payload.servico]
+      : [];
+
+  if (!servicos.length) return payload;
+
+  const enriched = servicos.map((servico, index) => {
+    if (!servico || typeof servico !== 'object') return servico;
+    const servicoInput = servicosInput[index] || {};
+    const inputRoot = emitInput || servicoInput;
+    return attachNfseObraToServico(servico, servicoInput, inputRoot);
+  });
+
+  return {
+    ...payload,
+    servico: Array.isArray(payload.servico) ? enriched : enriched[0],
+  };
 };
 
 /**
