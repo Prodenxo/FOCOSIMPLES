@@ -29,6 +29,7 @@ import {
   readRpsFromNfseEmitPayload,
   resolveNfseRpsLocalMaxFromHistory,
 } from './plugnotas/plugnotas-empresa-rps-heal.js';
+import { enrichNfseReformaCabecalhoInEmitPayload } from './nfse-reforma-defaults.js';
 import {
   allocateNfseRpsForEmit,
   applyAllocatedNfseRpsToEmitPayload,
@@ -57,7 +58,6 @@ import {
   readNfseNacionalFromEmpresa,
   resolveNfseIssForServico,
 } from './nfse-iss-defaults.js';
-import { enrichNfseReformaCabecalhoInEmitPayload } from './nfse-reforma-defaults.js';
 import {
   extractNfeItemQuantidade,
   extractNfeItemValorUnitario,
@@ -1495,6 +1495,7 @@ const emitNfseWithAutoRpsRecovery = async (
     }
 
     emitPayload.idIntegracao = buildMeiIdIntegracao(userId);
+    emitPayload = enrichNfseReformaCabecalhoInEmitPayload(emitPayload);
     response = await adapter.emitir(emitPayload);
 
     const integracaoPoll = extractIntegracaoId(response) || emitPayload.idIntegracao;
