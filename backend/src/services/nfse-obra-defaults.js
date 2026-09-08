@@ -142,16 +142,16 @@ const normalizeCnoOrCodigoObra = (value) => {
  */
 export const buildNfseObraEnderecoFlatForIssnetRtc = (enderecoInput) => {
   const built = buildNfseObraEndereco(enderecoInput);
-  if (!built?.cep || !built?.logradouro || !built?.numero || !built?.bairro) return null;
+  if (!built?.cep || !built?.logradouro || !built?.numero || !built?.bairro || !built?.codigoCidade) {
+    return null;
+  }
+  // endNac DPS 1.01: cMun + CEP + logradouro + número + bairro — sem UF/descricao/pais (PlugNotas injeta e quebra XSD).
   return {
     cep: built.cep,
     logradouro: built.logradouro,
     numero: built.numero,
     bairro: built.bairro,
-    ...(built.complemento ? { complemento: built.complemento } : {}),
-    ...(built.codigoCidade ? { codigoCidade: built.codigoCidade } : {}),
-    ...(built.estado ? { estado: built.estado } : {}),
-    ...(built.descricaoCidade ? { descricaoCidade: built.descricaoCidade } : {}),
+    codigoCidade: built.codigoCidade,
   };
 };
 
@@ -532,13 +532,39 @@ export const enrichNfseIssnetRtcCidadePrestacaoFromObra = (payload, options = {}
 };
 
 /**
- * @deprecated Use {@link enrichNfseIssnetRtcCidadePrestacaoFromObra} — omitir cidadePrestacao faz a PlugNotas usar prestador (E160).
+ * @param {Record<string, unknown>|null|undefined} payload
+ * @returns {boolean}
+ */
+export const payloadHasNfseObraEnderecoOnServico = (payload) => {
+  const servicos = Array.isArray(payload?.servico)
+    ? payload.servico
+    : payload?.servico && typeof payload.servico === 'object'
+      ? [payload.servico]
+      : [];
+  return servicos.some((item) => {
+    if (!item || !requiresNfseObraForServicoCodigo(item.codigo)) return false;
+    const end = item?.obra?.endereco ?? item?.obra;
+    if (!end || typeof end !== 'object') return false;
+    return Boolean(
+      end.cep
+      && end.logradouro
+      && end.numero
+      && end.bairro
+      && end.codigoCidade,
+    );
+  });
+};
+
+/**
+ * ISSNET RTC007 obra com `obra.endereco`: omitir `cidadePrestacao` (PlugNotas injeta tipoLogradouro → E160).
+ *
  * @param {Record<string, unknown>|null|undefined} payload
  * @returns {Record<string, unknown>|null|undefined}
  */
 export const stripCidadePrestacaoForIssnetRtcObra = (payload) => {
   if (!payload || typeof payload !== 'object') return payload;
   if (!payloadHasNfseObraServico(payload)) return payload;
+  if (!payloadHasNfseObraEnderecoOnServico(payload)) return payload;
   if (!payload.cidadePrestacao) return payload;
   const { cidadePrestacao: _removed, ...rest } = payload;
   return rest;
@@ -555,7 +581,7 @@ export const enrichNfseCidadePrestacaoFromObra = (payload, options = {}) => {
   if (!payload || typeof payload !== 'object') return payload;
 
   if (options.issnetOnline30 && payloadHasNfseObraServico(payload)) {
-    return enrichNfseIssnetRtcCidadePrestacaoFromObra(payload, options);
+    return stripCidadePrestacaoForIssnetRtcObra(payload);
   }
 
   const existing = payload.cidadePrestacao;

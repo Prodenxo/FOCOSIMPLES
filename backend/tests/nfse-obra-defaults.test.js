@@ -144,9 +144,9 @@ test('buildNfseObraPayload — ISSNET RTC: endereco aninhado, sem codigo placeho
     },
   );
   assert.equal(obra?.codigo, undefined);
-  assert.equal(obra?.endereco?.cep, '14000000');
-  assert.equal(obra?.endereco?.logradouro, 'Rua A');
-  assert.equal(obra?.cep, undefined);
+  assert.equal(obra?.endereco?.codigoCidade, '3543402');
+  assert.equal(obra?.endereco?.estado, undefined);
+  assert.equal(obra?.endereco?.descricaoCidade, undefined);
 });
 
 test('buildNfseObraPayload — ISSNET RTC: CNO real informado pelo usuário', () => {
@@ -313,14 +313,13 @@ test('sanitizeCidadePrestacaoForIssnetRtc — remove campos ABRASF', () => {
   assert.equal(out.cidadePrestacao?.logradouro, 'Rua A');
 });
 
-test('enrichNfseCidadePrestacaoFromObra — ISSNET RTC obra envia cidadePrestacao DPS-safe', () => {
+test('enrichNfseCidadePrestacaoFromObra — ISSNET RTC obra omite cidadePrestacao (só obra.endereco)', () => {
   const out = enrichNfseCidadePrestacaoFromObra({
-    servico: [{ codigo: '070602' }],
+    servico: [{ codigo: '070602', obra: { endereco: { cep: '14000000', logradouro: 'Rua A', numero: '1', bairro: 'Centro', codigoCidade: '3543402' } } }],
+    cidadePrestacao: { codigo: '3543402', logradouro: 'X' },
     tomador: {
       endereco: {
         codigoCidade: '3543402',
-        descricaoCidade: 'Ribeirão Preto',
-        estado: 'SP',
         cep: '14000000',
         logradouro: 'Rua A',
         numero: '1',
@@ -331,7 +330,6 @@ test('enrichNfseCidadePrestacaoFromObra — ISSNET RTC obra envia cidadePrestaca
     issnetOnline30: true,
     servicosInput: [{ codigo: '070602', obra: { usarEnderecoTomador: true } }],
   });
-  assert.equal(out.cidadePrestacao?.codigo, '3543402');
-  assert.equal(out.cidadePrestacao?.logradouro, 'Rua A');
-  assert.equal(out.cidadePrestacao?.tipoLogradouro, undefined);
+  assert.equal(out.cidadePrestacao, undefined);
+  assert.equal(out.servico[0].obra.endereco.cep, '14000000');
 });

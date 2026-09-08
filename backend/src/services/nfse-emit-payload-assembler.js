@@ -7,7 +7,7 @@ import { enrichNfseIssInEmitPayload } from './nfse-iss-defaults.js';
 import {
   enrichNfseCidadePrestacaoFromObra,
   enrichNfseObraOnEmitPayload,
-  sanitizeCidadePrestacaoForIssnetRtc,
+  stripCidadePrestacaoForIssnetRtcObra,
 } from './nfse-obra-defaults.js';
 import { enrichNfseReformaCabecalhoInEmitPayload } from './nfse-reforma-defaults.js';
 
@@ -33,11 +33,11 @@ export const assembleNfsePlugnotasEmitPayload = (basePayload, prep = {}) => {
     });
   }
 
-  emitPayload = enrichNfseCidadePrestacaoFromObra(emitPayload, {
+  emitPayload = enrichNfseObraOnEmitPayload(emitPayload, {
     ...(prep.obraContext ?? {}),
     issnetOnline30: prep.issnetOnline30 === true,
   });
-  emitPayload = enrichNfseObraOnEmitPayload(emitPayload, {
+  emitPayload = enrichNfseCidadePrestacaoFromObra(emitPayload, {
     ...(prep.obraContext ?? {}),
     issnetOnline30: prep.issnetOnline30 === true,
   });
@@ -48,7 +48,7 @@ export const assembleNfsePlugnotasEmitPayload = (basePayload, prep = {}) => {
   });
 
   if (prep.issnetOnline30) {
-    emitPayload = sanitizeCidadePrestacaoForIssnetRtc(emitPayload);
+    emitPayload = stripCidadePrestacaoForIssnetRtcObra(emitPayload);
   }
 
   return emitPayload;
