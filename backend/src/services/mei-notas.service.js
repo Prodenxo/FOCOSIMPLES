@@ -65,6 +65,11 @@ import {
   resolveNfseIssForServico,
 } from './nfse-iss-defaults.js';
 import {
+  attachNfseObraToServico,
+  requiresNfseObraForServicoCodigo,
+  validateNfseObraPayload,
+} from './nfse-obra-defaults.js';
+import {
   extractNfeItemQuantidade,
   extractNfeItemValorUnitario,
   normalizePlugnotasNfePayload,
@@ -581,11 +586,20 @@ const buildPayloadFromInput = (input, userId) => {
       || ''
   );
   const servicosInput = input?.servicos || input?.servico || null;
-  const servicosList = Array.isArray(servicosInput)
-    ? servicosInput.map(buildServicoFromInput).filter(Boolean)
-    : [buildServicoFromInput(servicosInput)].filter(Boolean);
+  const servicosInputList = Array.isArray(servicosInput)
+    ? servicosInput
+    : (servicosInput ? [servicosInput] : []);
   const prestadorEndereco = buildPrestadorEnderecoFromInput(input);
   const tomadorEndereco = buildTomadorEnderecoFromInput(input);
+  const servicosList = servicosInputList
+    .map((servicoInput) => buildServicoFromInput(servicoInput))
+    .filter(Boolean)
+    .map((servicoBuilt, index) => attachNfseObraToServico(
+      servicoBuilt,
+      servicosInputList[index],
+      input,
+      tomadorEndereco,
+    ));
 
   const prestadorBase = { ...(input?.prestador || {}) };
   delete prestadorBase.inscricaoMunicipal;
@@ -790,6 +804,12 @@ const validatePayload = (payload) => {
 
   if (!hasValidService) {
     throw badRequest('Serviço da NFSe está incompleto');
+  }
+
+  for (const item of servicos) {
+    if (!requiresNfseObraForServicoCodigo(item?.codigo)) continue;
+    const obraError = validateNfseObraPayload(item?.obra);
+    if (obraError) throw badRequest(obraError);
   }
 
   assertNfseServicoCodigosMinLength(payload);

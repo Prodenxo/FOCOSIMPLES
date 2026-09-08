@@ -105,6 +105,24 @@ export interface NfseServicoInput {
   codigoNbs?: string;
   /** Indicador de operação IBS/CBS (6 dígitos) — configurado no catálogo pelo contador. */
   cIndOp?: string;
+  /** Dados da obra — obrigatório para serviços LC 116 de construção civil (E0370). */
+  obra?: {
+    usarEnderecoTomador?: boolean;
+    cno?: string;
+    cei?: string;
+    art?: string;
+    codigoObra?: string;
+    endereco?: {
+      logradouro?: string;
+      numero?: string;
+      codigoCidade?: string;
+      cep?: string;
+      complemento?: string;
+      bairro?: string;
+      estado?: string;
+      descricaoCidade?: string;
+    };
+  };
 }
 
 export interface EmitirNfseInput {

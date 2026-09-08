@@ -159,6 +159,12 @@ import {
   type NfeItemForm,
 } from '../lib/meiNfseForms';
 import {
+  buildNfseObraFormFromTomadorEndereco,
+  getDefaultNfseObraForm,
+  mergeObraWhenServicoRequires,
+  requiresNfseObraForServicoCodigo,
+} from '../lib/nfseObraForm';
+import {
   applyCatalogClienteToNfeForm,
   applyCatalogClienteToNfseForm,
   catalogClienteHasNfeEndereco,
@@ -649,8 +655,12 @@ function MeiScreenContent() {
     tomadorRazaoSocial: '',
     tomadorEmail: '',
     tomadorEndereco: getDefaultNfeDestinatarioEndereco(),
-    servico: { codigo: '', discriminacao: '', cnae: '', aliquota: '', valorServico: '' },
+    servico: { codigo: '', discriminacao: '', cnae: '', aliquota: '', valorServico: '', obra: getDefaultNfseObraForm() },
   }));
+  const nfseServicoRequiresObra = useMemo(
+    () => requiresNfseObraForServicoCodigo(nfseForm.servico?.codigo),
+    [nfseForm.servico?.codigo],
+  );
   const [nfeLikeForm, setNfeLikeForm] = useState<NfeLikeForm>(() => getDefaultNfeLikeForm());
   const [emitirNotaLoading, setEmitirNotaLoading] = useState(false);
   const [emitirNotaError, setEmitirNotaError] = useState<string | null>(null);
@@ -2793,6 +2803,7 @@ function MeiScreenContent() {
         tomadorRazaoSocial: prefill.tomadorRazaoSocial,
         tomadorEmail: prefill.tomadorEmail,
         tomadorEndereco: prefill.tomadorEndereco,
+        servico: mergeObraWhenServicoRequires(f.servico, prefill.tomadorEndereco),
       }));
       lastTomadorLookupDocRef.current = normalizeDoc(prefill.tomadorCpfCnpj);
       if (
@@ -2954,6 +2965,10 @@ function MeiScreenContent() {
         reportEmitError(msg);
         return;
       }
+      formToEmit = {
+        ...formToEmit,
+        servico: mergeObraWhenServicoRequires(formToEmit.servico, formToEmit.tomadorEndereco),
+      };
       if (emitirNotaInFlightRef.current) return;
       emitirNotaInFlightRef.current = true;
       setEmitirNotaPending(true);
@@ -5073,7 +5088,14 @@ function MeiScreenContent() {
                     placeholder="Ex.: 17.19.01"
                     hint="Item da lista municipal — mínimo 6 caracteres sem pontos (17.19 não basta; use 17.19.01)."
                     value={nfseForm.servico?.codigo ?? ''}
-                    onChangeText={(t) => setNfseForm((f) => ({ ...f, servico: { ...f.servico, codigo: t } }))}
+                    onChangeText={(t) => setNfseForm((f) => {
+                      const nextServico = { ...f.servico, codigo: t };
+                      if (requiresNfseObraForServicoCodigo(t)) {
+                        nextServico.obra = nextServico.obra
+                          ?? buildNfseObraFormFromTomadorEndereco(f.tomadorEndereco);
+                      }
+                      return { ...f, servico: nextServico };
+                    })}
                   />
                   <MeiFormField
                     label="CNAE"
@@ -5108,6 +5130,221 @@ function MeiScreenContent() {
                     onChangeText={(t) => setNfseForm((f) => ({ ...f, servico: { ...f.servico, valorServico: t } }))}
                     keyboardType="decimal-pad"
                   />
+                  {nfseServicoRequiresObra ? (
+                    <>
+                      <Text style={[styles.obraSectionTitle, { color: theme.textSecondary }]}>
+                        Dados da obra
+                      </Text>
+                      <MeiFormBanner>
+                        Serviço de construção civil: informe onde o trabalho foi feito. Por padrão usamos o endereço do tomador.
+                      </MeiFormBanner>
+                      <MeiLinkButton
+                        label={
+                          nfseForm.servico?.obra?.usarEnderecoTomador !== false
+                            ? 'Obra em outro endereço'
+                            : 'Usar endereço do tomador'
+                        }
+                        onPress={() => setNfseForm((f) => {
+                          const current = f.servico?.obra ?? getDefaultNfseObraForm();
+                          const nextUsarTomador = current.usarEnderecoTomador === false;
+                          return {
+                            ...f,
+                            servico: {
+                              ...f.servico,
+                              obra: nextUsarTomador
+                                ? buildNfseObraFormFromTomadorEndereco(f.tomadorEndereco)
+                                : {
+                                    ...current,
+                                    usarEnderecoTomador: false,
+                                    endereco: {
+                                      ...getDefaultNfeDestinatarioEndereco(),
+                                      ...(current.endereco || {}),
+                                    },
+                                  },
+                            },
+                          };
+                        })}
+                      />
+                      {nfseForm.servico?.obra?.usarEnderecoTomador !== false ? (
+                        nfseForm.tomadorEndereco?.logradouro?.trim() ? (
+                          <Text style={{ color: theme.placeholder, fontSize: 13, marginBottom: 8 }}>
+                            Local da obra: {nfseForm.tomadorEndereco.logradouro},{' '}
+                            {nfseForm.tomadorEndereco.numero || 'S/N'} —{' '}
+                            {nfseForm.tomadorEndereco.descricaoCidade || 'cidade'}/{nfseForm.tomadorEndereco.estado || 'UF'}
+                          </Text>
+                        ) : (
+                          <MeiFormBanner>
+                            Complete o endereço do tomador ou clique em «Obra em outro endereço».
+                          </MeiFormBanner>
+                        )
+                      ) : (
+                        <>
+                          <MeiFormField
+                            label="CEP da obra"
+                            required
+                            placeholder="00000-000"
+                            value={nfseForm.servico?.obra?.endereco?.cep ?? ''}
+                            onChangeText={(t) => setNfseForm((f) => ({
+                              ...f,
+                              servico: {
+                                ...f.servico,
+                                obra: {
+                                  ...(f.servico?.obra ?? getDefaultNfseObraForm()),
+                                  usarEnderecoTomador: false,
+                                  endereco: {
+                                    ...(f.servico?.obra?.endereco ?? getDefaultNfeDestinatarioEndereco()),
+                                    cep: t,
+                                  },
+                                },
+                              },
+                            }))}
+                            keyboardType="numeric"
+                            maxLength={9}
+                          />
+                          <MeiFormField
+                            label="Logradouro da obra"
+                            required
+                            value={nfseForm.servico?.obra?.endereco?.logradouro ?? ''}
+                            onChangeText={(t) => setNfseForm((f) => ({
+                              ...f,
+                              servico: {
+                                ...f.servico,
+                                obra: {
+                                  ...(f.servico?.obra ?? getDefaultNfseObraForm()),
+                                  usarEnderecoTomador: false,
+                                  endereco: {
+                                    ...(f.servico?.obra?.endereco ?? getDefaultNfeDestinatarioEndereco()),
+                                    logradouro: t,
+                                  },
+                                },
+                              },
+                            }))}
+                          />
+                          <MeiFormField
+                            label="Número"
+                            required
+                            value={nfseForm.servico?.obra?.endereco?.numero ?? ''}
+                            onChangeText={(t) => setNfseForm((f) => ({
+                              ...f,
+                              servico: {
+                                ...f.servico,
+                                obra: {
+                                  ...(f.servico?.obra ?? getDefaultNfseObraForm()),
+                                  usarEnderecoTomador: false,
+                                  endereco: {
+                                    ...(f.servico?.obra?.endereco ?? getDefaultNfeDestinatarioEndereco()),
+                                    numero: t,
+                                  },
+                                },
+                              },
+                            }))}
+                          />
+                          <MeiFormField
+                            label="Bairro"
+                            required
+                            value={nfseForm.servico?.obra?.endereco?.bairro ?? ''}
+                            onChangeText={(t) => setNfseForm((f) => ({
+                              ...f,
+                              servico: {
+                                ...f.servico,
+                                obra: {
+                                  ...(f.servico?.obra ?? getDefaultNfseObraForm()),
+                                  usarEnderecoTomador: false,
+                                  endereco: {
+                                    ...(f.servico?.obra?.endereco ?? getDefaultNfeDestinatarioEndereco()),
+                                    bairro: t,
+                                  },
+                                },
+                              },
+                            }))}
+                          />
+                          <MeiFormField
+                            label="Código IBGE da cidade"
+                            required
+                            value={nfseForm.servico?.obra?.endereco?.codigoCidade ?? ''}
+                            onChangeText={(t) => setNfseForm((f) => ({
+                              ...f,
+                              servico: {
+                                ...f.servico,
+                                obra: {
+                                  ...(f.servico?.obra ?? getDefaultNfseObraForm()),
+                                  usarEnderecoTomador: false,
+                                  endereco: {
+                                    ...(f.servico?.obra?.endereco ?? getDefaultNfeDestinatarioEndereco()),
+                                    codigoCidade: t,
+                                  },
+                                },
+                              },
+                            }))}
+                            keyboardType="numeric"
+                            maxLength={7}
+                          />
+                          <MeiFormField
+                            label="Cidade"
+                            value={nfseForm.servico?.obra?.endereco?.descricaoCidade ?? ''}
+                            onChangeText={(t) => setNfseForm((f) => ({
+                              ...f,
+                              servico: {
+                                ...f.servico,
+                                obra: {
+                                  ...(f.servico?.obra ?? getDefaultNfseObraForm()),
+                                  usarEnderecoTomador: false,
+                                  endereco: {
+                                    ...(f.servico?.obra?.endereco ?? getDefaultNfeDestinatarioEndereco()),
+                                    descricaoCidade: t,
+                                  },
+                                },
+                              },
+                            }))}
+                          />
+                          <MeiFormField
+                            label="UF"
+                            required
+                            value={nfseForm.servico?.obra?.endereco?.estado ?? ''}
+                            onChangeText={(t) => setNfseForm((f) => ({
+                              ...f,
+                              servico: {
+                                ...f.servico,
+                                obra: {
+                                  ...(f.servico?.obra ?? getDefaultNfseObraForm()),
+                                  usarEnderecoTomador: false,
+                                  endereco: {
+                                    ...(f.servico?.obra?.endereco ?? getDefaultNfeDestinatarioEndereco()),
+                                    estado: t.toUpperCase().slice(0, 2),
+                                  },
+                                },
+                              },
+                            }))}
+                            maxLength={2}
+                          />
+                        </>
+                      )}
+                      <MeiFormField
+                        label="CNO (opcional)"
+                        hint="Cadastro Nacional de Obras — se não tiver, deixe em branco e confirme com o contador."
+                        value={nfseForm.servico?.obra?.cno ?? ''}
+                        onChangeText={(t) => setNfseForm((f) => ({
+                          ...f,
+                          servico: {
+                            ...f.servico,
+                            obra: { ...(f.servico?.obra ?? getDefaultNfseObraForm()), cno: t },
+                          },
+                        }))}
+                      />
+                      <MeiFormField
+                        label="CEI (opcional)"
+                        hint="Cadastro de obra no INSS — use só se o contador orientar."
+                        value={nfseForm.servico?.obra?.cei ?? ''}
+                        onChangeText={(t) => setNfseForm((f) => ({
+                          ...f,
+                          servico: {
+                            ...f.servico,
+                            obra: { ...(f.servico?.obra ?? getDefaultNfseObraForm()), cei: t },
+                          },
+                        }))}
+                      />
+                    </>
+                  ) : null}
                 </>
               )}
               {(emitirNotaType === 'NFE' || emitirNotaType === 'NFCE') && (
@@ -6194,6 +6431,12 @@ const createStyles = (
       fontSize: 16,
       fontWeight: '600',
       color: theme.text,
+    },
+    obraSectionTitle: {
+      fontSize: 14,
+      fontWeight: '700',
+      marginTop: 12,
+      marginBottom: 4,
     },
     sectionDescription: {
       fontSize: 12,

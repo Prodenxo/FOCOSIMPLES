@@ -38,6 +38,10 @@ import {
   NFSE_SERVICO_CODIGO_MIN_LENGTH,
   normalizeCodigoServicoInput,
 } from './meiCatalogoProdutoForm';
+import {
+  getNfseObraValidationMessage,
+  requiresNfseObraForServicoCodigo,
+} from './nfseObraForm';
 
 export type { DestinatarioIndIeDest } from './meiNfeDestinatarioIe';
 export type { NfeDestinatarioEnderecoForm } from './meiNfeDestinatarioEndereco';
@@ -383,8 +387,18 @@ export function getNfseValidationMessage(
   }
   const valorServico = parseDecimalInput(servico.valorServico);
   if (valorServico === null || valorServico <= 0) return 'Informe um valor de serviço maior que zero.';
+
+  const obraMsg = getNfseObraValidationMessage(
+    codigoNorm || servico.codigo,
+    servico.obra,
+    input.tomadorEndereco,
+  );
+  if (obraMsg) return obraMsg;
+
   return null;
 }
+
+export { requiresNfseObraForServicoCodigo };
 
 function getNfeLikeLabel(documentType: NotaDocumentType) {
   return documentType === 'NFE' ? 'NF-e' : 'NFC-e';
