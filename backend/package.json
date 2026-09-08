@@ -16,6 +16,7 @@
     "test:openclaw:nfse:local": "node scripts/test-openclaw-nfse.mjs --local",
     "test:nfse:obra:preview": "node scripts/nfse-obra-emit-debug.mjs preview",
     "test:nfse:obra:diff": "node scripts/nfse-obra-emit-debug.mjs diff",
+    "test:nfse:obra:status": "node scripts/nfse-obra-emit-debug.mjs status",
     "seed:tax-rules-rj": "node scripts/one-time/seed-tax-rules-state-rj-retail.mjs",
     "test:fiscal-engine": "node --test tests/fiscal-engine/*.test.js tests/nfe-like-payload-sanitize.test.js tests/st-rules-engine.test.js tests/nfe-item-tax.test.js tests/nfe-like-payload-tax-apply.test.js"
   },

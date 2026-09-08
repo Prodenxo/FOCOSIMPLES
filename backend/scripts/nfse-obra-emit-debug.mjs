@@ -20,7 +20,7 @@ import dotenv from 'dotenv';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildNfseEmitPayloadPreview } from '../src/services/mei-notas.service.js';
-import { emitirNfse } from '../src/services/plugnotas/nfse.service.js';
+import { consultarNfse, consultarNfsePorIntegracao, emitirNfse } from '../src/services/plugnotas/nfse.service.js';
 import { redactPayload } from '../src/services/plugnotas/plugnotas-emit-400-log.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -106,8 +106,11 @@ Modos:
   preview   — monta e imprime o JSON final (padrão)
   emit      — POST na PlugNotas (nota real se produção!)
   diff      — mostra só campos críticos (obra, cidadePrestacao, ibscbs, cabeçalho RTC)
+  status    — consulta status na PlugNotas (--id=... ou --integracao=...)
 
 Flags:
+  --id=6aa062b7...       ID PlugNotas retornado no emit
+  --integracao=obra-debug-...  idIntegracao usado no emit
   --cno=123456789012     CNO real (12 dígitos); omitir = sem codigo no ISSNET RTC
   --cei=                 CEI opcional
   --art=                 ART opcional
@@ -119,12 +122,53 @@ Flags:
 Exemplos:
   node scripts/nfse-obra-emit-debug.mjs preview
   node scripts/nfse-obra-emit-debug.mjs diff --cno=000
-  node scripts/nfse-obra-emit-debug.mjs emit --cno=000
+  node scripts/nfse-obra-emit-debug.mjs emit
+  node scripts/nfse-obra-emit-debug.mjs status --id=6aa062b72c140c847364c4a7
 `);
   process.exit(1);
 };
 
 if (argv.includes('--help') || argv.includes('-h')) usage();
+
+const pickPlugnotasStatus = (body) => {
+  const doc = body?.documents?.[0] ?? body?.documento?.[0] ?? body;
+  const status = doc?.status ?? body?.status ?? doc?.situacao ?? body?.situacao;
+  const mensagem = doc?.mensagem ?? body?.mensagem ?? doc?.message ?? body?.message;
+  const codigo = doc?.codigo ?? body?.codigo ?? doc?.codigoErro ?? body?.codigoErro;
+  const numero = doc?.numeroNfse ?? doc?.numero ?? body?.numeroNfse;
+  return { status, mensagem, codigo, numero, raw: doc ?? body };
+};
+
+if (mode === 'status') {
+  const apiKey = String(process.env.PLUGNOTAS_API_KEY || process.env.PLUGNOTAS_TOKEN || '').trim();
+  if (!apiKey) {
+    console.error('Defina PLUGNOTAS_API_KEY no .env para consultar.');
+    process.exit(1);
+  }
+  const notaId = readFlag('id');
+  const idIntegracao = readFlag('integracao');
+  if (!notaId && !idIntegracao) {
+    console.error('Informe --id=... ou --integracao=...');
+    usage();
+  }
+  console.log('Consultando PlugNotas...', notaId ? `id=${notaId}` : `integracao=${idIntegracao}`);
+  try {
+    const body = notaId
+      ? await consultarNfse(notaId)
+      : await consultarNfsePorIntegracao(idIntegracao, prestadorCnpj);
+    const summary = pickPlugnotasStatus(body);
+    console.log('Status:', summary.status ?? '(indeterminado)');
+    if (summary.numero) console.log('Número NFSe:', summary.numero);
+    if (summary.codigo) console.log('Código erro:', summary.codigo);
+    if (summary.mensagem) console.log('Mensagem:', summary.mensagem);
+    console.log('\nResposta completa:');
+    console.log(JSON.stringify(body, null, 2));
+  } catch (err) {
+    console.error('\nFalha na consulta:', err instanceof Error ? err.message : err);
+    process.exit(1);
+  }
+  process.exit(0);
+}
 
 const payload = buildNfseEmitPayloadPreview(buildSampleInput(), 'cli-debug', {
   codigoIbge,
@@ -180,6 +224,10 @@ if (mode === 'diff') {
     const response = await emitirNfse({ ...payload, idIntegracao: `obra-debug-${Date.now()}` });
     console.log('\nResposta PlugNotas:');
     console.log(JSON.stringify(response, null, 2));
+    const doc = response?.documents?.[0];
+    if (doc?.id) {
+      console.log(`\nConsultar status:\n  node scripts/nfse-obra-emit-debug.mjs status --id=${doc.id}`);
+    }
   } catch (err) {
     console.error('\nFalha na emissão:', err instanceof Error ? err.message : err);
     process.exit(1);
