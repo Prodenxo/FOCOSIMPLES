@@ -57,6 +57,7 @@ import {
   readNfseNacionalFromEmpresa,
   resolveNfseIssForServico,
 } from './nfse-iss-defaults.js';
+import { enrichNfseReformaCabecalhoInEmitPayload } from './nfse-reforma-defaults.js';
 import {
   extractNfeItemQuantidade,
   extractNfeItemValorUnitario,
@@ -2304,6 +2305,9 @@ export const emitirNota = async (userId, input) => {
           simplesNacional: empresaJsonCache?.simplesNacional !== false,
         });
       }
+    }
+    if (documentType === DOCUMENT_TYPE_NFSE) {
+      emitPayload = enrichNfseReformaCabecalhoInEmitPayload(emitPayload);
     }
     if (documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE) {
       cnpjEmitenteNfe = prestadorDoc
