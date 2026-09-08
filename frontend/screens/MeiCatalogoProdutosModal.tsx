@@ -28,12 +28,14 @@ import {
 } from '../lib/nfeCatalogProdutoMetadata'
 import {
   catalogProdutoNeedsNfseReformaCompletion,
+  canEditNfseReformaCatalogFields,
   emptyNfseCatalogProdutoFormFields,
   lookupSuggestedCodigoNbs,
   nfseCatalogProdutoFormFieldsFromMetadata,
   NFSE_CINDOP_OPTIONS,
   type NfseCatalogProdutoFormFields,
 } from '../lib/nfseCatalogProdutoMetadata'
+import { useAuthStore } from '../store/authStore'
 import { parseDecimalInput } from '../lib/meiNfseForms'
 import { resolveAppOrigin } from '../lib/appOrigin'
 import type { DocumentType, NfseCatalogProduto } from '../services/meiNotasService'
@@ -127,6 +129,8 @@ export default function MeiCatalogoProdutosModal ({
   const { theme, isDarkMode } = useMfTheme()
   const flow = useMeiFlowStyles()
   const showToast = useAppToastStore((s) => s.show)
+  const { role, isImpersonating } = useAuthStore()
+  const canEditNfseReforma = canEditNfseReformaCatalogFields(role, isImpersonating)
   const isFocoSimples = resolveAppOrigin() === 'focosimples'
 
   const [items, setItems] = useState<NfseCatalogProduto[]>([])
@@ -361,6 +365,7 @@ export default function MeiCatalogoProdutosModal ({
         },
         parseDecimalInput,
         editingItem?.metadata_json as Record<string, unknown> | null | undefined,
+        { includeReformaMetadata: canEditNfseReforma },
       )
     } catch (e: unknown) {
       alertDialog('Validação', e instanceof Error ? e.message : 'Dados inválidos.')
@@ -580,15 +585,19 @@ export default function MeiCatalogoProdutosModal ({
                 && (item.metadata_json as { needsServicoCodigo?: boolean }).needsServicoCodigo,
               )
               const missingCodigo = !String(item.codigo || '').trim()
-              const needsNcm = isNfeLike && catalogProdutoNeedsNfeCompletion(item)
-              const needsReforma = !isNfeLike && catalogProdutoNeedsNfseReformaCompletion(item)
+              const needsNcm = isNfeLike
+                && catalogProdutoNeedsNfeCompletion(item)
+                && canEditNfseReforma
+              const needsReforma = canEditNfseReforma
+                && !isNfeLike
+                && catalogProdutoNeedsNfseReformaCompletion(item)
               const tipo = catalogDocTypeLabel(item.document_type)
               const metaBits = [
                 tipo,
                 item.cnae ? `CNAE ${item.cnae}` : null,
                 !isNfeLike && (needsCodigo || missingCodigo) ? 'Completar código LC 116' : null,
-                needsReforma ? 'Contador: configurar IBS/CBS' : null,
-                needsNcm ? 'Completar cadastro fiscal' : null,
+                needsReforma ? 'Contador: configurar IBS/CBS (NFS-e)' : null,
+                needsNcm ? 'Contador: completar cadastro fiscal (NF-e)' : null,
               ].filter(Boolean)
               return (
                 <MeiCatalogListCard
@@ -992,6 +1001,8 @@ export default function MeiCatalogoProdutosModal ({
           onChangeText={(t) => setForm((f) => ({ ...f, valorSugerido: t }))}
           keyboardType="decimal-pad"
         />
+        {canEditNfseReforma ? (
+          <>
         <MeiFormSectionLabel>Reforma Tributária (contador)</MeiFormSectionLabel>
         <MeiFormBanner>
           Campos IBS/CBS exigidos por algumas prefeituras (ex.: Ribeirão Preto). O contador
@@ -1051,6 +1062,8 @@ export default function MeiCatalogoProdutosModal ({
             </Pressable>
           ))}
         </View>
+          </>
+        ) : null}
           </>
         )}
       </MeiFormSheet>

@@ -189,7 +189,7 @@ import {
 } from '../lib/empresaBusinessType';
 import { mapCatalogProdutoToNfeItem } from '../lib/mapCatalogProdutoToNfeItem';
 import { isCatalogProdutoUsableForNfeLike, catalogProdutoNeedsNfeCompletion, resolveCatalogProdutoNcm } from '../lib/nfeCatalogProdutoMetadata';
-import { applyCatalogProdutoToNfseServico, catalogProdutoNeedsNfseReformaCompletion } from '../lib/nfseCatalogProdutoMetadata';
+import { applyCatalogProdutoToNfseServico, canEditNfseReformaCatalogFields, catalogProdutoNeedsNfseReformaCompletion } from '../lib/nfseCatalogProdutoMetadata';
 import NfeEmitItemLeigoCard from '../components/mei/NfeEmitItemLeigoCard';
 import { getDefaultNfeDestinatarioEndereco } from '../lib/meiNfeDestinatarioEndereco';
 import { fetchNfsePrestadorPrefill } from '../services/meiPrestadorPrefillService';
@@ -502,7 +502,7 @@ function EmpresaFiscalCard({ empresa, theme, onEdit }: { empresa: EmpresaFiscalD
 }
 
 function MeiScreenContent() {
-  const { userId, displayName } = useAuthStore();
+  const { userId, displayName, role, isImpersonating } = useAuthStore();
   const { isDarkMode } = useThemeStore();
   const { openDrawer, hasGlobalNav } = useNavigationDrawer();
   const { width: winWidth } = useWindowDimensions();
@@ -2837,9 +2837,12 @@ function MeiScreenContent() {
           ...servicoPrefill,
         },
       }));
-      if (catalogProdutoNeedsNfseReformaCompletion(item)) {
+      if (
+        catalogProdutoNeedsNfseReformaCompletion(item)
+        && canEditNfseReformaCatalogFields(role, isImpersonating)
+      ) {
         showToast(
-          'Este serviço ainda não tem NBS/cIndOp configurados pelo contador. A emissão pode ser rejeitada em algumas cidades.',
+          'Este serviço ainda não tem NBS/cIndOp configurados. Preencha no catálogo antes da emissão.',
           'error',
         );
       }
@@ -5619,13 +5622,14 @@ function MeiScreenContent() {
               }
               const needsNfe = catalogProdutoNeedsNfeCompletion(item)
               const ncm = resolveCatalogProdutoNcm(item)
+              const showFiscalHint = canEditNfseReformaCatalogFields(role, isImpersonating)
               return (
                 <MeiCatalogListCard
                   title={buildProdutoCatalogLabel(item)}
                   meta={[
                     item.document_type,
                     ncm ? `NCM ${ncm}` : null,
-                    needsNfe ? 'Completar NCM' : null,
+                    showFiscalHint && needsNfe ? 'Contador: completar cadastro NF-e' : null,
                   ].filter(Boolean).join(' · ') || undefined}
                   onPress={() => handleSelectCatalogProduto(item)}
                 />

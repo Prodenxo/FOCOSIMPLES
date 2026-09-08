@@ -41,6 +41,14 @@ export function emptyNfseCatalogProdutoFormFields(): NfseCatalogProdutoFormField
   return { codigoNbs: '', cIndOp: '' }
 }
 
+/** Campos IBS/CBS no catálogo — só ao impersonar o cliente (contador configurando). */
+export function canEditNfseReformaCatalogFields(
+  _role: string | null | undefined,
+  isImpersonating = false,
+): boolean {
+  return isImpersonating === true
+}
+
 const onlyDigits = (value: string, max: number) =>
   String(value ?? '').replace(/\D/g, '').slice(0, max)
 

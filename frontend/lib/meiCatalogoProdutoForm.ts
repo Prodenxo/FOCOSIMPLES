@@ -64,6 +64,7 @@ export interface ProdutoCatalogFormInput {
 export function validateProdutoCatalogForm (
   input: ProdutoCatalogFormInput,
   parseDecimal: (raw: string) => number | null,
+  options?: { includeReformaMetadata?: boolean },
 ): string | null {
   const discriminacao = input.discriminacao.trim()
   if (!discriminacao) return 'Discriminação é obrigatória.'
@@ -115,8 +116,10 @@ export function validateProdutoCatalogForm (
   }
 
   const nfseFields = input.nfse ?? emptyNfseCatalogProdutoFormFields()
-  const nfseErr = validateNfseCatalogProdutoFormFields(nfseFields)
-  if (nfseErr) return nfseErr
+  if (options?.includeReformaMetadata) {
+    const nfseErr = validateNfseCatalogProdutoFormFields(nfseFields)
+    if (nfseErr) return nfseErr
+  }
 
   return null
 }
@@ -125,8 +128,9 @@ export function buildProdutoCatalogPayload (
   input: ProdutoCatalogFormInput,
   parseDecimal: (raw: string) => number | null,
   existingMetadata?: Record<string, unknown> | null,
+  options?: { includeReformaMetadata?: boolean },
 ) {
-  const err = validateProdutoCatalogForm(input, parseDecimal)
+  const err = validateProdutoCatalogForm(input, parseDecimal, options)
   if (err) throw new Error(err)
 
   const valorOpt = input.valorSugeridoStr.trim()
@@ -149,12 +153,18 @@ export function buildProdutoCatalogPayload (
 
   const aliquotaOpt = input.aliquotaStr.trim() ? parseDecimal(input.aliquotaStr) : null
 
-  return {
+  const base = {
     codigo: normalizeCodigoServicoInput(input.codigo),
     cnae: normalizeCnaeInput(input.cnae),
     discriminacao: input.discriminacao.trim(),
     ...(aliquotaOpt !== null && aliquotaOpt !== undefined ? { aliquota: aliquotaOpt } : {}),
     ...(valorOpt !== null && valorOpt !== undefined ? { valor_sugerido: valorOpt } : {}),
+  }
+
+  if (!options?.includeReformaMetadata) return base
+
+  return {
+    ...base,
     metadata_json: buildNfseCatalogProdutoMetadata(
       existingMetadata,
       input.nfse ?? emptyNfseCatalogProdutoFormFields(),

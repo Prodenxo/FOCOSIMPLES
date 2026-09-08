@@ -17,6 +17,12 @@ export const NFSE_CINDOP_SERVICO_NO_ESTABELECIMENTO = '050101';
 /** Prestação de serviço fora dos demais indicadores (ex.: remoto/consultoria). */
 export const NFSE_CINDOP_SERVICO_GERAL = '100301';
 
+/** CST IBS/CBS — tributação padrão (PlugNotas / ISSNET RTC v1.01). */
+export const NFSE_SITUACAO_TRIBUTARIA_IBSCBS_DEFAULT = '000';
+
+/** Classificação tributária IBS/CBS genérica para serviço. */
+export const NFSE_CLASSIFICACAO_TRIBUTARIA_IBSCBS_DEFAULT = '000001';
+
 /**
  * @param {unknown} codigo
  * @returns {string}
@@ -31,6 +37,71 @@ export const normalizeCIndOp = (value) => {
   if (value === undefined || value === null || value === '') return null;
   const digits = String(value).replace(/\D/g, '').slice(0, 6);
   return digits.length === 6 ? digits : null;
+};
+
+/**
+ * @param {unknown} value
+ * @returns {string|null}
+ */
+export const normalizeSituacaoTributariaIbsCbs = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  const digits = String(value).replace(/\D/g, '').slice(0, 3);
+  return digits.length === 3 ? digits : null;
+};
+
+/**
+ * @param {unknown} value
+ * @returns {string|null}
+ */
+export const normalizeClassificacaoTributariaIbsCbs = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  const digits = String(value).replace(/\D/g, '').slice(0, 6);
+  return digits.length === 6 ? digits : null;
+};
+
+/**
+ * @param {Record<string, unknown>|null|undefined} servico
+ * @returns {string}
+ */
+export const resolveClassificacaoTributariaIbsCbsForServico = (servico = {}) => {
+  const ibscbs = servico.ibscbs && typeof servico.ibscbs === 'object' && !Array.isArray(servico.ibscbs)
+    ? servico.ibscbs
+    : {};
+
+  const explicit = normalizeClassificacaoTributariaIbsCbs(
+    ibscbs.classificacaoTributariaIbsCbs
+    ?? ibscbs.cClassTrib
+    ?? ibscbs.classCode
+    ?? servico.classificacaoTributariaIbsCbs
+    ?? servico.cClassTrib,
+  );
+  if (explicit) return explicit;
+
+  return NFSE_CLASSIFICACAO_TRIBUTARIA_IBSCBS_DEFAULT;
+};
+
+/**
+ * @param {Record<string, unknown>|null|undefined} servico
+ * @returns {string}
+ */
+export const resolveSituacaoTributariaIbsCbsForServico = (servico = {}) => {
+  const ibscbs = servico.ibscbs && typeof servico.ibscbs === 'object' && !Array.isArray(servico.ibscbs)
+    ? servico.ibscbs
+    : {};
+
+  const explicit = normalizeSituacaoTributariaIbsCbs(
+    ibscbs.situacaoTributariaIbsCbs
+    ?? ibscbs.cst
+    ?? ibscbs.situationCode
+    ?? servico.situacaoTributariaIbsCbs
+    ?? servico.cstIbsCbs,
+  );
+  if (explicit) return explicit;
+
+  const classificacao = resolveClassificacaoTributariaIbsCbsForServico(servico);
+  if (classificacao.length >= 3) return classificacao.slice(0, 3);
+
+  return NFSE_SITUACAO_TRIBUTARIA_IBSCBS_DEFAULT;
 };
 
 /**
@@ -113,6 +184,20 @@ export const buildMinimalServicoIbscbs = (ibscbsInput = {}, options = {}) => {
     cIndOp: source.cIndOp ?? options.cIndOp,
     codigoOperacao: source.codigoOperacao ?? options.cIndOp,
   });
+  const classificacaoTributariaIbsCbs = resolveClassificacaoTributariaIbsCbsForServico({
+    ...servico,
+    ibscbs: source,
+    classificacaoTributariaIbsCbs: source.classificacaoTributariaIbsCbs ?? options.classificacaoTributariaIbsCbs,
+    cClassTrib: source.cClassTrib ?? options.cClassTrib,
+  });
+  const situacaoTributariaIbsCbs = resolveSituacaoTributariaIbsCbsForServico({
+    ...servico,
+    ibscbs: source,
+    situacaoTributariaIbsCbs: source.situacaoTributariaIbsCbs ?? options.situacaoTributariaIbsCbs,
+    cstIbsCbs: source.cst ?? options.situacaoTributariaIbsCbs,
+    classificacaoTributariaIbsCbs,
+    cClassTrib: classificacaoTributariaIbsCbs,
+  });
 
   const destinatarioSource = source.destinatario && typeof source.destinatario === 'object' && !Array.isArray(source.destinatario)
     ? source.destinatario
@@ -126,6 +211,11 @@ export const buildMinimalServicoIbscbs = (ibscbsInput = {}, options = {}) => {
     indFinal: source.indFinal ?? operacaoPessoal,
     cIndOp,
     codigoOperacao: source.codigoOperacao ?? cIndOp,
+    situacaoTributariaIbsCbs,
+    cst: source.cst ?? situacaoTributariaIbsCbs,
+    classificacaoTributariaIbsCbs,
+    cClassTrib: source.cClassTrib ?? classificacaoTributariaIbsCbs,
+    classCode: source.classCode ?? classificacaoTributariaIbsCbs,
     indDest: source.indDest ?? destinatarioSource.indicador ?? 0,
     destinatario: {
       indicador: destinatarioSource.indicador ?? source.indDest ?? 0,
@@ -158,6 +248,22 @@ export const validateNfseCatalogProdutoMetadata = (metadata = {}) => {
     const cIndOp = normalizeCIndOp(rawCIndOp);
     if (!cIndOp) {
       throw new Error('Indicador de operação (cIndOp) deve ter 6 dígitos.');
+    }
+  }
+
+  const rawCst = source.situacaoTributariaIbsCbs ?? source.cst ?? source.cstIbsCbs;
+  if (rawCst !== undefined && rawCst !== null && String(rawCst).trim() !== '') {
+    const cst = normalizeSituacaoTributariaIbsCbs(rawCst);
+    if (!cst) {
+      throw new Error('Situação tributária IBS/CBS (CST) deve ter 3 dígitos.');
+    }
+  }
+
+  const rawClass = source.classificacaoTributariaIbsCbs ?? source.cClassTrib ?? source.classCode;
+  if (rawClass !== undefined && rawClass !== null && String(rawClass).trim() !== '') {
+    const classificacao = normalizeClassificacaoTributariaIbsCbs(rawClass);
+    if (!classificacao) {
+      throw new Error('Classificação tributária IBS/CBS deve ter 6 dígitos.');
     }
   }
 };

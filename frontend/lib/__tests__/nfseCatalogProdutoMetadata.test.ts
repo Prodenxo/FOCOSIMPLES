@@ -1,6 +1,7 @@
 import {
   applyCatalogProdutoToNfseServico,
   buildNfseCatalogProdutoMetadata,
+  canEditNfseReformaCatalogFields,
   catalogProdutoNeedsNfseReformaCompletion,
   lookupSuggestedCodigoNbs,
   validateNfseCatalogProdutoFormFields,
@@ -48,5 +49,10 @@ describe('nfseCatalogProdutoMetadata', () => {
         metadata_json: { cIndOp: '050101' },
       }),
     ).toBe(false)
+  })
+
+  it('canEditNfseReformaCatalogFields: só impersonação', () => {
+    expect(canEditNfseReformaCatalogFields('admin', false)).toBe(false)
+    expect(canEditNfseReformaCatalogFields('usuario', true)).toBe(true)
   })
 })

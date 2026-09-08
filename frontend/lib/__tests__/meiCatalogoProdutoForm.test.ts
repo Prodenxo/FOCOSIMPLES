@@ -50,7 +50,7 @@ describe('meiCatalogoProdutoForm', () => {
     )
     expect(payload.codigo).toBe('140101')
     expect(payload.cnae).toBe('4211102')
-    expect(payload.metadata_json).toEqual({})
+    expect(payload.metadata_json).toBeUndefined()
   })
 
   it('aceita catálogo sem alíquota (MEI/Simples)', () => {
@@ -77,10 +77,10 @@ describe('meiCatalogoProdutoForm', () => {
       parseDecimal,
     )
     expect(payload.aliquota).toBeUndefined()
-    expect(payload.metadata_json).toEqual({})
+    expect(payload.metadata_json).toBeUndefined()
   })
 
-  it('persiste NBS e cIndOp no metadata_json NFS-e', () => {
+  it('persiste NBS e cIndOp no metadata_json NFS-e (contador)', () => {
     const payload = buildProdutoCatalogPayload(
       {
         codigo: '14.01.01',
@@ -91,6 +91,8 @@ describe('meiCatalogoProdutoForm', () => {
         nfse: { codigoNbs: '120013110', cIndOp: '050101' },
       },
       parseDecimal,
+      null,
+      { includeReformaMetadata: true },
     )
     expect(payload.metadata_json).toMatchObject({
       codigoNbs: '120013110',
