@@ -30,8 +30,8 @@ export const NFSE_VERSAO_ESQUEMA_RTC = 'RTC';
 /** ISSNET exige layout 1.01 quando o grupo IBSCBS está presente (manual v1.01). */
 export const NFSE_VERSAO_LAYOUT_RTC = '1.01';
 
-/** Municípios ISSNET que migraram DPS/RTC nacional (schema 1.01 + nfseNacional). */
-export const NFSE_ISSNET_RTC_NACIONAL_IBGE = Object.freeze(new Set([
+/** Municípios ISSNET que exigem layout RTC v1.01 na emissão (via ISSNET municipal, não portal nacional). */
+export const NFSE_ISSNET_RTC_IBGE = Object.freeze(new Set([
   '3543402', // Ribeirão Preto/SP
 ]));
 
@@ -265,10 +265,13 @@ export const readCodigoIbgeFromEmpresa = (empresaJson = {}) => {
  * @param {unknown} codigoIbge
  * @returns {boolean}
  */
-export const requiresIssnetRtcNfseNacional = (codigoIbge) => {
+export const requiresIssnetRtcEmitSchema = (codigoIbge) => {
   const digits = String(codigoIbge || '').replace(/\D/g, '').slice(0, 7);
-  return NFSE_ISSNET_RTC_NACIONAL_IBGE.has(digits);
+  return NFSE_ISSNET_RTC_IBGE.has(digits);
 };
+
+/** @deprecated Use {@link requiresIssnetRtcEmitSchema} — RTC municipal ≠ NFS-e Nacional. */
+export const requiresIssnetRtcNfseNacional = requiresIssnetRtcEmitSchema;
 
 /**
  * @param {Record<string, unknown>|null|undefined} ibscbsInput
@@ -460,8 +463,7 @@ export const enrichNfseReformaCabecalhoInEmitPayload = (payload, options = {}) =
     ?? '',
   ).replace(/\D/g, '').slice(0, 7);
 
-  const nfseNacional = options.nfseNacional !== false
-    && (options.nfseNacional === true || requiresIssnetRtcNfseNacional(codigoIbge));
+  const nfseNacional = options.nfseNacional === true;
 
   const emitente = nfseNacional && codigoIbge.length === 7
     ? {

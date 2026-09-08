@@ -10,7 +10,7 @@ import {
   NFSE_VERSAO_ESQUEMA_RTC,
   NFSE_VERSAO_LAYOUT_RTC,
   readCodigoIbgeFromEmpresa,
-  requiresIssnetRtcNfseNacional,
+  requiresIssnetRtcEmitSchema,
   resolveCIndOpForServico,
   resolveFinNfseValue,
   validateNfseCatalogProdutoMetadata,
@@ -32,9 +32,9 @@ test('resolveCIndOpForServico: oficina / LC 14.01 → 050101', () => {
   );
 });
 
-test('requiresIssnetRtcNfseNacional: Ribeirão Preto', () => {
-  assert.equal(requiresIssnetRtcNfseNacional('3543402'), true);
-  assert.equal(requiresIssnetRtcNfseNacional('3550308'), false);
+test('requiresIssnetRtcEmitSchema: Ribeirão Preto', () => {
+  assert.equal(requiresIssnetRtcEmitSchema('3543402'), true);
+  assert.equal(requiresIssnetRtcEmitSchema('3550308'), false);
 });
 
 test('readCodigoIbgeFromEmpresa: prefeitura.config', () => {
@@ -67,6 +67,16 @@ test('enrichNfseReformaCabecalhoInEmitPayload: versao 1.01 + RTC + emitente naci
   assert.equal(out.versaoEsquema, NFSE_VERSAO_ESQUEMA_RTC);
   assert.equal(out.emitente.codigoCidade, '3543402');
   assert.equal(out.servico[0].ibscbs.destinatario.indicador, 0);
+});
+
+test('enrichNfseReformaCabecalhoInEmitPayload: municipal ISSNET RTC sem emitente nacional', () => {
+  const out = enrichNfseReformaCabecalhoInEmitPayload({
+    servico: [{ codigo: '140101', cnae: '4520001' }],
+  }, { simplesNacional: true, nfseNacional: false, codigoIbge: '3543402' });
+  assert.equal(out.versao, NFSE_VERSAO_LAYOUT_RTC);
+  assert.equal(out.versaoEsquema, NFSE_VERSAO_ESQUEMA_RTC);
+  assert.equal(out.emitente, undefined);
+  assert.equal(out.servico[0].ibscbs.valores.tributacao.cst, '000');
 });
 
 test('enrichNfseReformaCabecalhoInEmitPayload: cIndOp vira codigoOperacao em ibscbs', () => {

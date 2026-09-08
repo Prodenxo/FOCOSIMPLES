@@ -1,11 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import {
-  buildEmpresaPayloadFromEmitenteSnapshot,
-  buildIssnetRtcNacionalEmpresaPatch,
-} from '../src/services/plugnotas/plugnotas-mei-nfse-emit-prep.js';
-import { applyPrefeituraPortalCredentialsPolicy } from '../src/services/plugnotas/prefeituraPortalCredentials.js';
+import { buildEmpresaPayloadFromEmitenteSnapshot } from '../src/services/plugnotas/plugnotas-mei-nfse-emit-prep.js';
 
 test('buildEmpresaPayloadFromEmitenteSnapshot monta POST empresa NFS-e a partir do espelho local', () => {
   const payload = buildEmpresaPayloadFromEmitenteSnapshot(
@@ -52,44 +48,4 @@ test('buildEmpresaPayloadFromEmitenteSnapshot tolera documentosAtivos null (espe
   );
 
   assert.equal(payload.nfse.ativo, true);
-});
-
-test('buildIssnetRtcNacionalEmpresaPatch migra Ribeirão Preto sem credenciais municipais', () => {
-  const empresaJson = {
-    endereco: { codigoCidade: '3543402' },
-    nfse: {
-      ativo: true,
-      config: {
-        nfseNacional: false,
-        prefeitura: {
-          codigoIbge: '3543402',
-          login: 'usuario-pref',
-          senha: 'senha-pref',
-        },
-      },
-    },
-  };
-
-  const patch = buildIssnetRtcNacionalEmpresaPatch('43581555000187', empresaJson);
-  assert.ok(patch);
-  assert.equal(patch.cpfCnpj, '43581555000187');
-  assert.equal(patch.nfse.config.nfseNacional, true);
-  assert.equal(patch.nfse.config.consultaNfseNacional, true);
-  assert.deepEqual(patch.nfse.config.prefeitura, { codigoIbge: '3543402' });
-  assert.equal('login' in (patch.nfse.config.prefeitura || {}), false);
-  assert.equal('senha' in (patch.nfse.config.prefeitura || {}), false);
-
-  assert.doesNotThrow(() => applyPrefeituraPortalCredentialsPolicy(patch, {
-    prefeituraCredentialsEnabled: false,
-    municipalAuthRequired: true,
-    attemptNfseMode: 'nacional',
-  }));
-});
-
-test('buildIssnetRtcNacionalEmpresaPatch retorna null se já estiver em modo nacional', () => {
-  const patch = buildIssnetRtcNacionalEmpresaPatch('43581555000187', {
-    endereco: { codigoCidade: '3543402' },
-    nfse: { config: { nfseNacional: true } },
-  });
-  assert.equal(patch, null);
 });

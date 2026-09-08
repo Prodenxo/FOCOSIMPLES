@@ -32,7 +32,6 @@ import {
 import {
   enrichNfseReformaCabecalhoInEmitPayload,
   readCodigoIbgeFromEmpresa,
-  requiresIssnetRtcNfseNacional,
   validateNfseCatalogProdutoMetadata,
   normalizeCIndOp,
 } from './nfse-reforma-defaults.js';
@@ -44,7 +43,6 @@ import {
 } from './plugnotas/nfse-rps-allocator.js';
 import {
   ensureMeiNfsePlugnotasCadastroBeforeEmit,
-  ensureNfseNacionalForIssnetRtcCity,
   rethrowIfPlugnotasEmpresaNaoCadastrada,
 } from './plugnotas/plugnotas-mei-nfse-emit-prep.js';
 import {
@@ -2324,12 +2322,10 @@ export const emitirNota = async (userId, input) => {
       cnpjPrestadorNfse = prestadorDoc
         || String(payload?.prestador?.cpfCnpj || payload?.emitente?.cpfCnpj || '').replace(/\D/g, '');
       if (cnpjPrestadorNfse.length === 14) {
-        let empresaJsonCache = await ensureMeiNfsePlugnotasCadastroBeforeEmit(userId, cnpjPrestadorNfse);
-        empresaJsonCache = await ensureNfseNacionalForIssnetRtcCity(cnpjPrestadorNfse, empresaJsonCache);
+        const empresaJsonCache = await ensureMeiNfsePlugnotasCadastroBeforeEmit(userId, cnpjPrestadorNfse);
         await ensureEmpresaPlugnotasRpsForNfseEmit(cnpjPrestadorNfse, empresaJsonCache);
         const codigoIbgePrestador = readCodigoIbgeFromEmpresa(empresaJsonCache);
-        const nfseNacionalEmit = readNfseNacionalFromEmpresa(empresaJsonCache)
-          || requiresIssnetRtcNfseNacional(codigoIbgePrestador);
+        const nfseNacionalEmit = readNfseNacionalFromEmpresa(empresaJsonCache);
         const [initialLocalMax, authoritativeMax] = await Promise.all([
           queryMaxRpsNumeroEmitted(userId, cnpjPrestadorNfse),
           queryAuthoritativeNfseRpsMaxUsed(cnpjPrestadorNfse, 0),

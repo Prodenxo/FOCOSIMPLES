@@ -15,7 +15,6 @@ import {
   cadastrarCertificadoPlugNotas,
   cadastrarEmpresaPlugNotas,
   consultarEmpresaPlugNotas,
-  atualizarEmpresaPlugNotas,
   resolverCertificadoIdPorCnpj,
 } from './empresa.service.js';
 import { resolvePrestadorEmitEmail } from './plugnotas-nfse-email-resolve.js';
@@ -25,10 +24,6 @@ import {
   applyNfseNationalContractPolicy,
   normalizeMeiEmpresaPayload,
 } from './plugnotas-mei-empresa-policy.js';
-import {
-  readCodigoIbgeFromEmpresa,
-  requiresIssnetRtcNfseNacional,
-} from '../nfse-reforma-defaults.js';
 
 const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
 
@@ -269,75 +264,6 @@ export const ensureMeiNfsePlugnotasCadastroBeforeEmit = async (userId, cnpjInput
 
   const empresaJson = await consultarEmpresaPlugNotas(cnpj);
   return unwrapPlugnotasEmpresaRecord(empresaJson);
-};
-
-/**
- * Monta PATCH mínimo para migrar empresa ISSNET/RTC para NFS-e Nacional (sem credenciais municipais).
- *
- * @param {string} cnpjInput
- * @param {Record<string, unknown>} empresaJson
- * @returns {Record<string, unknown>|null}
- */
-export const buildIssnetRtcNacionalEmpresaPatch = (cnpjInput, empresaJson) => {
-  const cnpj = normalizeDoc(cnpjInput);
-  if (cnpj.length !== 14 || !empresaJson || typeof empresaJson !== 'object') {
-    return null;
-  }
-
-  const codigoIbge = readCodigoIbgeFromEmpresa(empresaJson);
-  if (!requiresIssnetRtcNfseNacional(codigoIbge)) {
-    return null;
-  }
-
-  const nfse = empresaJson.nfse && typeof empresaJson.nfse === 'object' ? empresaJson.nfse : {};
-  const config = nfse.config && typeof nfse.config === 'object' ? nfse.config : {};
-  if (config.nfseNacional !== false) {
-    return null;
-  }
-
-  const prefeituraClean = codigoIbge.length === 7
-    ? { codigoIbge }
-    : undefined;
-
-  const patch = normalizeMeiEmpresaPayload({
-    cpfCnpj: cnpj,
-    nfse: {
-      ativo: nfse.ativo !== false,
-      config: {
-        producao: config.producao ?? true,
-        ...(config.rps && typeof config.rps === 'object' ? { rps: config.rps } : {}),
-        nfseNacional: true,
-        consultaNfseNacional: true,
-        ...(prefeituraClean ? { prefeitura: prefeituraClean } : {}),
-      },
-    },
-  });
-  applyNfseNationalContractPolicy(patch);
-  return patch;
-};
-
-/**
- * Ribeirão Preto/ISSNET exige DPS nacional (schema 1.01) desde a migração RTC.
- * Se a empresa ainda estiver com nfseNacional=false, corrige no PlugNotas antes da emissão.
- *
- * @param {string} cnpjInput
- * @param {Record<string, unknown>|null|undefined} empresaJson
- * @returns {Promise<Record<string, unknown>|null>}
- */
-export const ensureNfseNacionalForIssnetRtcCity = async (cnpjInput, empresaJson) => {
-  const cnpj = normalizeDoc(cnpjInput);
-  if (cnpj.length !== 14 || !empresaJson || typeof empresaJson !== 'object') {
-    return empresaJson ?? null;
-  }
-
-  const patch = buildIssnetRtcNacionalEmpresaPatch(cnpj, empresaJson);
-  if (!patch) {
-    return empresaJson;
-  }
-
-  await atualizarEmpresaPlugNotas(patch);
-  const refreshed = await consultarEmpresaPlugNotas(cnpj);
-  return unwrapPlugnotasEmpresaRecord(refreshed);
 };
 
 /**
