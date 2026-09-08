@@ -4018,17 +4018,57 @@ export const baixarPdf = async (userId, id) => {
 };
 
 export const baixarXml = async (userId, id) => {
+  const {
+    downloadXmlViaPlugnotasAdapter,
+    extractStoredXmlFromMeiNotaRecord,
+    REJECTED_NFSE_XML_UNAVAILABLE_MESSAGE,
+  } = await import('./mei-notas-xml-download.js');
+
   const record = await findRecord(userId, id);
   const documentType = normalizeDocumentType(record?.document_type || DOCUMENT_TYPE_NFSE);
   const adapter = getAdapterByDocumentType(documentType);
-  if (record?.plugnotas_id) {
-    const file = await adapter.downloadXml(record.plugnotas_id);
-    return { ...file, documentType };
+  const status = normalizeStatus(record?.status);
+
+  const storedXml = extractStoredXmlFromMeiNotaRecord(record);
+  if (storedXml) {
+    return {
+      buffer: Buffer.from(storedXml, 'utf8'),
+      contentType: 'application/xml',
+      documentType,
+    };
   }
-  if (record?.id_integracao && record?.cnpj_prestador && adapter.downloadXmlPorIntegracao) {
-    const file = await adapter.downloadXmlPorIntegracao(record.id_integracao, record.cnpj_prestador);
-    return { ...file, documentType };
+
+  const hasRemoteId = Boolean(
+    record?.plugnotas_id
+    || (record?.id_integracao && record?.cnpj_prestador),
+  );
+
+  if (hasRemoteId) {
+    try {
+      const file = await downloadXmlViaPlugnotasAdapter(adapter, record);
+      return { ...file, documentType };
+    } catch (downloadError) {
+      try {
+        const refreshed = await refreshWithPlugNotas(record);
+        const xmlFromConsult = extractStoredXmlFromMeiNotaRecord({ response_json: refreshed });
+        if (xmlFromConsult) {
+          return {
+            buffer: Buffer.from(xmlFromConsult, 'utf8'),
+            contentType: 'application/xml',
+            documentType,
+          };
+        }
+      } catch (_consultError) {
+        // segue para mensagem amigável abaixo
+      }
+
+      if (status === 'rejeitado' || status === 'interrompido') {
+        throw notFound(REJECTED_NFSE_XML_UNAVAILABLE_MESSAGE);
+      }
+      throw downloadError;
+    }
   }
+
   throw notFound('XML da nota fiscal não disponível');
 };
 

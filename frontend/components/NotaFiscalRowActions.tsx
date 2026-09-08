@@ -103,10 +103,13 @@ export function NotaFiscalRowActions ({
       key: 'xml',
       icon: 'code-slash-outline',
       label: 'Baixar XML',
-      hint: 'Salvar o arquivo XML da nota',
+      hint:
+        statusKey === 'rejeitado' || statusKey === 'interrompido'
+          ? 'Só existe XML após autorização; notas rejeitadas não geram arquivo na prefeitura'
+          : 'Salvar o arquivo XML da nota',
       color: '#059669',
       onPress: onXml,
-      disabled: busy || processando,
+      disabled: busy || processando || statusKey === 'rejeitado' || statusKey === 'interrompido',
     },
     {
       key: 'edit',
