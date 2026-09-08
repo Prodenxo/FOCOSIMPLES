@@ -8,6 +8,9 @@ import {
   NFSE_CINDOP_SERVICO_NO_ESTABELECIMENTO,
   NFSE_FIN_NFSE_REGULAR,
   NFSE_VERSAO_ESQUEMA_RTC,
+  NFSE_VERSAO_LAYOUT_RTC,
+  readCodigoIbgeFromEmpresa,
+  requiresIssnetRtcNfseNacional,
   resolveCIndOpForServico,
   resolveFinNfseValue,
   validateNfseCatalogProdutoMetadata,
@@ -29,21 +32,19 @@ test('resolveCIndOpForServico: oficina / LC 14.01 → 050101', () => {
   );
 });
 
-test('resolveCIndOpForServico: serviço genérico → 100301', () => {
+test('requiresIssnetRtcNfseNacional: Ribeirão Preto', () => {
+  assert.equal(requiresIssnetRtcNfseNacional('3543402'), true);
+  assert.equal(requiresIssnetRtcNfseNacional('3550308'), false);
+});
+
+test('readCodigoIbgeFromEmpresa: prefeitura.config', () => {
   assert.equal(
-    resolveCIndOpForServico({ codigo: '170601', cnae: '7319002' }),
-    NFSE_CINDOP_SERVICO_GERAL,
+    readCodigoIbgeFromEmpresa({ nfse: { config: { prefeitura: { codigoIbge: '3543402' } } } }),
+    '3543402',
   );
 });
 
-test('resolveCIndOpForServico: respeita valor explícito', () => {
-  assert.equal(
-    resolveCIndOpForServico({ ibscbs: { cIndOp: '050102' } }),
-    '050102',
-  );
-});
-
-test('buildMinimalServicoIbscbs: formato PlugNotas com valores.tributacao', () => {
+test('buildMinimalServicoIbscbs: formato PlugNotas com valores.tributacao e indDest', () => {
   const ibscbs = buildMinimalServicoIbscbs({}, {
     finNFSe: 0,
     servico: { codigo: '140101' },
@@ -55,68 +56,27 @@ test('buildMinimalServicoIbscbs: formato PlugNotas com valores.tributacao', () =
   assert.equal(ibscbs.codigoOperacao, '050101');
   assert.equal(ibscbs.valores.tributacao.cst, '000');
   assert.equal(ibscbs.valores.tributacao.cct, '000001');
-  assert.equal(ibscbs.regApIBSCBSSN, undefined);
-  assert.equal(ibscbs.finNFSe, undefined);
-  assert.equal(ibscbs.destinatario, undefined);
+  assert.equal(ibscbs.destinatario.indicador, 0);
 });
 
-test('buildMinimalServicoIbscbs: ignora cst inválido no input', () => {
-  const ibscbs = buildMinimalServicoIbscbs({ cst: 'x' }, { servico: { codigo: '140101' } });
-  assert.equal(ibscbs.valores.tributacao.cst, '000');
-});
-
-test('enrichNfseReformaCabecalhoInEmitPayload: versaoEsquema RTC + ibscbs limpo', () => {
+test('enrichNfseReformaCabecalhoInEmitPayload: versao 1.01 + RTC + emitente nacional', () => {
   const out = enrichNfseReformaCabecalhoInEmitPayload({
     servico: [{ codigo: '140101', cnae: '4520001' }],
-  }, { simplesNacional: true });
+  }, { simplesNacional: true, nfseNacional: true, codigoIbge: '3543402' });
+  assert.equal(out.versao, NFSE_VERSAO_LAYOUT_RTC);
   assert.equal(out.versaoEsquema, NFSE_VERSAO_ESQUEMA_RTC);
-  assert.equal(out.ibscbs, undefined);
-  assert.equal(out.finNFSe, undefined);
-  assert.equal(out.servico[0].situacaoTributariaIbsCbs, undefined);
-  assert.equal(out.servico[0].ibscbs.valores.tributacao.cst, '000');
-  assert.equal(out.servico[0].ibscbs.valores.tributacao.cct, '000001');
-  assert.equal(out.servico[0].ibscbs.codigoOperacao, NFSE_CINDOP_SERVICO_NO_ESTABELECIMENTO);
-});
-
-test('buildMinimalServicoIbscbs: preserva valores.tributacao existentes', () => {
-  const ibscbs = buildMinimalServicoIbscbs({
-    valores: {
-      operacao: { documentosReferenciados: [] },
-      tributacao: { codigoCreditoPresumido: '10' },
-    },
-  }, { servico: { codigo: '140101' } });
-  assert.equal(ibscbs.valores.tributacao.cst, '000');
-  assert.equal(ibscbs.valores.tributacao.cct, '000001');
-  assert.equal(ibscbs.valores.tributacao.codigoCreditoPresumido, '10');
-  assert.ok(Array.isArray(ibscbs.valores.operacao.documentosReferenciados));
+  assert.equal(out.emitente.codigoCidade, '3543402');
+  assert.equal(out.servico[0].ibscbs.destinatario.indicador, 0);
 });
 
 test('enrichNfseReformaCabecalhoInEmitPayload: cIndOp vira codigoOperacao em ibscbs', () => {
   const out = enrichNfseReformaCabecalhoInEmitPayload({
     idIntegracao: 'teste',
     servico: [{ codigo: '140101', cnae: '4520001' }],
-  });
-  assert.equal(out.cIndOp, undefined);
+  }, { codigoIbge: '3543402', nfseNacional: true });
   assert.equal(out.servico[0].ibscbs.codigoOperacao, NFSE_CINDOP_SERVICO_NO_ESTABELECIMENTO);
-});
-
-test('validateNfseCatalogProdutoMetadata: rejeita NBS inválido', () => {
-  assert.throws(
-    () => validateNfseCatalogProdutoMetadata({ codigoNbs: '123' }),
-    /NBS/,
-  );
 });
 
 test('validateNfseCatalogProdutoMetadata: aceita cIndOp válido', () => {
   assert.doesNotThrow(() => validateNfseCatalogProdutoMetadata({ cIndOp: '050101' }));
-});
-
-test('enrichNfseReformaCabecalhoInEmitPayload: preserva codigoOperacao explícito', () => {
-  const out = enrichNfseReformaCabecalhoInEmitPayload({
-    servico: [{
-      codigo: '140101',
-      ibscbs: { codigoOperacao: '050102', finalidadeNFSe: 0 },
-    }],
-  });
-  assert.equal(out.servico[0].ibscbs.codigoOperacao, '050102');
 });

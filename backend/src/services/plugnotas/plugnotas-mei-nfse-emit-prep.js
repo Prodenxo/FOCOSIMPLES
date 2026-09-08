@@ -15,6 +15,7 @@ import {
   cadastrarCertificadoPlugNotas,
   cadastrarEmpresaPlugNotas,
   consultarEmpresaPlugNotas,
+  atualizarEmpresaPlugNotas,
   resolverCertificadoIdPorCnpj,
 } from './empresa.service.js';
 import { resolvePrestadorEmitEmail } from './plugnotas-nfse-email-resolve.js';
@@ -24,6 +25,10 @@ import {
   applyNfseNationalContractPolicy,
   normalizeMeiEmpresaPayload,
 } from './plugnotas-mei-empresa-policy.js';
+import {
+  readCodigoIbgeFromEmpresa,
+  requiresIssnetRtcNfseNacional,
+} from '../nfse-reforma-defaults.js';
 
 const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
 
@@ -264,6 +269,50 @@ export const ensureMeiNfsePlugnotasCadastroBeforeEmit = async (userId, cnpjInput
 
   const empresaJson = await consultarEmpresaPlugNotas(cnpj);
   return unwrapPlugnotasEmpresaRecord(empresaJson);
+};
+
+/**
+ * Ribeirão Preto/ISSNET exige DPS nacional (schema 1.01) desde a migração RTC.
+ * Se a empresa ainda estiver com nfseNacional=false, corrige no PlugNotas antes da emissão.
+ *
+ * @param {string} cnpjInput
+ * @param {Record<string, unknown>|null|undefined} empresaJson
+ * @returns {Promise<Record<string, unknown>|null>}
+ */
+export const ensureNfseNacionalForIssnetRtcCity = async (cnpjInput, empresaJson) => {
+  const cnpj = normalizeDoc(cnpjInput);
+  if (cnpj.length !== 14 || !empresaJson || typeof empresaJson !== 'object') {
+    return empresaJson ?? null;
+  }
+
+  const codigoIbge = readCodigoIbgeFromEmpresa(empresaJson);
+  if (!requiresIssnetRtcNfseNacional(codigoIbge)) {
+    return empresaJson;
+  }
+
+  const nfse = empresaJson.nfse && typeof empresaJson.nfse === 'object' ? empresaJson.nfse : {};
+  const config = nfse.config && typeof nfse.config === 'object' ? nfse.config : {};
+  if (config.nfseNacional !== false) {
+    return empresaJson;
+  }
+
+  const patch = normalizeMeiEmpresaPayload({
+    cpfCnpj: cnpj,
+    nfse: {
+      ...nfse,
+      ativo: nfse.ativo !== false,
+      config: {
+        ...config,
+        nfseNacional: true,
+        consultaNfseNacional: true,
+      },
+    },
+  });
+  applyNfseNationalContractPolicy(patch);
+
+  await atualizarEmpresaPlugNotas(patch);
+  const refreshed = await consultarEmpresaPlugNotas(cnpj);
+  return unwrapPlugnotasEmpresaRecord(refreshed);
 };
 
 /**

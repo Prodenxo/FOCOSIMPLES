@@ -27,6 +27,14 @@ export const NFSE_CLASSIFICACAO_TRIBUTARIA_IBSCBS_DEFAULT = '000001';
 /** PlugNotas: obrigatório ao enviar campos IBS/CBS (Reforma Tributária). */
 export const NFSE_VERSAO_ESQUEMA_RTC = 'RTC';
 
+/** ISSNET exige layout 1.01 quando o grupo IBSCBS está presente (manual v1.01). */
+export const NFSE_VERSAO_LAYOUT_RTC = '1.01';
+
+/** Municípios ISSNET que migraram DPS/RTC nacional (schema 1.01 + nfseNacional). */
+export const NFSE_ISSNET_RTC_NACIONAL_IBGE = Object.freeze(new Set([
+  '3543402', // Ribeirão Preto/SP
+]));
+
 /** Chaves permitidas em `servico[].ibscbs` pela API PlugNotas (ibscbsNfse). */
 const PLUGNOTAS_IBSCBS_ALLOWED_KEYS = new Set([
   'finalidadeNFSe',
@@ -217,7 +225,8 @@ export const sanitizeIbscbsForPlugnotasEmit = (built = {}) => {
  * @returns {Record<string, unknown>|undefined}
  */
 const resolveDestinatarioForPlugnotasEmit = (destinatarioSource, source) => {
-  const indicador = destinatarioSource.indicador ?? source.indDest;
+  const indicadorRaw = destinatarioSource.indicador ?? source.indDest;
+  const indicador = indicadorRaw === 1 || indicadorRaw === '1' ? 1 : 0;
   const hasExtraFields = Boolean(
     destinatarioSource.cpfCnpj
     || destinatarioSource.razaoSocial
@@ -226,11 +235,39 @@ const resolveDestinatarioForPlugnotasEmit = (destinatarioSource, source) => {
   );
   if (indicador === 1 || hasExtraFields) {
     return {
-      indicador: indicador === 1 ? 1 : 0,
+      indicador: 1,
       ...destinatarioSource,
     };
   }
-  return undefined;
+  // indDest é 1-1 no XSD 1.01 quando IBSCBS está presente.
+  return { indicador: 0 };
+};
+
+/**
+ * @param {Record<string, unknown>|null|undefined} empresaJson
+ * @returns {string}
+ */
+export const readCodigoIbgeFromEmpresa = (empresaJson = {}) => {
+  const nfse = empresaJson?.nfse && typeof empresaJson.nfse === 'object' ? empresaJson.nfse : {};
+  const config = nfse.config && typeof nfse.config === 'object' ? nfse.config : {};
+  const prefeitura = config.prefeitura && typeof config.prefeitura === 'object' ? config.prefeitura : {};
+  const endereco = empresaJson?.endereco && typeof empresaJson.endereco === 'object' ? empresaJson.endereco : {};
+  return String(
+    prefeitura.codigoIbge
+    ?? prefeitura.codigoCidade
+    ?? endereco.codigoCidade
+    ?? endereco.codigoIbge
+    ?? '',
+  ).replace(/\D/g, '').slice(0, 7);
+};
+
+/**
+ * @param {unknown} codigoIbge
+ * @returns {boolean}
+ */
+export const requiresIssnetRtcNfseNacional = (codigoIbge) => {
+  const digits = String(codigoIbge || '').replace(/\D/g, '').slice(0, 7);
+  return NFSE_ISSNET_RTC_NACIONAL_IBGE.has(digits);
 };
 
 /**
@@ -291,7 +328,7 @@ export const buildMinimalServicoIbscbs = (ibscbsInput = {}, options = {}) => {
     finalidadeNFSe: source.finalidadeNFSe ?? source.finalidadeNfse ?? finNFSe,
     operacaoPessoal,
     codigoOperacao: source.codigoOperacao ?? cIndOp,
-    ...(destinatario ? { destinatario } : {}),
+    destinatario,
     valores: {
       ...existingValores,
       tributacao: {
@@ -360,7 +397,7 @@ export const validateNfseCatalogProdutoMetadata = (metadata = {}) => {
  * Preenche campos RTC mínimos no cabeçalho e em cada servico.ibscbs antes do POST PlugNotas.
  *
  * @param {Record<string, unknown>|null|undefined} payload
- * @param {{ simplesNacional?: boolean }} [options]
+ * @param {{ simplesNacional?: boolean, codigoIbge?: string, nfseNacional?: boolean }} [options]
  * @returns {Record<string, unknown>|null|undefined}
  */
 export const enrichNfseReformaCabecalhoInEmitPayload = (payload, options = {}) => {
@@ -412,12 +449,33 @@ export const enrichNfseReformaCabecalhoInEmitPayload = (payload, options = {}) =
     finalidadeNfse: _finalidade2,
     indFinal: _indFinal,
     cIndOp: _cIndOp,
+    emitente: _existingEmitente,
     ...payloadRest
   } = payload;
 
+  const codigoIbge = String(
+    options.codigoIbge
+    ?? readCodigoIbgeFromEmpresa({ endereco: payload?.prestador?.endereco })
+    ?? payload?.prestador?.endereco?.codigoCidade
+    ?? '',
+  ).replace(/\D/g, '').slice(0, 7);
+
+  const nfseNacional = options.nfseNacional !== false
+    && (options.nfseNacional === true || requiresIssnetRtcNfseNacional(codigoIbge));
+
+  const emitente = nfseNacional && codigoIbge.length === 7
+    ? {
+      ...(payload.emitente && typeof payload.emitente === 'object' ? payload.emitente : {}),
+      tipo: Number(payload?.emitente?.tipo) === 2 ? 2 : 1,
+      codigoCidade: codigoIbge,
+    }
+    : undefined;
+
   return {
     ...payloadRest,
+    versao: payload.versao ?? NFSE_VERSAO_LAYOUT_RTC,
     versaoEsquema: payload.versaoEsquema ?? NFSE_VERSAO_ESQUEMA_RTC,
+    ...(emitente ? { emitente } : {}),
     ...(servicoEnriched.length ? { servico: servicoEnriched } : {}),
   };
 };

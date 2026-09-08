@@ -29,7 +29,13 @@ import {
   readRpsFromNfseEmitPayload,
   resolveNfseRpsLocalMaxFromHistory,
 } from './plugnotas/plugnotas-empresa-rps-heal.js';
-import { enrichNfseReformaCabecalhoInEmitPayload, validateNfseCatalogProdutoMetadata, normalizeCIndOp } from './nfse-reforma-defaults.js';
+import {
+  enrichNfseReformaCabecalhoInEmitPayload,
+  readCodigoIbgeFromEmpresa,
+  requiresIssnetRtcNfseNacional,
+  validateNfseCatalogProdutoMetadata,
+  normalizeCIndOp,
+} from './nfse-reforma-defaults.js';
 import {
   allocateNfseRpsForEmit,
   applyAllocatedNfseRpsToEmitPayload,
@@ -38,6 +44,7 @@ import {
 } from './plugnotas/nfse-rps-allocator.js';
 import {
   ensureMeiNfsePlugnotasCadastroBeforeEmit,
+  ensureNfseNacionalForIssnetRtcCity,
   rethrowIfPlugnotasEmpresaNaoCadastrada,
 } from './plugnotas/plugnotas-mei-nfse-emit-prep.js';
 import {
@@ -1520,6 +1527,8 @@ const emitNfseWithAutoRpsRecovery = async (
     emitPayload.idIntegracao = buildMeiIdIntegracao(userId);
     emitPayload = enrichNfseReformaCabecalhoInEmitPayload(emitPayload, {
       simplesNacional: prep.simplesNacional !== false,
+      nfseNacional: prep.nfseNacional !== false,
+      codigoIbge: prep.codigoIbge,
     });
     response = await adapter.emitir(emitPayload);
 
@@ -2315,8 +2324,12 @@ export const emitirNota = async (userId, input) => {
       cnpjPrestadorNfse = prestadorDoc
         || String(payload?.prestador?.cpfCnpj || payload?.emitente?.cpfCnpj || '').replace(/\D/g, '');
       if (cnpjPrestadorNfse.length === 14) {
-        const empresaJsonCache = await ensureMeiNfsePlugnotasCadastroBeforeEmit(userId, cnpjPrestadorNfse);
+        let empresaJsonCache = await ensureMeiNfsePlugnotasCadastroBeforeEmit(userId, cnpjPrestadorNfse);
+        empresaJsonCache = await ensureNfseNacionalForIssnetRtcCity(cnpjPrestadorNfse, empresaJsonCache);
         await ensureEmpresaPlugnotasRpsForNfseEmit(cnpjPrestadorNfse, empresaJsonCache);
+        const codigoIbgePrestador = readCodigoIbgeFromEmpresa(empresaJsonCache);
+        const nfseNacionalEmit = readNfseNacionalFromEmpresa(empresaJsonCache)
+          || requiresIssnetRtcNfseNacional(codigoIbgePrestador);
         const [initialLocalMax, authoritativeMax] = await Promise.all([
           queryMaxRpsNumeroEmitted(userId, cnpjPrestadorNfse),
           queryAuthoritativeNfseRpsMaxUsed(cnpjPrestadorNfse, 0),
@@ -2324,11 +2337,13 @@ export const emitirNota = async (userId, input) => {
         nfseEmitPrep = {
           empresaJson: empresaJsonCache,
           simplesNacional: empresaJsonCache?.simplesNacional !== false,
+          nfseNacional: nfseNacionalEmit,
+          codigoIbge: codigoIbgePrestador,
           initialLocalMax: Math.max(initialLocalMax ?? 0, authoritativeMax),
           periodoMax: authoritativeMax,
         };
         emitPayload = enrichNfseIssInEmitPayload(emitPayload, {
-          nfseNacional: readNfseNacionalFromEmpresa(empresaJsonCache),
+          nfseNacional: nfseNacionalEmit,
           simplesNacional: empresaJsonCache?.simplesNacional !== false,
         });
       }
@@ -2336,6 +2351,8 @@ export const emitirNota = async (userId, input) => {
     if (documentType === DOCUMENT_TYPE_NFSE) {
       emitPayload = enrichNfseReformaCabecalhoInEmitPayload(emitPayload, {
         simplesNacional: nfseEmitPrep?.empresaJson?.simplesNacional !== false,
+        nfseNacional: nfseEmitPrep?.nfseNacional !== false,
+        codigoIbge: nfseEmitPrep?.codigoIbge,
       });
     }
     if (documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE) {
