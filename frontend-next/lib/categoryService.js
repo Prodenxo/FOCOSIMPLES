@@ -3,7 +3,34 @@ import { normalizeContaRow } from './contaFinanceiraTypes';
 
 export async function fetchUserCategories() {
   const data = await apiClient.get('/categories');
-  return data || [];
+  return (data || []).map(normalizeCategoryRow);
+}
+
+export function normalizeCategoryRow(row) {
+  return {
+    id: Number(row.id) || 0,
+    nome: String(row.nome || ''),
+    tipo: String(row.tipo || ''),
+    user_id: row.user_id != null ? String(row.user_id) : null,
+  };
+}
+
+export async function createCategory(payload) {
+  const data = await apiClient.post('/categories', payload);
+  return normalizeCategoryRow(data);
+}
+
+export async function updateCategory(payload) {
+  const data = await apiClient.put('/categories', payload);
+  return normalizeCategoryRow(data);
+}
+
+export async function deleteCategory(id, reassignTo) {
+  const qs = new URLSearchParams({
+    id: String(id),
+    reassign_to: reassignTo,
+  });
+  return apiClient.delete(`/categories?${qs.toString()}`);
 }
 
 export async function fetchCategoryBudgetsSummary(year, month) {

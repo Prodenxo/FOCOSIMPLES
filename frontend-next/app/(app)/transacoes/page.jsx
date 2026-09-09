@@ -103,6 +103,24 @@ function TransacoesPageContent() {
       setFormDraft(null);
       setFormOpen(true);
     }
+
+    const tipo = searchParams.get('tipo');
+    if (tipo === 'saida' || tipo === 'entrada') {
+      setTypeFilter(tipo);
+    }
+
+    const yearParam = searchParams.get('year');
+    const monthParam = searchParams.get('month');
+    if (yearParam && monthParam) {
+      const year = parseInt(yearParam, 10);
+      const month = parseInt(monthParam, 10);
+      if (!Number.isNaN(year) && !Number.isNaN(month) && month >= 1 && month <= 12) {
+        setSelectedMonth({ year, month });
+        setPeriod('month');
+        setUseCustomRange(false);
+        setDateRange({ start: '', end: '' });
+      }
+    }
   }, [searchParams]);
 
   const periodOnlyList = useMemo(
