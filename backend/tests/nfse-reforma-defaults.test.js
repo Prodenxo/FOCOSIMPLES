@@ -114,6 +114,25 @@ test('enrichNfseReformaCabecalhoInEmitPayload: ISSNETONLINE30 Ribeirão Preto', 
   assert.equal(out.servico[0].ibscbs.valores.tributacao.cst, '000');
 });
 
+test('enrichNfseReformaCabecalhoInEmitPayload: flag NFSE_ISSNET_RTC_SCHEMA_DISABLED omite cabeçalho RTC e ibscbs', () => {
+  const anterior = process.env.NFSE_ISSNET_RTC_SCHEMA_DISABLED;
+  process.env.NFSE_ISSNET_RTC_SCHEMA_DISABLED = 'true';
+  try {
+    const input = { servico: [{ codigo: '140101', cnae: '4520001', iss: { aliquota: 2 } }] };
+    const out = enrichNfseReformaCabecalhoInEmitPayload(input, {
+      simplesNacional: true,
+      nfseNacional: false,
+      codigoIbge: '3543402',
+    });
+    assert.deepEqual(out, input);
+    assert.equal(out.versaoEsquema, undefined);
+    assert.equal(out.servico[0].ibscbs, undefined);
+  } finally {
+    if (anterior === undefined) delete process.env.NFSE_ISSNET_RTC_SCHEMA_DISABLED;
+    else process.env.NFSE_ISSNET_RTC_SCHEMA_DISABLED = anterior;
+  }
+});
+
 test('enrichNfseReformaCabecalhoInEmitPayload: ignora cidades fora do ISSNET RTC', () => {
   const input = { servico: [{ codigo: '140101' }], versao: '2' };
   const out = enrichNfseReformaCabecalhoInEmitPayload(input, { codigoIbge: '3550308' });

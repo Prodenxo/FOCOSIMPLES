@@ -281,6 +281,15 @@ export const requiresIssnetRtcEmitSchema = (codigoIbge) => {
   return NFSE_ISSNET_RTC_IBGE.has(digits);
 };
 
+/**
+ * Escape hatch operacional (`NFSE_ISSNET_RTC_SCHEMA_DISABLED=true`): omite o cabeçalho RTC e o
+ * grupo `ibscbs` no payload, mantendo intactas a rota municipal e a escolha de esquema de obra.
+ * Serve para isolar o E160 quando o emissor municipal recusa a versão do XSD.
+ * @returns {boolean}
+ */
+export const isNfseIssnetRtcSchemaDisabled = () =>
+  String(process.env.NFSE_ISSNET_RTC_SCHEMA_DISABLED || '').trim().toLowerCase() === 'true';
+
 /** @deprecated Use {@link requiresIssnetRtcEmitSchema} — RTC municipal ≠ NFS-e Nacional. */
 export const requiresIssnetRtcNfseNacional = requiresIssnetRtcEmitSchema;
 
@@ -441,7 +450,7 @@ export const enrichNfseReformaCabecalhoInEmitPayload = (payload, options = {}) =
     ?? '',
   ).replace(/\D/g, '').slice(0, 7);
 
-  if (!requiresIssnetRtcEmitSchema(codigoIbge)) {
+  if (!requiresIssnetRtcEmitSchema(codigoIbge) || isNfseIssnetRtcSchemaDisabled()) {
     return payload;
   }
 
