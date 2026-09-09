@@ -15,6 +15,11 @@
   --decor-tone: #CBD5E1;
   --illustration-stroke: #94A3B8;
   --illustration-fill: rgba(203, 213, 225, 0.38);
+  --scrollbar-size: 8px;
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: rgba(113, 128, 150, 0.42);
+  --scrollbar-thumb-hover: rgba(113, 128, 150, 0.68);
+  color-scheme: light;
 }
 
 .dark {
@@ -30,6 +35,10 @@
   --decor-tone: #64748B;
   --illustration-stroke: #64748b;
   --illustration-fill: rgba(100, 116, 139, 0.22);
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: rgba(148, 163, 184, 0.34);
+  --scrollbar-thumb-hover: rgba(148, 163, 184, 0.58);
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -55,6 +64,42 @@ body {
   min-height: 100vh;
   font-size: 14px;
   line-height: 1.5;
+}
+
+/* Barra de rolagem nativa — reutilizável em listas, painéis e modais */
+.app-scrollbar,
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+.app-scrollbar::-webkit-scrollbar,
+html::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+
+.app-scrollbar::-webkit-scrollbar-track,
+html::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+.app-scrollbar::-webkit-scrollbar-thumb,
+html::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.app-scrollbar::-webkit-scrollbar-thumb:hover,
+html::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+.app-scrollbar::-webkit-scrollbar-corner,
+html::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 :focus-visible {

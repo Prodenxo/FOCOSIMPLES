@@ -40,7 +40,7 @@ export function AppSidebar({ className = '' }) {
         <BrandWordmark compact />
       </div>
 
-      <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+      <nav className="app-scrollbar min-h-0 flex-1 overflow-y-auto px-3 py-3">
         <ul className="space-y-0.5">
           {visibleItems.map((item) => {
             const active = isNavActive(pathname, item.href);

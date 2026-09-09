@@ -20,13 +20,19 @@ function AppShellGate({ children }) {
 
   if (booting) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--canvas)]">
-        <LoadingPanel label="Verificando sessão…" />
+      <div className="flex min-h-screen items-center justify-center bg-[#F5F7FA]">
+        <LoadingPanel label="Carregando…" />
       </div>
     );
   }
 
-  if (!isAuthenticated) return null;
+  if (!isAuthenticated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#F5F7FA]">
+        <LoadingPanel label="Redirecionando para login…" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-[var(--canvas)]">
@@ -40,7 +46,7 @@ function AppShellGate({ children }) {
           />
           <span className="text-sm font-semibold text-[var(--text-primary)]">Foco Simples</span>
         </div>
-        <main className="flex-1 px-4 py-5 sm:px-6 lg:px-7 lg:py-7">{children}</main>
+        <main className="flex min-h-0 flex-1 flex-col px-4 py-5 sm:px-6 lg:px-7 lg:py-7">{children}</main>
       </div>
     </div>
   );

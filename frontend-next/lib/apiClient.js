@@ -1,7 +1,7 @@
 import { getApiBaseUrl } from './env';
 import { getLocalAccessToken } from './authSession';
 
-const FETCH_TIMEOUT_MS = 12000;
+const FETCH_TIMEOUT_MS = 8000;
 
 const normalizePath = (path) => (path.startsWith('/') ? path : `/${path}`);
 

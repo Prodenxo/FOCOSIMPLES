@@ -1,6 +1,14 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/apiClient';
 import { unwrapAuthSession } from '@/lib/authApi';
@@ -39,6 +47,7 @@ function buildSnapshotFromSignInResult(result, emailInput) {
 export function AuthProvider({ children }) {
   const router = useRouter();
   const [booting, setBooting] = useState(true);
+  const [hydrated, setHydrated] = useState(false);
   const [userId, setUserId] = useState(null);
   const [displayName, setDisplayName] = useState(null);
   const [email, setEmail] = useState(null);
@@ -96,6 +105,10 @@ export function AuthProvider({ children }) {
       if (isAuthError) {
         clearLocalAuthSnapshot();
         setUserId(null);
+        setDisplayName(null);
+        setEmail(null);
+        setRole(null);
+        setMei(null);
       }
       return false;
     }
@@ -104,30 +117,14 @@ export function AuthProvider({ children }) {
   const refreshSessionRef = useRef(refreshSession);
   refreshSessionRef.current = refreshSession;
 
-  useEffect(() => {
-    let active = true;
-
-    const finishBoot = () => {
-      if (active) setBooting(false);
-    };
-
+  useLayoutEffect(() => {
     const snap = readLocalAuthSnapshot();
     if (snap) hydrateFromSnapshot(snap);
+    else setUserId(null);
 
-    const safetyTimer = window.setTimeout(finishBoot, 12000);
-
-    refreshSessionRef
-      .current()
-      .catch(() => {})
-      .finally(() => {
-        window.clearTimeout(safetyTimer);
-        finishBoot();
-      });
-
-    return () => {
-      active = false;
-      window.clearTimeout(safetyTimer);
-    };
+    setHydrated(true);
+    setBooting(false);
+    refreshSessionRef.current().catch(() => {});
   }, [hydrateFromSnapshot]);
 
   const signIn = useCallback(async (emailInput, password) => {
@@ -178,7 +175,7 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(
     () => ({
-      booting,
+      booting: booting || !hydrated,
       userId,
       displayName,
       email,
@@ -190,7 +187,7 @@ export function AuthProvider({ children }) {
       refreshSession,
       isAuthenticated: Boolean(userId),
     }),
-    [booting, userId, displayName, email, role, mei, signIn, signUp, signOut, refreshSession],
+    [booting, hydrated, userId, displayName, email, role, mei, signIn, signUp, signOut, refreshSession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

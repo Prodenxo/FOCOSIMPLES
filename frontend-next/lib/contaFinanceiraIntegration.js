@@ -32,6 +32,32 @@ export function filterTransactionsByConta(list, filter) {
   return list.filter((t) => String(t.conta_id || '') === filter);
 }
 
+export function computeMonthFlowKpis(list) {
+  let entradas = 0;
+  let saidas = 0;
+  let countEntradas = 0;
+  let countSaidas = 0;
+
+  for (const t of list) {
+    const valor = normalizarValor(t.valor);
+    if (normalizarTipo(t.tipo) === 'entrada') {
+      entradas += valor;
+      countEntradas += 1;
+    } else {
+      saidas += valor;
+      countSaidas += 1;
+    }
+  }
+
+  return {
+    entradas,
+    saidas,
+    saldo: entradas - saidas,
+    countEntradas,
+    countSaidas,
+  };
+}
+
 export function resolveDashboardBalance(contas, lancamentos, legacyAllTxBalance, filter) {
   const ativas = contas.filter((c) => c.ativo);
 
