@@ -60,6 +60,14 @@ export function useDashboardData(userId, selectedMonth) {
     load();
   }, [load]);
 
+  useEffect(() => {
+    const onBudgetsUpdated = () => {
+      load();
+    };
+    window.addEventListener('focosimples:budgets-updated', onBudgetsUpdated);
+    return () => window.removeEventListener('focosimples:budgets-updated', onBudgetsUpdated);
+  }, [load]);
+
   const categoriasMap = useMemo(() => {
     const map = {};
     for (const cat of categories) {
