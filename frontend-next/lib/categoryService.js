@@ -1,4 +1,5 @@
 import { apiClient } from './apiClient';
+import { normalizeContaRow } from './contaFinanceiraTypes';
 
 export async function fetchUserCategories() {
   const data = await apiClient.get('/categories');
@@ -18,7 +19,7 @@ export async function fetchCategoryBudgetsSummary(year, month) {
 
 export async function fetchContasFinanceiras() {
   const data = await apiClient.get('/contas-financeiras');
-  return data || [];
+  return (data || []).map(normalizeContaRow);
 }
 
 export function normalizeTransactionRow(t) {
