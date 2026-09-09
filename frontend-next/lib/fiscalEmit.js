@@ -4,6 +4,7 @@
  */
 
 import { applyCatalogProdutoToNfseServico } from '@/lib/nfseCatalogProdutoMetadata';
+import { mapCatalogProdutoToNfeItem } from '@/lib/mapCatalogProdutoToNfeItem';
 
 /** Normaliza para apenas dígitos. */
 export function onlyDigits(value) {
@@ -434,7 +435,7 @@ export function buildNfeLikePayload(form, documentType) {
     },
     destinatario,
     itens,
-    ...(total > 0 ? { pagamentos: [{ meio: 'PIX', valor: total }] } : {}),
+    ...(total > 0 ? { pagamentos: [{ meio: '99', valor: total, descricaoMeio: 'Outros' }] } : {}),
     informacoesComplementares: form.informacoesComplementares.trim() || undefined,
     config: { producao: true },
     enviarEmail: Boolean(form.enviarEmail),
@@ -491,14 +492,8 @@ export function applyClienteToNfeForm(cliente) {
 
 /** Aplica prefill do produto (catálogo) ao item NF-e. */
 export function applyProdutoToNfeItem(produto) {
-  if (!produto) return {};
-  return {
-    codigo: String(produto.codigo || '').trim(),
-    descricao: String(produto.discriminacao || produto.nome || '').trim(),
-    ncm: String(produto.ncm || '').replace(/\D/g, '').slice(0, 8),
-    cfop: String(produto.cfop || '5102').slice(0, 4),
-    valorUnitario: produto.valor_sugerido ? String(produto.valor_sugerido.toFixed(2)).replace('.', ',') : '',
-  };
+  if (!produto) return mapCatalogProdutoToNfeItem({});
+  return mapCatalogProdutoToNfeItem(produto);
 }
 
 /** Aplica prefill do produto (catálogo) ao serviço NFS-e. */

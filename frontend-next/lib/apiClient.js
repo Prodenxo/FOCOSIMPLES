@@ -1,13 +1,15 @@
 import { getApiBaseUrl } from './env';
 import { getLocalAccessToken } from './authSession';
 
-const FETCH_TIMEOUT_MS = 8000;
+const DEFAULT_FETCH_TIMEOUT_MS = 8000;
+/** Emissão fiscal (Plugnotas + validações) pode levar dezenas de segundos. */
+export const EMIT_FETCH_TIMEOUT_MS = 120000;
 
 const normalizePath = (path) => (path.startsWith('/') ? path : `/${path}`);
 
-async function fetchWithTimeout(url, options = {}) {
+async function fetchWithTimeout(url, options = {}, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     return await fetch(url, {
@@ -50,7 +52,7 @@ async function buildAuthHeaders(extra) {
   };
 }
 
-async function requestJson(path, options = {}) {
+async function requestJson(path, options = {}, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS) {
   const url = `${getBaseUrl()}${normalizePath(path)}`;
   const headers = await buildAuthHeaders(
     options.body && !(options.body instanceof FormData)
@@ -67,7 +69,7 @@ async function requestJson(path, options = {}) {
         ...headers,
         ...(options.headers || {}),
       },
-    });
+    }, timeoutMs);
   } catch (error) {
     throw error instanceof Error ? error : new Error('Falha na requisição.');
   }
@@ -84,6 +86,33 @@ async function requestJson(path, options = {}) {
   const text = await response.text();
   if (!response.ok) throw new Error(text || response.statusText || 'Falha na requisição.');
   return text;
+}
+
+async function downloadBinary(path, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS) {
+  const url = `${getBaseUrl()}${normalizePath(path)}`;
+  const headers = await buildAuthHeaders();
+
+  let response;
+  try {
+    response = await fetchWithTimeout(url, {
+      method: 'GET',
+      cache: 'no-store',
+      headers,
+    }, timeoutMs);
+  } catch (error) {
+    throw error instanceof Error ? error : new Error('Falha no download.');
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!response.ok) {
+    if (contentType.includes('application/json')) {
+      const payload = await response.json();
+      throw new Error(resolveApiErrorMessage(payload, response.statusText, 'Falha no download.'));
+    }
+    throw new Error(response.statusText || 'Falha no download.');
+  }
+
+  return response.blob();
 }
 
 async function requestJsonPublic(path, options = {}) {
@@ -112,21 +141,22 @@ async function requestJsonPublic(path, options = {}) {
 }
 
 export const apiClient = {
-  get: (path) => requestJson(path, { method: 'GET' }),
-  post: (path, body) =>
+  get: (path, { timeoutMs } = {}) => requestJson(path, { method: 'GET' }, timeoutMs),
+  post: (path, body, { timeoutMs } = {}) =>
     requestJson(path, {
       method: 'POST',
       body: body !== undefined ? JSON.stringify(body) : undefined,
-    }),
+    }, timeoutMs),
   postPublic: (path, body) =>
     requestJsonPublic(path, {
       method: 'POST',
       body: body !== undefined ? JSON.stringify(body) : undefined,
     }),
-  put: (path, body) =>
+  put: (path, body, { timeoutMs } = {}) =>
     requestJson(path, {
       method: 'PUT',
       body: body !== undefined ? JSON.stringify(body) : undefined,
-    }),
-  delete: (path) => requestJson(path, { method: 'DELETE' }),
+    }, timeoutMs),
+  delete: (path, { timeoutMs } = {}) => requestJson(path, { method: 'DELETE' }, timeoutMs),
+  download: (path, { timeoutMs } = {}) => downloadBinary(path, timeoutMs),
 };
