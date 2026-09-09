@@ -133,6 +133,22 @@ test('enrichNfseReformaCabecalhoInEmitPayload: flag NFSE_ISSNET_RTC_SCHEMA_DISAB
   }
 });
 
+test('enrichNfseReformaCabecalhoInEmitPayload: NFSE_ISSNET_RTC_VERSAO_ESQUEMA sobrescreve versaoEsquema', () => {
+  const anterior = process.env.NFSE_ISSNET_RTC_VERSAO_ESQUEMA;
+  process.env.NFSE_ISSNET_RTC_VERSAO_ESQUEMA = NFSE_VERSAO_ESQUEMA_RTC;
+  try {
+    const out = enrichNfseReformaCabecalhoInEmitPayload({
+      servico: [{ codigo: '140101', cnae: '4520001', iss: { aliquota: 2 } }],
+    }, { simplesNacional: true, nfseNacional: false, codigoIbge: '3543402' });
+    assert.equal(out.versaoEsquema, NFSE_VERSAO_ESQUEMA_RTC);
+    assert.equal(out.versao, NFSE_VERSAO_LAYOUT_NACIONAL);
+    assert.equal(out.servico[0].ibscbs.valores.tributacao.cst, '000');
+  } finally {
+    if (anterior === undefined) delete process.env.NFSE_ISSNET_RTC_VERSAO_ESQUEMA;
+    else process.env.NFSE_ISSNET_RTC_VERSAO_ESQUEMA = anterior;
+  }
+});
+
 test('enrichNfseReformaCabecalhoInEmitPayload: ignora cidades fora do ISSNET RTC', () => {
   const input = { servico: [{ codigo: '140101' }], versao: '2' };
   const out = enrichNfseReformaCabecalhoInEmitPayload(input, { codigoIbge: '3550308' });

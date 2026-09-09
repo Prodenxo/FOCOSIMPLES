@@ -290,6 +290,17 @@ export const requiresIssnetRtcEmitSchema = (codigoIbge) => {
 export const isNfseIssnetRtcSchemaDisabled = () =>
   String(process.env.NFSE_ISSNET_RTC_SCHEMA_DISABLED || '').trim().toLowerCase() === 'true';
 
+/**
+ * Override operacional de `versaoEsquema` (`NFSE_ISSNET_RTC_VERSAO_ESQUEMA`). O emissor municipal
+ * recusa RTC007 com E160 e a própria PlugNotas nomeia o layout como "RTC v1.01" — permite testar
+ * `RTC` sem alterar o padrão. Vazio ⇒ mantém {@link NFSE_VERSAO_ESQUEMA_RTC007}.
+ * @returns {string}
+ */
+export const resolveNfseIssnetVersaoEsquema = () => {
+  const override = String(process.env.NFSE_ISSNET_RTC_VERSAO_ESQUEMA || '').trim();
+  return override || NFSE_VERSAO_ESQUEMA_RTC007;
+};
+
 /** @deprecated Use {@link requiresIssnetRtcEmitSchema} — RTC municipal ≠ NFS-e Nacional. */
 export const requiresIssnetRtcNfseNacional = requiresIssnetRtcEmitSchema;
 
@@ -538,7 +549,7 @@ export const enrichNfseReformaCabecalhoInEmitPayload = (payload, options = {}) =
 
   const rtcHeader = {
     versao: payload.versao ?? NFSE_VERSAO_LAYOUT_NACIONAL,
-    versaoEsquema: payload.versaoEsquema ?? NFSE_VERSAO_ESQUEMA_RTC007,
+    versaoEsquema: payload.versaoEsquema ?? resolveNfseIssnetVersaoEsquema(),
   };
 
   return {
