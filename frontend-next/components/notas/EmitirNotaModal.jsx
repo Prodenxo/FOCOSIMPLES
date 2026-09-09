@@ -66,6 +66,11 @@ import {
   PRESTADOR_PREFILL_MSG_ERROR,
 } from '@/lib/nfsePrestadorPrefill';
 import { formatCurrencyBRL } from '@/lib/fiscalFormat';
+import { allowedEmitDocumentTypes } from '@/lib/documentosAtivos';
+import {
+  getDefaultNfseObraForm,
+  requiresNfseObraForServicoCodigo,
+} from '@/lib/nfseObraForm';
 import { Card } from '@/components/ui/Card';
 import { EmptyPanel } from '@/components/ui/EmptyPanel';
 import { LoadingPanel } from '@/components/ui/LoadingPanel';
@@ -88,7 +93,13 @@ const DOCUMENT_TYPES = [
  * Fluxo: Seleção do tipo → Dados do tomador/destinatário → Itens/Serviço → Revisão → Envio.
  * Integração com catálogo de clientes/produtos via API.
  */
-export function EmitirNotaModal({ onClose, onSuccess, company = null, certDocumento = null }) {
+export function EmitirNotaModal({
+  onClose,
+  onSuccess,
+  company = null,
+  certDocumento = null,
+  documentosPermitidos = null,
+}) {
   const [step, setStep] = useState('tipo');
   const [documentType, setDocumentType] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -118,6 +129,12 @@ export function EmitirNotaModal({ onClose, onSuccess, company = null, certDocume
     if (documentType === 'NFE' || documentType === 'NFCE') return documentType;
     return 'NFSE';
   }, [documentType]);
+
+  const availableDocTypes = useMemo(() => {
+    const allowed = allowedEmitDocumentTypes(documentosPermitidos);
+    if (!allowed.length) return DOCUMENT_TYPES;
+    return DOCUMENT_TYPES.filter((t) => allowed.includes(t.id));
+  }, [documentosPermitidos]);
 
   const nfeEmitenteUf = useMemo(
     () => String(company?.endereco?.estado || nfseForm.prestadorEndereco?.estado || '').trim().toUpperCase().slice(0, 2),
@@ -758,7 +775,7 @@ export function EmitirNotaModal({ onClose, onSuccess, company = null, certDocume
             </div>
           ) : step === 'tipo' ? (
             <div className="grid gap-3 sm:grid-cols-3">
-              {DOCUMENT_TYPES.map((type) => (
+              {availableDocTypes.map((type) => (
                 <button
                   key={type.id}
                   onClick={() => handleSelectDocType(type.id)}
@@ -1179,6 +1196,35 @@ function NfseServicoForm({ form, setForm, showProdutoList, setShowProdutoList, p
     setForm((prev) => ({ ...prev, servico: { ...prev.servico, [field]: value } }));
   };
 
+  const needsObra = requiresNfseObraForServicoCodigo(form.servico?.codigo);
+  const obra = form.servico?.obra || getDefaultNfseObraForm();
+
+  const handleObraChange = (field, value) => {
+    setForm((prev) => ({
+      ...prev,
+      servico: {
+        ...prev.servico,
+        obra: { ...(prev.servico?.obra || getDefaultNfseObraForm()), [field]: value },
+      },
+    }));
+  };
+
+  const handleObraEnderecoChange = (field, value) => {
+    setForm((prev) => {
+      const base = prev.servico?.obra || getDefaultNfseObraForm();
+      return {
+        ...prev,
+        servico: {
+          ...prev.servico,
+          obra: {
+            ...base,
+            endereco: { ...(base.endereco || {}), [field]: value },
+          },
+        },
+      };
+    });
+  };
+
   return (
     <div className="flex flex-col gap-5">
       <div className="rounded-[16px] border border-[var(--card-border)] p-4">
@@ -1250,6 +1296,41 @@ function NfseServicoForm({ form, setForm, showProdutoList, setShowProdutoList, p
           <Input label="cIndOp" value={form.servico.cIndOp} onChange={(v) => handleChange('cIndOp', v.replace(/\D/g, '').slice(0, 6))} placeholder="6 dígitos" hint="Indicador de operação (Reforma Tributária)" />
         </div>
       </div>
+
+      {needsObra ? (
+        <div className="rounded-[16px] border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">
+          <h3 className="text-sm font-semibold text-[var(--text-primary)]">Dados da obra</h3>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
+            Este código de serviço exige informações da obra (ISSNET / DPS).
+          </p>
+          <label className="mt-3 flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={obra.usarEnderecoTomador !== false}
+              onChange={(e) => handleObraChange('usarEnderecoTomador', e.target.checked)}
+              className="h-4 w-4 rounded border-[var(--card-border)] text-[var(--accent)]"
+            />
+            Usar endereço do tomador como local da obra
+          </label>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <Input label="CNO" value={obra.cno || ''} onChange={(v) => handleObraChange('cno', v)} />
+            <Input label="Código da obra" value={obra.codigoObra || ''} onChange={(v) => handleObraChange('codigoObra', v)} />
+            <Input label="ART" value={obra.art || ''} onChange={(v) => handleObraChange('art', v)} />
+            <Input label="CEI" value={obra.cei || ''} onChange={(v) => handleObraChange('cei', v)} />
+          </div>
+          {obra.usarEnderecoTomador === false ? (
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <Input label="Logradouro da obra" value={obra.endereco?.logradouro || ''} onChange={(v) => handleObraEnderecoChange('logradouro', v)} className="sm:col-span-2" />
+              <Input label="Número" value={obra.endereco?.numero || ''} onChange={(v) => handleObraEnderecoChange('numero', v)} />
+              <Input label="CEP" value={obra.endereco?.cep || ''} onChange={(v) => handleObraEnderecoChange('cep', maskCep(v))} />
+              <Input label="Bairro" value={obra.endereco?.bairro || ''} onChange={(v) => handleObraEnderecoChange('bairro', v)} />
+              <Input label="Cidade" value={obra.endereco?.descricaoCidade || ''} onChange={(v) => handleObraEnderecoChange('descricaoCidade', v)} />
+              <Input label="UF" value={obra.endereco?.estado || ''} onChange={(v) => handleObraEnderecoChange('estado', v.toUpperCase().slice(0, 2))} maxLength={2} />
+              <Input label="Código IBGE" value={obra.endereco?.codigoCidade || ''} onChange={(v) => handleObraEnderecoChange('codigoCidade', v.replace(/\D/g, ''))} />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Informações adicionais */}
       <div className="rounded-[16px] border border-[var(--card-border)] p-4">

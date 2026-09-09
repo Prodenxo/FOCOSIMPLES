@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthProvider';
 import {
+  cadastrarFiscalCompany,
   fetchCertificateStatus,
   fetchFiscalCompany,
   fetchNfsePrestadorPrefill,
@@ -25,9 +26,13 @@ import {
   importCnaesProdutos,
 } from '@/lib/fiscalApi';
 import {
-  buildCertPageCompanyPayload,
   buildEnrichedCertPageForm,
+  buildPlugNotasEmpresaPayload,
+  getPlugNotasCompanyValidationMessage,
+  isEmpresaCadastradaNoEmissor,
+  mergeCnpjLookupIntoCertPageForm,
 } from '@/lib/plugNotasEmpresaForm';
+import { EmpresaFiscalForm } from '@/components/notas/EmpresaFiscalForm';
 import {
   describeCertificateState,
   formatCnpj,
@@ -74,6 +79,10 @@ export default function CertificadoPage() {
 
   const [importCnaesLoading, setImportCnaesLoading] = useState(false);
   const [importCnaesMsg, setImportCnaesMsg] = useState(null);
+
+  const [empresaRegistered, setEmpresaRegistered] = useState(false);
+  const [cnpjLookupLoading, setCnpjLookupLoading] = useState(false);
+  const [cnpjLookupError, setCnpjLookupError] = useState(null);
 
   const documento = certStatus?.documento || company?.cpfCnpj || company?.cnpj || null;
 
@@ -144,6 +153,7 @@ export default function CertificadoPage() {
         || enrichedForm?.cep,
       );
 
+      setEmpresaRegistered(isEmpresaCadastradaNoEmissor(data));
       setCompany(hasEmpresa || hasPrefill ? (data || { cpfCnpj: documento }) : null);
       if (hasEmpresa || hasPrefill) {
         setCompanyForm(enrichedForm);
@@ -229,9 +239,11 @@ export default function CertificadoPage() {
           prefillOnlyFillEmpty: false,
           lookupOnlyFillEmpty: true,
         });
+        setEmpresaRegistered(isEmpresaCadastradaNoEmissor(empresaData));
         setCompany(empresaData || { cpfCnpj: cnpjDoc });
         setCompanyForm(enrichedForm);
         setCompanyDirty(false);
+        void runCnpjLookup(cnpjDoc, enrichedForm, false);
       } else {
         await loadCompany();
       }
@@ -255,6 +267,25 @@ export default function CertificadoPage() {
     }
   };
 
+  const runCnpjLookup = useCallback(async (cnpjDigits, currentForm, onlyFillEmpty = true) => {
+    const digits = String(cnpjDigits || '').replace(/\D/g, '');
+    if (digits.length !== 14) return;
+    setCnpjLookupLoading(true);
+    setCnpjLookupError(null);
+    try {
+      const lookup = await lookupCnpj(digits);
+      setCompanyForm((prev) => mergeCnpjLookupIntoCertPageForm(
+        prev || currentForm,
+        lookup,
+        { onlyFillEmpty },
+      ));
+    } catch (err) {
+      setCnpjLookupError(err instanceof Error ? err.message : 'Falha ao consultar CNPJ.');
+    } finally {
+      setCnpjLookupLoading(false);
+    }
+  }, []);
+
   const handleCompanyField = (field, value) => {
     setCompanyForm((prev) => ({ ...(prev || {}), [field]: value }));
     setCompanyDirty(true);
@@ -263,11 +294,22 @@ export default function CertificadoPage() {
   const handleSaveCompany = async (e) => {
     e.preventDefault();
     if (!companyForm) return;
+
+    const validationMsg = getPlugNotasCompanyValidationMessage(companyForm);
+    if (validationMsg) {
+      setCompanyError(validationMsg);
+      return;
+    }
+
     setCompanySaving(true);
     setCompanySavedAt(null);
+    setCompanyError(null);
     try {
-      const payload = buildCertPageCompanyPayload(companyForm);
-      const updated = await updateFiscalCompany(payload);
+      const payload = buildPlugNotasEmpresaPayload(companyForm);
+      const updated = empresaRegistered
+        ? await updateFiscalCompany(payload)
+        : await cadastrarFiscalCompany(payload);
+      setEmpresaRegistered(true);
       const refreshedForm = await enrichCompanyForm(updated || companyForm);
       setCompany(updated || companyForm);
       setCompanyForm(refreshedForm);
@@ -504,23 +546,29 @@ export default function CertificadoPage() {
             </div>
           ) : (
             <form onSubmit={handleSaveCompany} className="mt-4 space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Razão social" value={companyForm?.razaoSocial || ''} onChange={(v) => handleCompanyField('razaoSocial', v)} />
-                <Field label="Nome fantasia" value={companyForm?.nomeFantasia || ''} onChange={(v) => handleCompanyField('nomeFantasia', v)} />
-                <Field label="CNPJ" value={formatCnpj(companyForm?.cpfCnpj || '')} readOnly />
-                <Field label="Inscrição municipal" value={companyForm?.inscricaoMunicipal || ''} onChange={(v) => handleCompanyField('inscricaoMunicipal', v)} />
-                <Field label="E-mail fiscal" value={companyForm?.email || ''} onChange={(v) => handleCompanyField('email', v)} />
-                <Field label="Telefone" value={companyForm?.telefone || ''} onChange={(v) => handleCompanyField('telefone', v)} />
-              </div>
+              {!empresaRegistered ? (
+                <p className="rounded-[10px] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+                  Primeira configuração: preencha os dados e salve para cadastrar a empresa no emissor fiscal.
+                </p>
+              ) : null}
 
-              <div className="grid gap-3 sm:grid-cols-3">
-                <Field label="CEP" value={companyForm?.cep || ''} onChange={(v) => handleCompanyField('cep', v)} />
-                <Field label="Município" value={companyForm?.municipio || ''} onChange={(v) => handleCompanyField('municipio', v)} />
-                <Field label="UF" value={companyForm?.uf || ''} onChange={(v) => handleCompanyField('uf', v)} maxLength={2} />
-              </div>
+              <EmpresaFiscalForm
+                form={companyForm}
+                onChange={handleCompanyField}
+                cnpjLookupLoading={cnpjLookupLoading}
+                cnpjLookupError={cnpjLookupError}
+              />
 
-              <Field label="Logradouro" value={companyForm?.logradouro || ''} onChange={(v) => handleCompanyField('logradouro', v)} />
-              <Field label="Bairro" value={companyForm?.bairro || ''} onChange={(v) => handleCompanyField('bairro', v)} />
+              {documento ? (
+                <button
+                  type="button"
+                  onClick={() => runCnpjLookup(documento, companyForm, true)}
+                  disabled={cnpjLookupLoading}
+                  className="text-xs font-semibold text-[var(--accent)] hover:underline disabled:opacity-60"
+                >
+                  Atualizar dados do CNPJ na Receita
+                </button>
+              ) : null}
 
               <div className="border-t border-[var(--card-border)] pt-4">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -571,22 +619,6 @@ export default function CertificadoPage() {
         O conteúdo e a senha do certificado são transmitidos de forma segura e nunca ficam visíveis após o envio.
       </p>
     </div>
-  );
-}
-
-function Field({ label, value, onChange, readOnly, maxLength, type = 'text' }) {
-  return (
-    <label className="flex flex-col gap-1 text-xs">
-      <span className="font-medium text-[var(--text-muted)]">{label}</span>
-      <input
-        type={type}
-        value={value || ''}
-        onChange={(e) => onChange && onChange(e.target.value)}
-        readOnly={readOnly}
-        maxLength={maxLength}
-        className={`h-10 rounded-[10px] border border-[var(--card-border)] bg-[var(--canvas)] px-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none ${readOnly ? 'opacity-70' : ''}`}
-      />
-    </label>
   );
 }
 

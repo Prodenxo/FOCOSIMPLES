@@ -5,6 +5,7 @@
 
 import { applyCatalogProdutoToNfseServico } from '@/lib/nfseCatalogProdutoMetadata';
 import { mapCatalogProdutoToNfeItem } from '@/lib/mapCatalogProdutoToNfeItem';
+import { getNfseObraValidationMessage } from '@/lib/nfseObraForm';
 
 /** Normaliza para apenas dígitos. */
 export function onlyDigits(value) {
@@ -262,6 +263,14 @@ export function validateNfseForm(form) {
   }
   const valorServico = parseDecimal(servico.valorServico);
   if (!valorServico || valorServico <= 0) return 'Informe um valor de serviço maior que zero.';
+
+  const obraMsg = getNfseObraValidationMessage(
+    servico.codigo,
+    servico.obra,
+    form.tomadorEndereco,
+  );
+  if (obraMsg) return obraMsg;
+
   return null;
 }
 

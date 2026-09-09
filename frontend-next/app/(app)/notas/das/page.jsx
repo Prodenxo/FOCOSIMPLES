@@ -19,10 +19,13 @@ import {
   fetchDasPeriods,
   fetchDasIntegrationStatus,
   downloadDasPdf,
+  declararDas,
+  fetchSimplesDasFaturamento,
   gerarDas,
   fetchFiscalCompany,
 } from '@/lib/fiscalApi';
 import {
+  competenciaToPeriodoApuracao,
   dasStatusTone,
   describeDasStatus,
   downloadBlob,
@@ -148,6 +151,79 @@ export default function DasPage() {
     }
     return acc;
   }, [periods]);
+
+  const hasCertificate = Boolean(certStatus?.hasUserCertificate || certStatus?.hasEnvCertificate);
+
+  const handleDeclarar = async (period) => {
+    if (!cnpj) return;
+    const periodoApuracao = period.periodoApuracao || competenciaToPeriodoApuracao(period.competencia);
+    if (!periodoApuracao) {
+      setActionMessage({ type: 'error', text: 'Competência inválida para declaração.' });
+      return;
+    }
+    if (!hasCertificate) {
+      setActionMessage({
+        type: 'error',
+        text: 'Envie o certificado A1 da empresa na aba Certificado antes de declarar.',
+      });
+      return;
+    }
+
+    const periodoLabel = formatCompetenciaShort(period.competencia);
+    setActingId(`${period.id || period.competencia}`);
+    setActionMessage(null);
+
+    let valorOk = 0;
+    let count = 0;
+    try {
+      const fat = await fetchSimplesDasFaturamento(periodoApuracao);
+      const total = Number(fat?.total);
+      count = Number(fat?.count) || 0;
+      valorOk = Number.isFinite(total) ? total : 0;
+    } catch (err) {
+      setActionMessage({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Não foi possível consultar o faturamento interno.',
+      });
+      setActingId(null);
+      return;
+    }
+
+    if (typeof window !== 'undefined') {
+      const ok = window.confirm(
+        `Declarar ${periodoLabel}?\n\n`
+        + `Será enviado à Receita o faturamento de ${periodoLabel}, somado das notas concluídas neste app.\n\n`
+        + `Valor: ${formatCurrencyBRL(valorOk)} (${count} nota${count === 1 ? '' : 's'} concluída${count === 1 ? '' : 's'})\n\n`
+        + 'Depois disso a Receita pode gerar a guia DAS.',
+      );
+      if (!ok) {
+        setActingId(null);
+        return;
+      }
+    }
+
+    try {
+      await declararDas({
+        confirm: true,
+        periodoApuracao,
+        cnpj,
+        valorReceitaInterna: valorOk,
+      });
+      const result = await gerarDas({ cnpj, periodoApuracao });
+      setActionMessage({
+        type: 'success',
+        text: result?.message || `Declaração de ${periodoLabel} enviada. Guia DAS gerada.`,
+      });
+      await loadPeriods();
+    } catch (err) {
+      setActionMessage({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Falha ao declarar e gerar guia DAS.',
+      });
+    } finally {
+      setActingId(null);
+    }
+  };
 
   const handleGerar = async (period) => {
     if (!cnpj) return;
@@ -281,9 +357,10 @@ export default function DasPage() {
           </div>
         ) : null}
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <SummaryChip label="Pago" value={counts.pago} tone="success" />
           <SummaryChip label="A pagar" value={counts.a_pagar} tone="warning" />
+          <SummaryChip label="A declarar" value={counts.a_declarar} tone="info" />
           <SummaryChip label="Sem débito" value={counts.sem_debito} tone="muted" />
           <SummaryChip label="Falhas" value={counts.erro} tone="danger" />
         </div>
@@ -354,6 +431,16 @@ export default function DasPage() {
                               {downloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <FileDown className="h-3.5 w-3.5" aria-hidden />}
                               Baixar PDF
                             </button>
+                          ) : status === 'a_declarar' || period.podeDeclarar ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDeclarar(period)}
+                              disabled={generating || !integrationOk || !hasCertificate}
+                              className="inline-flex h-9 items-center gap-1 rounded-[10px] bg-[var(--accent)] px-3 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60"
+                            >
+                              {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <ScrollText className="h-3.5 w-3.5" aria-hidden />}
+                              Declarar e gerar
+                            </button>
                           ) : (
                             <button
                               type="button"
@@ -405,6 +492,7 @@ function SummaryChip({ label, value, tone }) {
     success: 'bg-emerald-500',
     warning: 'bg-amber-500',
     danger: 'bg-red-500',
+    info: 'bg-sky-500',
     muted: 'bg-slate-400',
   }[tone];
   return (

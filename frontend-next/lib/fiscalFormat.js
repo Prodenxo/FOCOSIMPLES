@@ -58,6 +58,19 @@ export function formatCompetencia(value) {
   return `${label}/${year}`;
 }
 
+/** Converte competência (YYYY-MM ou YYYYMM) para periodoApuracao (YYYYMM). */
+export function competenciaToPeriodoApuracao(comp) {
+  const text = String(comp || '').trim();
+  if (/^\d{4}-(0[1-9]|1[0-2])$/.test(text)) {
+    return text.replace(/-/g, '');
+  }
+  const digits = text.replace(/\D/g, '');
+  if (digits.length !== 6) return null;
+  const month = digits.slice(4, 6);
+  if (!/^(0[1-9]|1[0-2])$/.test(month)) return null;
+  return digits;
+}
+
 /** Resumo curto da competência: "Jan/2026". */
 export function formatCompetenciaShort(value) {
   const str = String(value || '');

@@ -24,6 +24,7 @@ import {
 import { useAuth } from '@/context/AuthProvider';
 import {
   arquivarNota,
+  atualizarNota,
   cancelarNota,
   downloadNotaPdf,
   downloadNotaXml,
@@ -35,6 +36,10 @@ import {
   fetchNotas,
   syncNotasEmProcessamento,
 } from '@/lib/fiscalApi';
+import {
+  allowedEmitDocumentTypes,
+  resolveDocumentosPermitidos,
+} from '@/lib/documentosAtivos';
 import {
   describeDocumentType,
   downloadBlob,
@@ -57,6 +62,7 @@ import { NotasEmptyIllustration } from '@/components/illustrations/NotasEmptyIll
 import { EmitirNotaModal } from '@/components/notas/EmitirNotaModal';
 import { ClienteModal } from '@/components/notas/ClienteModal';
 import { ProdutoModal } from '@/components/notas/ProdutoModal';
+import { NotaFiscalFailureBanner } from '@/components/notas/NotaFiscalFailureBanner';
 
 /**
  * Aba Notas fiscais — gestão de NF-e, NFC-e e NFS-e.
@@ -109,6 +115,30 @@ export default function NotasFiscaisPage() {
   const notasSyncInFlightRef = useRef(false);
 
   const cnpj = company?.cpfCnpj || company?.cnpj || certStatus?.documento || null;
+
+  const documentosPermitidos = useMemo(
+    () => resolveDocumentosPermitidos(certStatus, company),
+    [certStatus, company],
+  );
+
+  const documentTypeOptions = useMemo(() => {
+    const labels = { nfse: 'NFS-e', nfe: 'NF-e', nfce: 'NFC-e' };
+    const allowed = allowedEmitDocumentTypes(documentosPermitidos);
+    const base = [{ value: 'all', label: 'Todos os tipos' }];
+    allowed.forEach((type) => {
+      const key = type.toLowerCase();
+      base.push({ value: key, label: labels[key] || type });
+    });
+    if (base.length === 1) {
+      return [
+        { value: 'all', label: 'Todos os tipos' },
+        { value: 'nfse', label: 'NFS-e' },
+        { value: 'nfe', label: 'NF-e' },
+        { value: 'nfce', label: 'NFC-e' },
+      ];
+    }
+    return base;
+  }, [documentosPermitidos]);
 
   const showClientes = searchParams.get('clientes') === '1';
   const showCatalogo = searchParams.get('catalogo') === '1';
@@ -362,6 +392,56 @@ export default function NotasFiscaisPage() {
     }
   };
 
+  const handleSyncNota = async (nota) => {
+    if (!nota?.id) return;
+    setActing(`sync-${nota.id}`);
+    setActionMsg(null);
+    try {
+      const updated = await fetchNota(nota.id, { sync: true });
+      const normalized = normalizeNotaForUi(updated);
+      setNotas((current) => {
+        const next = current.map((item) => (item.id === nota.id ? normalized : item));
+        notasRef.current = next;
+        return next;
+      });
+      setSelected(normalized);
+      setActionMsg({ type: 'success', text: 'Status da nota atualizado.' });
+    } catch (err) {
+      setActionMsg({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Falha ao sincronizar status da nota.',
+      });
+    } finally {
+      setActing(null);
+    }
+  };
+
+  const handleSaveDescricao = async (nota, descricaoInterna) => {
+    if (!nota?.id) return;
+    setActing(`desc-${nota.id}`);
+    setActionMsg(null);
+    try {
+      const updated = await atualizarNota(nota.id, {
+        descricaoInterna: descricaoInterna.trim() || undefined,
+      });
+      const normalized = normalizeNotaForUi(updated);
+      setNotas((current) => {
+        const next = current.map((item) => (item.id === nota.id ? normalized : item));
+        notasRef.current = next;
+        return next;
+      });
+      setSelected(normalized);
+      setActionMsg({ type: 'success', text: 'Descrição interna salva.' });
+    } catch (err) {
+      setActionMsg({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Falha ao salvar descrição.',
+      });
+    } finally {
+      setActing(null);
+    }
+  };
+
   const handleCancelar = async (nota) => {
     if (!nota?.id) return;
     const isRetry = getNfseStatusKey(nota.status) === 'cancelamento_pendente';
@@ -482,12 +562,7 @@ export default function NotasFiscaisPage() {
             icon={Filter}
             value={documentType}
             onChange={setDocumentType}
-            options={[
-              { value: 'all', label: 'Todos os tipos' },
-              { value: 'nfse', label: 'NFS-e' },
-              { value: 'nfe', label: 'NF-e' },
-              { value: 'nfce', label: 'NFC-e' },
-            ]}
+            options={documentTypeOptions}
           />
           <label className="inline-flex h-10 items-center gap-2 rounded-[12px] border border-[var(--card-border)] bg-[var(--card-bg)] px-3 text-xs">
             <input
@@ -662,6 +737,7 @@ export default function NotasFiscaisPage() {
         <EmitirNotaModal
           company={company}
           certDocumento={certStatus?.documento ?? null}
+          documentosPermitidos={documentosPermitidos}
           onClose={() => {
             router.replace('/notas/notas-fiscais');
           }}
@@ -773,6 +849,8 @@ export default function NotasFiscaisPage() {
           onDownloadXml={() => handleDownloadXml(selected)}
           onArquivar={() => handleArquivar(selected)}
           onCancelar={() => handleCancelar(selected)}
+          onSync={() => handleSyncNota(selected)}
+          onSaveDescricao={(desc) => handleSaveDescricao(selected, desc)}
         />
       ) : null}
 
@@ -810,11 +888,29 @@ export default function NotasFiscaisPage() {
 }
 
 function NotaDetailModal({
-  nota, loading, acting, onClose, onDownloadPdf, onDownloadXml, onArquivar, onCancelar,
+  nota,
+  loading,
+  acting,
+  onClose,
+  onDownloadPdf,
+  onDownloadXml,
+  onArquivar,
+  onCancelar,
+  onSync,
+  onSaveDescricao,
 }) {
+  const [editDescricao, setEditDescricao] = useState('');
+  const [descricaoDirty, setDescricaoDirty] = useState(false);
+
+  useEffect(() => {
+    setEditDescricao(nota?.descricaoInterna || '');
+    setDescricaoDirty(false);
+  }, [nota?.id, nota?.descricaoInterna]);
+
   const isArchived = Boolean(nota.arquivada || nota.archived);
   const statusKey = getNfseStatusKey(nota.situacao || nota.status);
   const cancelDisabled = statusKey === 'cancelado' || statusKey === 'rejeitado' || statusKey === 'interrompido';
+  const canSync = notaFiscalPodeSincronizarEstadoEmissor(nota);
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -853,6 +949,8 @@ function NotaDetailModal({
           <div className="p-5"><LoadingPanel label="Carregando detalhes…" /></div>
         ) : (
           <div className="flex flex-col gap-4 px-5 py-5">
+            <NotaFiscalFailureBanner nota={nota} />
+
             <div className="grid gap-3 sm:grid-cols-2">
               <DetailItem label="Cliente" value={nota.cliente || nota.destinatarioNome || '—'} />
               <DetailItem label="Documento do destinatário" value={nota.destinatarioDocumento || nota.documentoDestinatario || '—'} />
@@ -860,6 +958,37 @@ function NotaDetailModal({
               <DetailItem label="Tipo" value={describeDocumentType(nota.tipo || nota.documentType)} />
               <DetailItem label="Situação" value={formatNfseStatus(nota.situacao || nota.status)} />
               <DetailItem label="Data de emissão" value={formatDateBR(nota.dataEmissao || nota.createdAt)} />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                Descrição interna
+              </label>
+              <textarea
+                value={editDescricao}
+                onChange={(e) => {
+                  setEditDescricao(e.target.value);
+                  setDescricaoDirty(true);
+                }}
+                rows={2}
+                placeholder="Anotações visíveis só para você (não vão na nota fiscal)"
+                className="w-full rounded-[12px] border border-[var(--card-border)] bg-[var(--canvas)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
+              />
+              {descricaoDirty ? (
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => onSaveDescricao(editDescricao)}
+                    disabled={acting === `desc-${nota.id}`}
+                    className="inline-flex h-8 items-center gap-1 rounded-[10px] bg-[var(--accent)] px-3 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60"
+                  >
+                    {acting === `desc-${nota.id}` ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                    ) : null}
+                    Salvar descrição
+                  </button>
+                </div>
+              ) : null}
             </div>
 
             {nota.itens && nota.itens.length > 0 ? (
@@ -886,6 +1015,21 @@ function NotaDetailModal({
         )}
 
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[var(--card-border)] bg-[var(--canvas)]/40 px-5 py-3">
+          {canSync ? (
+            <button
+              type="button"
+              onClick={onSync}
+              disabled={acting === `sync-${nota.id}`}
+              className="inline-flex h-9 items-center gap-1 rounded-[10px] border border-[var(--card-border)] bg-[var(--card-bg)] px-3 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--canvas)] disabled:opacity-60"
+            >
+              {acting === `sync-${nota.id}` ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+              ) : (
+                <RefreshCcw className="h-3.5 w-3.5" aria-hidden />
+              )}
+              Sincronizar status
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onDownloadPdf}

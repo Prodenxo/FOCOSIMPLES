@@ -272,5 +272,69 @@ export function normalizeNotaForUi(record) {
     arquivada: Boolean(record.archived_at),
     archived: Boolean(record.archived_at),
     itens: extractItens(record),
+    descricaoInterna: record.descricao_interna ?? record.descricaoInterna ?? '',
+    response_json: record.response_json ?? record.responseJson ?? null,
+    metadata_json: record.metadata_json ?? record.metadataJson ?? null,
   };
+}
+
+function normalizeFailureText(value) {
+  const t = String(value ?? '').trim();
+  return t || null;
+}
+
+function asResponseRecords(responseJson) {
+  if (!responseJson) return [];
+  if (Array.isArray(responseJson)) return responseJson;
+  if (typeof responseJson === 'object') return [responseJson];
+  return [];
+}
+
+function pickMessageFromResponseRecord(record) {
+  if (!record || typeof record !== 'object') return null;
+  const retorno = record.retorno;
+  if (retorno && typeof retorno === 'object') {
+    const m = normalizeFailureText(retorno.mensagemRetorno);
+    if (m) return m;
+  }
+  const direct = normalizeFailureText(record.mensagemRetorno ?? record.mensagem ?? record.message);
+  if (direct) return direct;
+  const rawMsg = normalizeFailureText(record.mensagem);
+  if (rawMsg && rawMsg.includes('[{')) {
+    try {
+      const match = rawMsg.match(/\[[\s\S]*\]/);
+      if (match) {
+        const arr = JSON.parse(match[0]);
+        const first = Array.isArray(arr) ? arr[0] : null;
+        if (first?.Codigo && first?.Descricao) {
+          return `${first.Codigo}: ${first.Descricao}`;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return rawMsg;
+}
+
+export function extractNfseFailureMessage(responseJson, metadataJson) {
+  for (const record of asResponseRecords(responseJson)) {
+    const message = pickMessageFromResponseRecord(record);
+    if (message) return message;
+  }
+  if (metadataJson && typeof metadataJson === 'object') {
+    const providerError = normalizeFailureText(metadataJson.providerError);
+    if (providerError) return providerError;
+    const cancelamento = metadataJson.cancelamento;
+    if (cancelamento && typeof cancelamento === 'object') {
+      const cancelError = normalizeFailureText(cancelamento.providerError);
+      if (cancelError) return cancelError;
+    }
+  }
+  return null;
+}
+
+export function notaFiscalExibeMotivoFalha(status) {
+  const key = getNfseStatusKey(status);
+  return key === 'rejeitado' || key === 'interrompido';
 }

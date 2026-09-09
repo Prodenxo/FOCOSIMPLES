@@ -123,9 +123,14 @@ export async function fetchFiscalCompany(cnpj) {
   return apiClient.get(`/mei-notas/setup/plugnotas/empresa?${params.toString()}`);
 }
 
+/** Cadastra empresa fiscal no emissor (primeira configuração). */
+export async function cadastrarFiscalCompany(payload) {
+  return apiClient.post('/mei-notas/setup/plugnotas/empresa', { payload });
+}
+
 /** Atualiza dados da empresa fiscal. */
 export async function updateFiscalCompany(payload) {
-  return apiClient.patch('/mei-notas/setup/plugnotas/empresa', payload);
+  return apiClient.patch('/mei-notas/setup/plugnotas/empresa', { payload });
 }
 
 /** Cadastra empresa fiscal + certificado (composite). */
@@ -134,7 +139,7 @@ export async function setupEmitenteComposite({ file, password, payload }) {
   if (file) formData.append('arquivo', file);
   if (password) formData.append('senha', password);
   if (payload) formData.append('payload', JSON.stringify(payload));
-  const token = typeof window !== 'undefined' ? window.__FOCO_SIMPLES_AUTH__?.token : null;
+  const token = typeof window !== 'undefined' ? getLocalAccessToken() : null;
   const apiUrl = (typeof window !== 'undefined' && window.__FOCO_SIMPLES_ENV__?.NEXT_PUBLIC_API_URL)
     || process.env.NEXT_PUBLIC_API_URL
     || process.env.NEXT_PUBLIC_API_URL_DEV
@@ -175,6 +180,12 @@ export async function fetchDasIntegrationStatus() {
 /** Gera guia DAS para uma competência. */
 export async function gerarDas(payload) {
   return apiClient.post('/simples-das/gerar', payload);
+}
+
+/** Faturamento interno (notas concluídas) para declaração PGDAS-D. */
+export async function fetchSimplesDasFaturamento(periodoApuracao) {
+  const params = new URLSearchParams({ periodo: periodoApuracao });
+  return apiClient.get(`/simples-das/faturamento?${params.toString()}`);
 }
 
 /** Declaração PGDAS-D. */
