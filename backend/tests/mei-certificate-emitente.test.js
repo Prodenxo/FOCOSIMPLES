@@ -27,6 +27,17 @@ test('normalizeEmitenteRowFragment — update parcial omite vazios', () => {
   assert.equal(row.logradouro, undefined);
 });
 
+test('normalizeEmitenteRowFragment — ignora nome de cidade puramente numérico', () => {
+  const row = normalizeEmitenteRowFragment({ cidade: '9560', uf: 'SP' });
+  assert.equal(row.cidade, undefined);
+  assert.equal(row.uf, 'SP');
+});
+
+test('normalizeEmitenteRowFragment — aceita nome de cidade válido', () => {
+  const row = normalizeEmitenteRowFragment({ descricaoCidade: 'RIBEIRAO PRETO' });
+  assert.equal(row.cidade, 'RIBEIRAO PRETO');
+});
+
 test('emitenteRowToApiShape — defaults', () => {
   const api = emitenteRowToApiShape({
     razao_social: 'A',
