@@ -9,6 +9,9 @@ const ALLOWED_ROUTES = new Map([
   ['callback', new Set(['POST'])],
   ['events', new Set(['GET'])],
   ['create-event', new Set(['POST'])],
+  ['create-custom-event', new Set(['POST'])],
+  ['update-custom-event', new Set(['POST'])],
+  ['delete-custom-event', new Set(['POST'])],
   ['disconnect', new Set(['DELETE', 'POST'])],
 ])
 

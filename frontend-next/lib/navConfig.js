@@ -27,7 +27,6 @@ export const NAV_ITEMS = [
 ];
 
 export const MIGRATION_STUB_ROUTES = [
-  '/agenda',
   '/notas',
   '/configuracoes',
   '/minha-conta',

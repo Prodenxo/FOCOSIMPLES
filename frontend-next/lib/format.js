@@ -3,6 +3,9 @@ export function formatBrl(value) {
   return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+/** @deprecated Use formatBrl */
+export const formatCurrency = formatBrl;
+
 export function formatPct(value) {
   const n = typeof value === 'number' && !Number.isNaN(value) ? value : 0;
   return `${Math.round(n)}%`;
