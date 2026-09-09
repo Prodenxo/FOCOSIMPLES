@@ -487,9 +487,8 @@ const buildServicoFromInput = (input) => {
     ?? input?.ibscbs?.cIndOp
     ?? input?.ibscbs?.codigoOperacao,
   );
-  const ibscbsFromInput = explicitCIndOp
-    ? { cIndOp: explicitCIndOp, codigoOperacao: explicitCIndOp }
-    : undefined;
+  // Não montar ibscbs parcial aqui — PlugNotas valida campos obrigatórios aninhados.
+  // O enriquecimento RTC (ISSNET) monta ibscbs completo antes do POST.
 
   const nfseNacional = input?.nfseNacional !== false;
   const simplesNacional = input?.simplesNacional !== false;
@@ -501,7 +500,7 @@ const buildServicoFromInput = (input) => {
     cnae,
     codigoNbs,
     codigoTributacao,
-    ...(ibscbsFromInput ? { ibscbs: ibscbsFromInput } : {}),
+    ...(explicitCIndOp ? { cIndOp: explicitCIndOp, codigoOperacao: explicitCIndOp } : {}),
     iss: resolveNfseIssForServico(issSource, { nfseNacional, simplesNacional }),
     valor: prune({
       ...valor,
@@ -2505,12 +2504,19 @@ export const emitirNota = async (userId, input) => {
       }
     }
     if (documentType === DOCUMENT_TYPE_NFSE) {
+      const codigoIbgeAssembly = String(
+        nfseEmitPrep?.codigoIbge
+        ?? readCodigoIbgeFromEmpresa({ endereco: emitPayload?.prestador?.endereco })
+        ?? emitPayload?.prestador?.endereco?.codigoCidade
+        ?? '',
+      ).replace(/\D/g, '').slice(0, 7);
       emitPayload = assembleNfsePlugnotasEmitPayload(emitPayload, {
         obraContext: nfseEmitPrep?.obraContext ?? {},
         simplesNacional: nfseEmitPrep?.empresaJson?.simplesNacional !== false,
         nfseNacional: nfseEmitPrep?.nfseNacional === true,
-        codigoIbge: nfseEmitPrep?.codigoIbge,
-        issnetOnline30: nfseEmitPrep?.issnetOnline30 === true,
+        codigoIbge: codigoIbgeAssembly || undefined,
+        issnetOnline30: nfseEmitPrep?.issnetOnline30 === true
+          || requiresIssnetRtcEmitSchema(codigoIbgeAssembly),
       });
     }
     if (documentType === DOCUMENT_TYPE_NFE || documentType === DOCUMENT_TYPE_NFCE) {

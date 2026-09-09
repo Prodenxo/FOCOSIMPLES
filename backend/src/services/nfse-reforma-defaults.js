@@ -231,6 +231,54 @@ export const sanitizeIbscbsForPlugnotasEmit = (built = {}) => {
 };
 
 /**
+ * ibscbs completo exige finalidadeNFSe, operacaoPessoal e valores.tributacao (PlugNotas / ISSNET RTC).
+ *
+ * @param {unknown} ibscbs
+ * @returns {boolean}
+ */
+export const hasCompleteServicoIbscbs = (ibscbs) => {
+  if (!ibscbs || typeof ibscbs !== 'object' || Array.isArray(ibscbs)) return false;
+  const tributacao = ibscbs.valores?.tributacao;
+  return ibscbs.finalidadeNFSe !== undefined
+    && ibscbs.operacaoPessoal !== undefined
+    && ibscbs.valores != null
+    && typeof ibscbs.valores === 'object'
+    && tributacao != null
+    && typeof tributacao === 'object'
+    && tributacao.cst !== undefined;
+};
+
+/**
+ * Remove ibscbs incompleto dos serviços — evita rejeição JSON quando o enriquecimento RTC não rodou.
+ *
+ * @param {Record<string, unknown>|null|undefined} payload
+ * @returns {Record<string, unknown>|null|undefined}
+ */
+export const stripIncompleteServicoIbscbsFromEmitPayload = (payload) => {
+  if (!payload || typeof payload !== 'object') return payload;
+
+  const servicos = Array.isArray(payload.servico)
+    ? payload.servico
+    : payload.servico && typeof payload.servico === 'object'
+      ? [payload.servico]
+      : [];
+
+  if (!servicos.length) return payload;
+
+  let changed = false;
+  const servicoStripped = servicos.map((item) => {
+    if (!item || typeof item !== 'object') return item;
+    if (!item.ibscbs || hasCompleteServicoIbscbs(item.ibscbs)) return item;
+    changed = true;
+    const { ibscbs: _removed, ...rest } = item;
+    return rest;
+  });
+
+  if (!changed) return payload;
+  return { ...payload, servico: servicoStripped };
+};
+
+/**
  * @param {Record<string, unknown>|null|undefined} destinatarioSource
  * @param {Record<string, unknown>} source
  * @returns {Record<string, unknown>|undefined}
@@ -319,8 +367,12 @@ export const buildMinimalServicoIbscbs = (ibscbsInput = {}, options = {}) => {
   const cIndOp = resolveCIndOpForServico({
     ...servico,
     ibscbs: source,
-    cIndOp: source.cIndOp ?? options.cIndOp,
-    codigoOperacao: source.codigoOperacao ?? options.cIndOp,
+    ...(source.cIndOp != null || options.cIndOp != null
+      ? {
+        cIndOp: source.cIndOp ?? options.cIndOp ?? servico.cIndOp,
+        codigoOperacao: source.codigoOperacao ?? source.cIndOp ?? options.cIndOp ?? servico.codigoOperacao,
+      }
+      : {}),
   });
   const classificacaoTributariaIbsCbs = resolveClassificacaoTributariaIbsCbsForServico({
     ...servico,

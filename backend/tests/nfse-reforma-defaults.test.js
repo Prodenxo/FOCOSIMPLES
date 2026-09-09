@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   buildMinimalServicoIbscbs,
   enrichNfseReformaCabecalhoInEmitPayload,
+  hasCompleteServicoIbscbs,
   NFSE_CINDOP_SERVICO_GERAL,
   NFSE_CINDOP_SERVICO_NO_ESTABELECIMENTO,
   NFSE_FIN_NFSE_REGULAR,
@@ -15,8 +16,10 @@ import {
   resolveCodigoTributacaoIssnetFromAliquota,
   resolveCIndOpForServico,
   resolveFinNfseValue,
+  stripIncompleteServicoIbscbsFromEmitPayload,
   validateNfseCatalogProdutoMetadata,
 } from '../src/services/nfse-reforma-defaults.js';
+import { assembleNfsePlugnotasEmitPayload } from '../src/services/nfse-emit-payload-assembler.js';
 
 test('resolveFinNfseValue: default 0 (regular)', () => {
   assert.equal(resolveFinNfseValue({}), NFSE_FIN_NFSE_REGULAR);
@@ -130,4 +133,27 @@ test('enrichNfseReformaCabecalhoInEmitPayload: cIndOp vira codigoOperacao em ibs
 
 test('validateNfseCatalogProdutoMetadata: aceita cIndOp válido', () => {
   assert.doesNotThrow(() => validateNfseCatalogProdutoMetadata({ cIndOp: '050101' }));
+});
+
+test('stripIncompleteServicoIbscbsFromEmitPayload: remove ibscbs parcial', () => {
+  const out = stripIncompleteServicoIbscbsFromEmitPayload({
+    servico: [{ codigo: '171901', ibscbs: { codigoOperacao: '160201' } }],
+  });
+  assert.equal(out.servico[0].ibscbs, undefined);
+  assert.equal(out.servico[0].codigo, '171901');
+});
+
+test('hasCompleteServicoIbscbs: detecta ibscbs montado', () => {
+  const complete = buildMinimalServicoIbscbs({}, { servico: { codigo: '140101' } });
+  assert.equal(hasCompleteServicoIbscbs(complete), true);
+  assert.equal(hasCompleteServicoIbscbs({ codigoOperacao: '160201' }), false);
+});
+
+test('assembleNfsePlugnotasEmitPayload: cIndOp no serviço vira ibscbs completo em Ribeirão Preto', () => {
+  const out = assembleNfsePlugnotasEmitPayload({
+    prestador: { endereco: { codigoCidade: '3543402' } },
+    servico: [{ codigo: '171901', cnae: '9511800', cIndOp: '160201', iss: { aliquota: 2 } }],
+  }, { simplesNacional: true, nfseNacional: false });
+  assert.equal(hasCompleteServicoIbscbs(out.servico[0].ibscbs), true);
+  assert.equal(out.servico[0].ibscbs.codigoOperacao, '160201');
 });

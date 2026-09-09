@@ -9,7 +9,12 @@ import {
   enrichNfseObraOnEmitPayload,
   stripCidadePrestacaoForIssnetRtcObra,
 } from './nfse-obra-defaults.js';
-import { enrichNfseReformaCabecalhoInEmitPayload } from './nfse-reforma-defaults.js';
+import {
+  enrichNfseReformaCabecalhoInEmitPayload,
+  readCodigoIbgeFromEmpresa,
+  requiresIssnetRtcEmitSchema,
+  stripIncompleteServicoIbscbsFromEmitPayload,
+} from './nfse-reforma-defaults.js';
 
 /**
  * @param {Record<string, unknown>} basePayload
@@ -23,9 +28,17 @@ import { enrichNfseReformaCabecalhoInEmitPayload } from './nfse-reforma-defaults
  * @returns {Record<string, unknown>}
  */
 export const assembleNfsePlugnotasEmitPayload = (basePayload, prep = {}) => {
-  let emitPayload = { ...basePayload };
+  let emitPayload = stripIncompleteServicoIbscbsFromEmitPayload({ ...basePayload });
 
-  if (prep.issnetOnline30 && prep.applyIss !== false) {
+  const codigoIbge = String(
+    prep.codigoIbge
+    ?? readCodigoIbgeFromEmpresa({ endereco: emitPayload?.prestador?.endereco })
+    ?? emitPayload?.prestador?.endereco?.codigoCidade
+    ?? '',
+  ).replace(/\D/g, '').slice(0, 7);
+  const issnetOnline30 = prep.issnetOnline30 === true || requiresIssnetRtcEmitSchema(codigoIbge);
+
+  if (issnetOnline30 && prep.applyIss !== false) {
     emitPayload = enrichNfseIssInEmitPayload(emitPayload, {
       nfseNacional: prep.nfseNacional === true,
       simplesNacional: prep.simplesNacional !== false,
@@ -35,20 +48,22 @@ export const assembleNfsePlugnotasEmitPayload = (basePayload, prep = {}) => {
 
   emitPayload = enrichNfseObraOnEmitPayload(emitPayload, {
     ...(prep.obraContext ?? {}),
-    issnetOnline30: prep.issnetOnline30 === true,
+    issnetOnline30,
   });
   emitPayload = enrichNfseCidadePrestacaoFromObra(emitPayload, {
     ...(prep.obraContext ?? {}),
-    issnetOnline30: prep.issnetOnline30 === true,
+    issnetOnline30,
   });
   emitPayload = enrichNfseReformaCabecalhoInEmitPayload(emitPayload, {
     simplesNacional: prep.simplesNacional !== false,
     nfseNacional: prep.nfseNacional === true,
-    codigoIbge: prep.codigoIbge,
+    codigoIbge,
   });
 
-  if (prep.issnetOnline30) {
+  if (issnetOnline30) {
     emitPayload = stripCidadePrestacaoForIssnetRtcObra(emitPayload);
+  } else {
+    emitPayload = stripIncompleteServicoIbscbsFromEmitPayload(emitPayload);
   }
 
   return emitPayload;
