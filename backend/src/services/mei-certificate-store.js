@@ -162,7 +162,11 @@ export const normalizeEmitenteRowFragment = (raw, opts = {}) => {
   const cidade = get('cidade', 'cidade') ?? get('descricaoCidade', 'descricao_cidade');
   if (cidade !== undefined && cidade !== null) {
     const t = String(cidade).trim();
-    if (t || !omitEmpty) out.cidade = t || null;
+    // Nome de município nunca é só dígitos. Códigos numéricos (TOM/Receita) chegando aqui
+    // viram `descricaoCidade` no cadastro PlugNotas e quebram o XML da NFS-e (E160).
+    if (!/^\d+$/.test(t)) {
+      if (t || !omitEmpty) out.cidade = t || null;
+    }
   }
 
   const uf = get('uf', 'uf') ?? get('estado', 'estado');
