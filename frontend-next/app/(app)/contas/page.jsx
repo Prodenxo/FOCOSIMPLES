@@ -153,11 +153,14 @@ export default function ContasPage() {
   return (
     <div className="flex flex-col gap-5">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+        <div className="min-w-0 flex-1">
           <h1 className="text-[2rem] font-bold leading-tight text-[var(--text-primary)]">
             Contas e cartões
           </h1>
           <p className="mt-1 text-sm text-[var(--text-muted)]">{subtitle}</p>
+          {!hasAccounts ? (
+            <p className="mt-1 text-sm text-[var(--text-muted)]">0 contas cadastradas.</p>
+          ) : null}
         </div>
         <button
           type="button"
@@ -211,21 +214,27 @@ export default function ContasPage() {
         </>
       ) : (
         <>
-          <Card className="flex flex-col items-center px-6 py-10 text-center">
-            <p className="mb-6 w-full text-left text-sm text-[var(--text-muted)]">
-              0 contas cadastradas.
-            </p>
-            <AccountsEmptyIllustration className="mx-auto" />
-            <h2 className="mt-6 text-lg font-bold text-[var(--text-primary)]">
+          <Card className="relative flex flex-col items-center overflow-hidden px-6 py-12 text-center sm:py-14">
+            <div
+              className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-[var(--accent)]/[0.07]"
+              aria-hidden
+            />
+            <div
+              className="pointer-events-none absolute -bottom-16 -left-16 h-48 w-48 rounded-full bg-[var(--accent)]/[0.05]"
+              aria-hidden
+            />
+
+            <AccountsEmptyIllustration />
+            <h2 className="relative mt-7 text-xl font-semibold leading-snug text-[var(--text-primary)] sm:text-[1.375rem]">
               Nenhuma conta ainda
             </h2>
-            <p className="mt-2 max-w-md text-sm text-[var(--text-muted)]">
+            <p className="relative mt-2 max-w-[400px] text-sm leading-relaxed text-[var(--text-muted)]">
               Cadastre contas e cartões para acompanhar seus saldos por instituição.
             </p>
             <button
               type="button"
               onClick={openCreate}
-              className="mt-6 inline-flex h-11 items-center gap-2 rounded-[14px] bg-[var(--accent)] px-5 text-sm font-semibold text-white"
+              className="relative mt-7 inline-flex h-11 items-center gap-2 rounded-[14px] bg-[var(--accent)] px-5 text-sm font-semibold text-white shadow-[0_4px_14px_rgba(0,133,106,0.28)] transition hover:brightness-110 dark:shadow-[0_4px_18px_rgba(0,168,132,0.32)]"
             >
               <Plus className="h-4 w-4" aria-hidden />
               Cadastrar primeira conta

@@ -1,42 +1,28 @@
 'use client';
 
-import { useId } from 'react';
+import { CreditCard, Wallet } from 'lucide-react';
 
-/** Aproximação da referência: carteira com cartões e círculos suaves. */
+/** Hero do estado vazio — ícone com contraste garantido (sem SVG artesanal). */
 export function AccountsEmptyIllustration({ className = '' }) {
-  const gradId = useId();
-
   return (
-    <svg
-      width="200"
-      height="160"
-      viewBox="0 0 200 160"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
+    <div
+      className={`relative mx-auto flex h-[120px] w-[120px] items-center justify-center ${className}`}
       aria-hidden="true"
     >
-      <defs>
-        <radialGradient id={gradId} cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="var(--accent)" stopOpacity="0" />
-          <stop offset="70%" stopColor="var(--accent)" stopOpacity="0.08" />
-          <stop offset="100%" stopColor="var(--accent)" stopOpacity="0.16" />
-        </radialGradient>
-      </defs>
+      <div className="absolute inset-0 rounded-full bg-[var(--accent)]/12" />
+      <div className="absolute inset-4 rounded-full border border-[var(--accent)]/18" />
 
-      <circle cx="148" cy="48" r="52" fill={`url(#${gradId})`} />
-      <circle cx="148" cy="48" r="36" stroke="var(--accent-soft)" strokeWidth="1" fill="none" opacity="0.7" />
-      <circle cx="148" cy="48" r="22" stroke="var(--accent-soft)" strokeWidth="1" fill="none" opacity="0.5" />
+      <CreditCard
+        className="absolute -left-1 top-2 h-12 w-12 -rotate-[14deg] text-[var(--accent)]/40"
+        strokeWidth={1.5}
+      />
 
-      <rect x="52" y="72" width="96" height="64" rx="10" fill="#0B2030" />
-      <rect x="60" y="80" width="80" height="48" rx="6" fill="#15202b" />
+      <div className="relative flex h-[76px] w-[76px] items-center justify-center rounded-[20px] bg-[var(--accent-soft)] ring-1 ring-[var(--accent)]/25 shadow-[0_8px_24px_rgba(0,133,106,0.12)] dark:shadow-[0_8px_28px_rgba(0,168,132,0.18)]">
+        <Wallet className="h-10 w-10 text-[var(--accent)]" strokeWidth={1.65} />
+      </div>
 
-      <rect x="68" y="56" width="72" height="44" rx="8" fill="var(--accent)" transform="rotate(-8 104 78)" />
-      <rect x="76" y="48" width="72" height="44" rx="8" fill="#1e293b" transform="rotate(6 112 70)" />
-      <circle cx="132" cy="58" r="5" fill="#94a3b8" opacity="0.8" transform="rotate(6 112 70)" />
-
-      <circle cx="36" cy="118" r="3" fill="var(--accent)" opacity="0.35" />
-      <circle cx="168" cy="120" r="4" fill="var(--accent)" opacity="0.25" />
-    </svg>
+      <span className="absolute right-0 top-3 h-2 w-2 rounded-full bg-[var(--accent)]/55" />
+      <span className="absolute bottom-4 left-0 h-1.5 w-1.5 rounded-full bg-[var(--text-muted)]/45" />
+    </div>
   );
 }

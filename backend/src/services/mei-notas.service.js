@@ -2458,8 +2458,31 @@ export const emitirNota = async (userId, input) => {
         const empresaJsonCache = await ensureMeiNfsePlugnotasCadastroBeforeEmit(userId, cnpjPrestadorNfse);
         await ensureEmpresaPlugnotasRpsForNfseEmit(cnpjPrestadorNfse, empresaJsonCache);
         const codigoIbgePrestador = readCodigoIbgeFromEmpresa(empresaJsonCache);
-        const nfseNacionalEmit = readNfseNacionalFromEmpresa(empresaJsonCache);
+        let nfseNacionalEmit = readNfseNacionalFromEmpresa(empresaJsonCache);
         const issnetOnline30 = requiresIssnetRtcEmitSchema(codigoIbgePrestador);
+        // E0039: municípios ISSNET não aceitam o emissor público nacional. Alterna para o
+        // modo municipal antes do POST — o fallback reativo só cobre rejeições que chegam
+        // dentro da janela de poll de NFSE_EMIT_PROCESSING_POLL_MAX_MS.
+        if (issnetOnline30 && nfseNacionalEmit !== false) {
+          try {
+            const patched = await ensureEmpresaPlugnotasNfseMunicipalMode(
+              cnpjPrestadorNfse,
+              empresaJsonCache,
+            );
+            nfseNacionalEmit = false;
+            console.warn('[plugnotas-nfse] município ISSNET — emissão alternada para modo municipal antes do POST', {
+              cnpj: cnpjPrestadorNfse,
+              codigoIbge: codigoIbgePrestador,
+              patched,
+            });
+          } catch (error) {
+            console.warn('[plugnotas-nfse] falha ao alternar para modo municipal ISSNET — segue no nacional com fallback E0039', {
+              cnpj: cnpjPrestadorNfse,
+              codigoIbge: codigoIbgePrestador,
+              message: error?.message,
+            });
+          }
+        }
         const [initialLocalMax, authoritativeMax] = await Promise.all([
           queryMaxRpsNumeroEmitted(userId, cnpjPrestadorNfse),
           queryAuthoritativeNfseRpsMaxUsed(cnpjPrestadorNfse, 0),
