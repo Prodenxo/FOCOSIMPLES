@@ -34,11 +34,24 @@ const isVercelPreviewOrigin = (url) => {
   }
 };
 
+/** Em dev, aceita qualquer porta em localhost (Next pode subir em 3000, 3001, 3002…). */
+const isLocalDevOrigin = (url) => {
+  if (env.NODE_ENV !== 'development') return false;
+  try {
+    const { hostname, protocol } = new URL(url);
+    return (protocol === 'http:' || protocol === 'https:')
+      && (hostname === 'localhost' || hostname === '127.0.0.1');
+  } catch {
+    return false;
+  }
+};
+
 const isOriginAllowed = (origin) => {
   if (!origin) return true;
   const normalized = normalizeOrigin(origin);
   if (allowedOrigins.includes('*') || allowedOrigins.includes(normalized)) return true;
   if (isVercelPreviewOrigin(normalized)) return true;
+  if (isLocalDevOrigin(normalized)) return true;
   return false;
 };
 
@@ -60,6 +73,9 @@ const corsOptions = {
       return callback(null, true);
     }
     if (isVercelPreviewOrigin(normalizedOrigin)) {
+      return callback(null, true);
+    }
+    if (isLocalDevOrigin(normalizedOrigin)) {
       return callback(null, true);
     }
 

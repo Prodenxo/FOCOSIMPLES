@@ -1,0 +1,111 @@
+@import "tailwindcss";
+
+:root {
+  --canvas: #F5F7FA;
+  --card-bg: #FFFFFF;
+  --card-border: #E3E9EF;
+  --text-primary: #0F172A;
+  --text-muted: #718096;
+  --accent: #00856A;
+  --accent-soft: #E6F5F1;
+  --expense-soft: #FDF0F2;
+  --sidebar: #0B2030;
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.03);
+  --radius-card: 14px;
+  --decor-tone: #CBD5E1;
+  --illustration-stroke: #94A3B8;
+  --illustration-fill: rgba(203, 213, 225, 0.38);
+  --scrollbar-size: 8px;
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: rgba(113, 128, 150, 0.42);
+  --scrollbar-thumb-hover: rgba(113, 128, 150, 0.68);
+  color-scheme: light;
+}
+
+.dark {
+  --canvas: #0f1720;
+  --card-bg: #15202b;
+  --card-border: #243040;
+  --text-primary: #eef2f6;
+  --text-muted: #94a3b8;
+  --accent: #00a884;
+  --accent-soft: rgba(0, 168, 132, 0.15);
+  --expense-soft: rgba(248, 113, 113, 0.12);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --decor-tone: #64748B;
+  --illustration-stroke: #64748b;
+  --illustration-fill: rgba(100, 116, 139, 0.22);
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: rgba(148, 163, 184, 0.34);
+  --scrollbar-thumb-hover: rgba(148, 163, 184, 0.58);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --font-sans: var(--font-inter);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--text-primary);
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Barra de rolagem nativa — reutilizável em listas, painéis e modais */
+.app-scrollbar,
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+.app-scrollbar::-webkit-scrollbar,
+html::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+
+.app-scrollbar::-webkit-scrollbar-track,
+html::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+.app-scrollbar::-webkit-scrollbar-thumb,
+html::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.app-scrollbar::-webkit-scrollbar-thumb:hover,
+html::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+.app-scrollbar::-webkit-scrollbar-corner,
+html::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+:focus-visible {
+  outline-color: var(--accent);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
