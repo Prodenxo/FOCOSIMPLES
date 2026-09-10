@@ -38,11 +38,11 @@ export const assembleNfsePlugnotasEmitPayload = (basePayload, prep = {}) => {
   ).replace(/\D/g, '').slice(0, 7);
   const issnetOnline30 = prep.issnetOnline30 === true || requiresIssnetRtcEmitSchema(codigoIbge);
 
-  if (issnetOnline30 && prep.applyIss !== false) {
+  if (prep.applyIss !== false) {
     emitPayload = enrichNfseIssInEmitPayload(emitPayload, {
       nfseNacional: prep.nfseNacional === true,
       simplesNacional: prep.simplesNacional !== false,
-      issnetOnline30: true,
+      issnetOnline30,
     });
   }
 
