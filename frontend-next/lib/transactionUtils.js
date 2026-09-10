@@ -14,6 +14,7 @@ export function buildDuplicateTransactionDraft(tx) {
   delete copy.criado_em;
   delete copy.recorrencia_id;
   delete copy.recorrencia_ano_mes;
+  delete copy.__projecao;
   copy._draftDuplicate = true;
   return copy;
 }

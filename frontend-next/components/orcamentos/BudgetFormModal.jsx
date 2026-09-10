@@ -1,5 +1,7 @@
 'use client';
 
+import { AppSelect } from '@/components/ui/AppSelect';
+
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { formatMoneyInputFromDigits, normalizeTipo } from '@/lib/budgetUtils';
@@ -133,19 +135,19 @@ export function BudgetFormModal({
                 <span className="text-sm font-semibold text-[var(--text-primary)]">{editingRow.nome}</span>
               </div>
             ) : (
-              <select
-                id="budget-categoria"
+              <AppSelect
+                ariaLabel="Categoria do orçamento"
                 value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-                className="h-11 w-full rounded-[12px] border border-[var(--card-border)] bg-[var(--canvas)] px-3 text-sm text-[var(--text-primary)]"
-              >
-                <option value="">Selecione…</option>
-                {availableCategories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.nome}
-                  </option>
-                ))}
-              </select>
+                onChange={setCategoryId}
+                placeholder="Selecione…"
+                options={[
+                  { value: '', label: 'Selecione…' },
+                  ...availableCategories.map((cat) => ({
+                    value: String(cat.id),
+                    label: cat.nome,
+                  })),
+                ]}
+              />
             )}
           </div>
 

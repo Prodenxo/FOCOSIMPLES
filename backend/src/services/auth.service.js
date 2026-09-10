@@ -511,6 +511,31 @@ export const resetPasswordForEmail = async (email) => {
   await sendPasswordResetViaSupabase(normalized, redirectTo);
 };
 
+export const verifyRecoveryOtp = async ({ token_hash }) => {
+  const hash = String(token_hash || '').trim();
+  if (!hash) throw badRequest('token_hash obrigatório');
+
+  const supabase = createSupabaseClient();
+  const { data, error } = await supabase.auth.verifyOtp({
+    token_hash: hash,
+    type: 'recovery',
+  });
+
+  if (error || !data?.session) {
+    throw badRequest(error?.message || 'Token inválido ou expirado');
+  }
+
+  const session = data.session;
+  return {
+    session: {
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+      expires_at: session.expires_at,
+      user: session.user,
+    },
+  };
+};
+
 export const processRecoveryHash = async ({ access_token, refresh_token, type }) => {
   if (type !== 'recovery' || !access_token) {
     throw badRequest('Hash inválido');

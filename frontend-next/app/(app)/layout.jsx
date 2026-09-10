@@ -6,10 +6,14 @@ import { useAuth } from '@/context/AuthProvider';
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { MobileNavDrawer } from '@/components/layout/MobileNavDrawer';
 import { LoadingPanel } from '@/components/ui/LoadingPanel';
+import { ImpersonationBanner } from '@/components/layout/ImpersonationBanner';
+import { PendingApprovalScreen } from '@/components/auth/PendingApprovalScreen';
+import { useAccessGate } from '@/hooks/useAccessGate';
 
 function AppShellGate({ children }) {
   const router = useRouter();
   const { booting, isAuthenticated } = useAuth();
+  const accessGate = useAccessGate();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
@@ -34,6 +38,24 @@ function AppShellGate({ children }) {
     );
   }
 
+  if (accessGate === 'checking') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[var(--canvas)]">
+        <LoadingPanel label="Verificando acesso…" />
+      </div>
+    );
+  }
+
+  if (accessGate === 'pending') {
+    return (
+      <div className="flex min-h-screen bg-[var(--canvas)]">
+        <main className="mx-auto w-full max-w-lg flex-1 px-4 py-10">
+          <PendingApprovalScreen />
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen bg-[var(--canvas)]">
       <AppSidebar className="hidden lg:flex" />
@@ -46,6 +68,7 @@ function AppShellGate({ children }) {
           />
           <span className="text-sm font-semibold text-[var(--text-primary)]">Foco Simples</span>
         </div>
+        <ImpersonationBanner />
         <main className="flex min-h-0 flex-1 flex-col px-4 py-5 sm:px-6 lg:px-7 lg:py-7">{children}</main>
       </div>
     </div>

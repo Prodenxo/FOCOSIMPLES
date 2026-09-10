@@ -12,6 +12,7 @@ import {
   formatNationalPhoneInput,
   normalizePhoneDigits,
 } from '@/lib/internationalPhone';
+import { AppSelect } from '@/components/ui/AppSelect';
 
 export function SettingsPhoneField({
   value,
@@ -43,22 +44,20 @@ export function SettingsPhoneField({
       <label className="mb-2 block text-xs font-medium text-[var(--text-muted)]">Telefone</label>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="flex flex-1 gap-2">
-          <select
+          <AppSelect
+            ariaLabel="País do telefone"
             value={countryIso}
-            onChange={(e) => {
-              const iso = e.target.value;
+            onChange={(iso) => {
               setCountryIso(iso);
               emitChange(iso, national);
             }}
-            className="h-10 rounded-[12px] border border-[var(--card-border)] bg-[var(--canvas)] px-2 text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
-            aria-label="País do telefone"
-          >
-            {PHONE_COUNTRIES.map((c) => (
-              <option key={c.iso} value={c.iso}>
-                {c.flag} +{c.dialCode}
-              </option>
-            ))}
-          </select>
+            compact
+            className="w-[108px] shrink-0"
+            options={PHONE_COUNTRIES.map((c) => ({
+              value: c.iso,
+              label: `${c.flag} +${c.dialCode}`,
+            }))}
+          />
           <input
             type="tel"
             inputMode="numeric"

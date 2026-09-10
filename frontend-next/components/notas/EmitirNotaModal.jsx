@@ -71,6 +71,7 @@ import {
   getDefaultNfseObraForm,
   requiresNfseObraForServicoCodigo,
 } from '@/lib/nfseObraForm';
+import { AppSelect } from '@/components/ui/AppSelect';
 import { Card } from '@/components/ui/Card';
 import { EmptyPanel } from '@/components/ui/EmptyPanel';
 import { LoadingPanel } from '@/components/ui/LoadingPanel';
@@ -1156,16 +1157,17 @@ function NfeDestinatarioForm({
 
           {/* IE e indicador */}
           <div>
-            <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">Indicador de IE</label>
-            <select
+            <AppSelect
+              label="Indicador de IE"
               value={form.destinatarioIndIEDest}
-              onChange={(e) => handleChange('destinatarioIndIEDest', e.target.value)}
-              className="w-full rounded-[10px] border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-sm"
-            >
-              {DESTINATARIO_IE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
+              onChange={(v) => handleChange('destinatarioIndIEDest', v)}
+              searchable={false}
+              compact
+              options={DESTINATARIO_IE_OPTIONS.map((opt) => ({
+                value: opt.value,
+                label: opt.label,
+              }))}
+            />
           </div>
           {form.destinatarioIndIEDest === '1' && (
             <Input label="Inscrição Estadual" value={form.destinatarioInscricaoEstadual} onChange={(v) => handleChange('destinatarioInscricaoEstadual', v)} placeholder="Número da IE" />

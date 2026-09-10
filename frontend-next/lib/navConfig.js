@@ -26,10 +26,6 @@ export const NAV_ITEMS = [
   },
 ];
 
-export const MIGRATION_STUB_ROUTES = [
-  '/notas',
-];
-
 export function isNavActive(pathname, href) {
   if (href === '/') return pathname === '/';
   return pathname === href || pathname.startsWith(`${href}/`);

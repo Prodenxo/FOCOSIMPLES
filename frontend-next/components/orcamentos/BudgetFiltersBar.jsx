@@ -1,5 +1,7 @@
 'use client';
 
+import { AppSelect } from '@/components/ui/AppSelect';
+
 import { ArrowDown, ArrowUp, Search } from 'lucide-react';
 import { getStatusFilterOptions, SORT_OPTIONS } from '@/lib/budgetUtils';
 import { MonthPicker } from '@/components/ui/MonthPicker';
@@ -74,30 +76,22 @@ export function BudgetFiltersBar({
             className="h-11 w-full rounded-[14px] border border-[var(--card-border)] bg-[var(--card-bg)] pl-10 pr-3 text-sm text-[var(--text-primary)] shadow-[var(--shadow-card)] outline-none placeholder:text-[var(--text-muted)] focus-visible:ring-2 focus-visible:ring-[var(--accent)]/30"
           />
         </div>
-        <select
+        <AppSelect
+          ariaLabel="Filtrar por status"
           value={statusFilter}
-          onChange={(e) => onStatusFilterChange(e.target.value)}
-          aria-label="Filtrar por status"
-          className="h-11 rounded-[14px] border border-[var(--card-border)] bg-[var(--card-bg)] px-3 text-sm text-[var(--text-primary)] shadow-[var(--shadow-card)]"
-        >
-          {statusOptions.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-        <select
+          onChange={onStatusFilterChange}
+          searchable={false}
+          className="w-[160px]"
+          options={statusOptions.map((opt) => ({ value: opt.value, label: opt.label }))}
+        />
+        <AppSelect
+          ariaLabel="Ordenar lista"
           value={sortBy}
-          onChange={(e) => onSortChange(e.target.value)}
-          aria-label="Ordenar lista"
-          className="h-11 rounded-[14px] border border-[var(--card-border)] bg-[var(--card-bg)] px-3 text-sm text-[var(--text-primary)] shadow-[var(--shadow-card)]"
-        >
-          {SORT_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+          onChange={onSortChange}
+          searchable={false}
+          className="w-[160px]"
+          options={SORT_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label }))}
+        />
       </div>
       )}
 

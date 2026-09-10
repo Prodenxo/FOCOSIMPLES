@@ -44,6 +44,7 @@ if (fs.existsSync(nextDir)) {
 }
 
 console.log('[restart] subindo em http://localhost:3002 …');
+console.log('[restart] aguarde aparecer "Ready" no terminal antes de abrir o navegador (evita Internal Server Error por cache .next incompleto).');
 const child = spawn('npx', ['next', 'dev', '-p', '3002'], {
   cwd: root,
   stdio: 'inherit',

@@ -9,6 +9,7 @@ router.post('/register-empresa', controller.registerEmpresa);
 router.post('/signin', controller.signIn);
 router.post('/reset-password', controller.resetPassword);
 router.post('/process-recovery-hash', controller.processRecoveryHash);
+router.post('/verify-recovery-otp', controller.verifyRecoveryOtp);
 router.post('/exchange-code-for-session', controller.exchangeCodeForSession);
 
 router.post('/signout', requireAuth, controller.signOut);

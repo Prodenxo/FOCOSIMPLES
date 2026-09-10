@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { FileSpreadsheet, Plus } from 'lucide-react';
+import { FileSpreadsheet, Plus, Repeat } from 'lucide-react';
 import { AppFooter } from '@/components/layout/AppFooter';
 import { ErrorPanel } from '@/components/ui/ErrorPanel';
 import { TransactionsSkeleton } from '@/components/transactions/TransactionsSkeleton';
@@ -12,7 +12,16 @@ import { TransactionsExtract } from '@/components/transactions/TransactionsExtra
 import { TransactionDetailsPanel } from '@/components/transactions/TransactionDetailsPanel';
 import { MobileDetailsDrawer } from '@/components/transactions/MobileDetailsDrawer';
 import { TransactionFormModal } from '@/components/transactions/TransactionFormModal';
+import { RecurrenceDeleteDialog } from '@/components/transactions/RecurrenceDeleteDialog';
+import { RecorrenciasPanel } from '@/components/recorrencias/RecorrenciasPanel';
+import { useRecorrencias } from '@/hooks/useRecorrencias';
 import { fetchContasFinanceiras, fetchUserCategories } from '@/lib/categoryService';
+import {
+  buildMaterializationPayload,
+  isProjecao,
+  projectRecurrences,
+} from '@/lib/recorrenciaProjection';
+import { computeProjectionMonthRange } from '@/lib/transactionProjectionRange';
 import { buildContaNameMap } from '@/lib/contaFinanceiraIntegration';
 import { exportTransactionsToExcel } from '@/lib/exportTransactionsSpreadsheet';
 import { matchesTransactionPeriod } from '@/lib/transactionPeriodFilter';
@@ -65,6 +74,24 @@ function TransacoesPageContent() {
   const [saving, setSaving] = useState(false);
   const [busyAction, setBusyAction] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [recorrenciasOpen, setRecorrenciasOpen] = useState(false);
+  const [recFormOpen, setRecFormOpen] = useState(false);
+  const [recEditing, setRecEditing] = useState(null);
+  const [recFormSaving, setRecFormSaving] = useState(false);
+  const [deleteScopeTx, setDeleteScopeTx] = useState(null);
+
+  const {
+    recorrencias,
+    skips,
+    loading: recLoading,
+    error: recError,
+    loadAll: loadRecorrencias,
+    addSkip,
+    addRecorrencia,
+    updateRecorrencia,
+    deleteRecorrencia,
+  } = useRecorrencias();
+
   const periodOptions = useMemo(
     () => ({
       period,
@@ -83,6 +110,7 @@ function TransacoesPageContent() {
         fetchAllTransactions(),
         fetchUserCategories(),
         fetchContasFinanceiras(),
+        loadRecorrencias(),
       ]);
       setTransactions(txs);
       setCategories(cats);
@@ -92,7 +120,7 @@ function TransacoesPageContent() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadRecorrencias]);
 
   useEffect(() => {
     loadAll();
@@ -123,19 +151,40 @@ function TransacoesPageContent() {
     }
   }, [searchParams]);
 
+  const projectionRange = useMemo(
+    () => computeProjectionMonthRange(periodOptions),
+    [periodOptions],
+  );
+
+  const projections = useMemo(
+    () => projectRecurrences(
+      recorrencias.filter((r) => r.ativo),
+      transactions,
+      projectionRange,
+      skips,
+    ),
+    [recorrencias, transactions, projectionRange, skips],
+  );
+
+  const combinedTransactions = useMemo(() => {
+    const combined = [...transactions, ...projections];
+    combined.sort((a, b) => String(b.data || '').localeCompare(String(a.data || '')));
+    return combined;
+  }, [transactions, projections]);
+
   const periodOnlyList = useMemo(
-    () => transactions.filter((t) => matchesTransactionPeriod(t, periodOptions)),
-    [transactions, periodOptions],
+    () => combinedTransactions.filter((t) => matchesTransactionPeriod(t, periodOptions)),
+    [combinedTransactions, periodOptions],
   );
 
   const filteredList = useMemo(
-    () => filterTransactions(transactions, {
+    () => filterTransactions(combinedTransactions, {
       periodOptions,
       search,
       typeFilter,
       statusFilter,
     }),
-    [transactions, periodOptions, search, typeFilter, statusFilter],
+    [combinedTransactions, periodOptions, search, typeFilter, statusFilter],
   );
 
   const sections = useMemo(() => groupTransactionsByDay(filteredList), [filteredList]);
@@ -226,7 +275,13 @@ function TransacoesPageContent() {
 
   const openEditForm = () => {
     if (!selectedTx) return;
-    setFormDraft(selectedTx);
+    if (isProjecao(selectedTx)) {
+      const payload = buildMaterializationPayload(selectedTx);
+      const statusAPagar = payload.tipo === 'entrada' ? 'a_receber' : 'a_pagar';
+      setFormDraft({ ...payload, status: statusAPagar, __projecao: true });
+    } else {
+      setFormDraft(selectedTx);
+    }
     setFormError('');
     setFormOpen(true);
   };
@@ -238,14 +293,50 @@ function TransacoesPageContent() {
     setFormOpen(true);
   };
 
-  const handleFormSubmit = async (payload) => {
+  const handleFormSubmit = async (rawPayload) => {
     setSaving(true);
     setFormError('');
     try {
-      if (formDraft?.id && !formDraft?._draftDuplicate) {
-        await updateTransaction(formDraft.id, payload);
+      const { _recurrenceMeta, ...payload } = rawPayload;
+      const meta = _recurrenceMeta || null;
+
+      if (meta?.vinculadaARecorrencia && meta.recorrenciaId && meta.maxOcorrencias != null) {
+        const tpl = recorrencias.find((r) => r.id === meta.recorrenciaId);
+        if (tpl && tpl.max_ocorrencias !== meta.maxOcorrencias) {
+          await updateRecorrencia(meta.recorrenciaId, { max_ocorrencias: meta.maxOcorrencias });
+        }
+      }
+
+      let body = { ...payload };
+      if (meta?.recorrente && !meta.vinculadaARecorrencia && !formDraft?.recorrencia_id) {
+        const diaDoMes = Number(String(payload.data || '').slice(8, 10)) || new Date().getDate();
+        const created = await addRecorrencia({
+          tipo: payload.tipo,
+          valor: payload.valor,
+          classificacao: payload.classificacao,
+          status: payload.status,
+          obs: payload.obs,
+          dia_do_mes: Math.min(Math.max(diaDoMes, 1), 31),
+          ativo: true,
+          max_ocorrencias: meta.maxOcorrencias,
+          categoria: payload.classificacao,
+        });
+        if (created?.id) {
+          body = {
+            ...body,
+            recorrencia_id: created.id,
+            recorrencia_ano_mes: String(payload.data).slice(0, 7),
+          };
+        }
+      }
+
+      const isMaterialize = meta?.materializeFromProjection || isProjecao(formDraft);
+      const isEditReal = formDraft?.id && !formDraft?._draftDuplicate && !isMaterialize;
+
+      if (isEditReal) {
+        await updateTransaction(formDraft.id, body);
       } else {
-        const created = await createTransaction(payload);
+        const created = await createTransaction(body);
         setSelectedId(created.id);
       }
       setFormOpen(false);
@@ -258,8 +349,42 @@ function TransacoesPageContent() {
     }
   };
 
+  const performDeleteOne = async (tx) => {
+    if (!tx?.id) return;
+    if (tx.recorrencia_id && tx.recorrencia_ano_mes && !isProjecao(tx)) {
+      await addSkip(tx.recorrencia_id, tx.recorrencia_ano_mes);
+    }
+    if (isProjecao(tx) && tx.recorrencia_id && tx.recorrencia_ano_mes) {
+      await addSkip(tx.recorrencia_id, tx.recorrencia_ano_mes);
+      return;
+    }
+    await deleteTransaction(tx.id);
+  };
+
   const handleDelete = async () => {
     if (!selectedTx) return;
+    if (selectedTx.recorrencia_id && !isProjecao(selectedTx)) {
+      setDeleteScopeTx(selectedTx);
+      return;
+    }
+    if (isProjecao(selectedTx)) {
+      const ok = window.confirm(
+        `Ocultar a projeção "${selectedTx.classificacao}" deste mês?`,
+      );
+      if (!ok) return;
+      setBusyAction(true);
+      try {
+        await performDeleteOne(selectedTx);
+        setSelectedId(null);
+        setMobileDetailsOpen(false);
+        await loadAll();
+      } catch (err) {
+        window.alert(err instanceof Error ? err.message : 'Falha ao excluir.');
+      } finally {
+        setBusyAction(false);
+      }
+      return;
+    }
     const ok = window.confirm(
       `Excluir "${selectedTx.classificacao}" no valor de ${formatBrl(selectedTx.valor)}?`,
     );
@@ -267,7 +392,7 @@ function TransacoesPageContent() {
 
     setBusyAction(true);
     try {
-      await deleteTransaction(selectedTx.id);
+      await performDeleteOne(selectedTx);
       setSelectedId(null);
       setMobileDetailsOpen(false);
       await loadAll();
@@ -278,10 +403,104 @@ function TransacoesPageContent() {
     }
   };
 
+  const handleDeleteOnlyThis = async () => {
+    if (!deleteScopeTx) return;
+    setBusyAction(true);
+    try {
+      await performDeleteOne(deleteScopeTx);
+      setDeleteScopeTx(null);
+      setSelectedId(null);
+      setMobileDetailsOpen(false);
+      await loadAll();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Falha ao excluir.');
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
+  const handleDeleteFromHere = async () => {
+    if (!deleteScopeTx?.recorrencia_id || !deleteScopeTx?.data) return;
+    setBusyAction(true);
+    try {
+      const recId = deleteScopeTx.recorrencia_id;
+      const fromDate = String(deleteScopeTx.data).slice(0, 10);
+      const toDelete = transactions.filter(
+        (t) => t.recorrencia_id === recId && String(t.data || '') >= fromDate && !isProjecao(t),
+      );
+      for (const tx of toDelete) {
+        await deleteTransaction(tx.id);
+      }
+      await updateRecorrencia(recId, { ativo: false });
+      setDeleteScopeTx(null);
+      setSelectedId(null);
+      setMobileDetailsOpen(false);
+      await loadAll();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Falha ao excluir futuros.');
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
+  const handleDeleteEntireRecurrence = async () => {
+    if (!deleteScopeTx?.recorrencia_id) return;
+    setBusyAction(true);
+    try {
+      const recId = deleteScopeTx.recorrencia_id;
+      const toDelete = transactions.filter((t) => t.recorrencia_id === recId && !isProjecao(t));
+      for (const tx of toDelete) {
+        await deleteTransaction(tx.id);
+      }
+      await deleteRecorrencia(recId);
+      setDeleteScopeTx(null);
+      setSelectedId(null);
+      setMobileDetailsOpen(false);
+      await loadAll();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Falha ao excluir recorrência.');
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
+  const handleSaveRecorrencia = async (data) => {
+    setRecFormSaving(true);
+    try {
+      const { id, ...rest } = data;
+      if (id) {
+        await updateRecorrencia(id, rest);
+      } else {
+        const created = await addRecorrencia(rest);
+        if (!created) {
+          window.alert(recError || 'Não foi possível salvar a recorrência.');
+          return;
+        }
+      }
+      setRecFormOpen(false);
+      setRecEditing(null);
+      await loadAll();
+    } finally {
+      setRecFormSaving(false);
+    }
+  };
+
+  const handleDeleteRecorrenciaItem = async (r) => {
+    const result = await deleteRecorrencia(r.id);
+    if (!result.ok) {
+      window.alert(result.error || 'Falha ao excluir');
+      return;
+    }
+    if (result.mode === 'soft') {
+      window.alert('Recorrência pausada (há lançamentos vinculados).');
+    }
+    await loadAll();
+  };
+
   const handleExport = async () => {
     setExporting(true);
     try {
-      await exportTransactionsToExcel(filteredList);
+      await exportTransactionsToExcel(filteredList.filter((t) => !isProjecao(t)));
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'Falha ao exportar.');
     } finally {
@@ -328,6 +547,14 @@ function TransacoesPageContent() {
           >
             <FileSpreadsheet className="h-4 w-4" aria-hidden />
             {exporting ? 'Exportando…' : 'Exportar Excel'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setRecorrenciasOpen(true)}
+            className="inline-flex h-11 items-center gap-2 rounded-[14px] border border-[var(--card-border)] bg-[var(--card-bg)] px-4 text-sm font-semibold text-[var(--text-primary)] shadow-[var(--shadow-card)]"
+          >
+            <Repeat className="h-4 w-4" aria-hidden />
+            Recorrências
           </button>
           <button
             type="button"
@@ -411,9 +638,37 @@ function TransacoesPageContent() {
         draft={formDraft}
         categories={categories}
         contas={contas}
+        recorrencias={recorrencias}
         onSubmit={handleFormSubmit}
         saving={saving}
         error={formError}
+      />
+
+      <RecorrenciasPanel
+        open={recorrenciasOpen}
+        onClose={() => setRecorrenciasOpen(false)}
+        recorrencias={recorrencias}
+        loading={recLoading}
+        categories={categories}
+        onRefresh={loadRecorrencias}
+        onSaveRecorrencia={handleSaveRecorrencia}
+        onDeleteRecorrencia={handleDeleteRecorrenciaItem}
+        formOpen={recFormOpen}
+        setFormOpen={setRecFormOpen}
+        editing={recEditing}
+        setEditing={setRecEditing}
+        formSaving={recFormSaving}
+        formError={recError}
+      />
+
+      <RecurrenceDeleteDialog
+        open={Boolean(deleteScopeTx)}
+        transaction={deleteScopeTx}
+        onClose={() => !busyAction && setDeleteScopeTx(null)}
+        onDeleteOnlyThis={handleDeleteOnlyThis}
+        onDeleteFromHere={handleDeleteFromHere}
+        onDeleteEntireRecurrence={handleDeleteEntireRecurrence}
+        busy={busyAction}
       />
 
       <AppFooter />

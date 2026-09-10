@@ -15,6 +15,7 @@ import {
   saveProductFiscalProfile,
 } from '@/lib/accountantFiscalApi';
 import { Card } from '@/components/ui/Card';
+import { AppSelect } from '@/components/ui/AppSelect';
 import { EmptyPanel } from '@/components/ui/EmptyPanel';
 import { ErrorPanel } from '@/components/ui/ErrorPanel';
 import { LoadingPanel } from '@/components/ui/LoadingPanel';
@@ -133,34 +134,26 @@ export default function ProdutosFiscaisPage() {
       ) : null}
 
       <Card className="space-y-4 p-4 sm:p-5">
-        <label className="block text-xs font-medium text-[var(--text-muted)]">
-          Cliente (CNPJ)
-          <select
-            value={selectedClient}
-            onChange={(e) => setSelectedClient(e.target.value)}
-            className="mt-1 h-10 w-full rounded-[12px] border border-[var(--card-border)] bg-[var(--canvas)] px-3 text-sm"
-          >
-            {clients.map((c) => (
-              <option key={c.empresaId || c.clientKey} value={c.empresaId}>
-                {c.label || c.nomeFantasia || c.razaoSocial || c.cpfCnpj}
-              </option>
-            ))}
-          </select>
-        </label>
+        <AppSelect
+          label="Cliente (CNPJ)"
+          value={selectedClient}
+          onChange={setSelectedClient}
+          options={clients.map((c) => ({
+            value: c.empresaId,
+            label: c.label || c.nomeFantasia || c.razaoSocial || c.cpfCnpj,
+          }))}
+        />
 
         {establishments.length > 0 ? (
-          <label className="block text-xs font-medium text-[var(--text-muted)]">
-            Estabelecimento
-            <select
-              value={establishmentId}
-              onChange={(e) => setEstablishmentId(e.target.value)}
-              className="mt-1 h-10 w-full rounded-[12px] border border-[var(--card-border)] bg-[var(--canvas)] px-3 text-sm"
-            >
-              {establishments.map((e) => (
-                <option key={e.establishmentId} value={e.establishmentId}>{e.label}</option>
-              ))}
-            </select>
-          </label>
+          <AppSelect
+            label="Estabelecimento"
+            value={establishmentId}
+            onChange={setEstablishmentId}
+            options={establishments.map((e) => ({
+              value: e.establishmentId,
+              label: e.label,
+            }))}
+          />
         ) : null}
 
         {loading ? <LoadingPanel label="Carregando…" /> : error ? (
@@ -181,19 +174,19 @@ export default function ProdutosFiscaisPage() {
               </div>
             ) : null}
 
-            <label className="block text-xs font-medium text-[var(--text-muted)]">
-              Produto
-              <select
-                value={selectedProduct}
-                onChange={(e) => setSelectedProduct(e.target.value)}
-                className="mt-1 h-10 w-full rounded-[12px] border border-[var(--card-border)] bg-[var(--canvas)] px-3 text-sm"
-              >
-                <option value="">Selecione…</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>{p.descricao || p.nome || p.id}</option>
-                ))}
-              </select>
-            </label>
+            <AppSelect
+              label="Produto"
+              value={selectedProduct}
+              onChange={setSelectedProduct}
+              placeholder="Selecione…"
+              options={[
+                { value: '', label: 'Selecione…' },
+                ...products.map((p) => ({
+                  value: p.id,
+                  label: p.descricao || p.nome || p.id,
+                })),
+              ]}
+            />
 
             {productProfile ? (
               <div className="space-y-3 rounded-[12px] border border-[var(--card-border)] p-4">

@@ -37,6 +37,7 @@ import { Card } from '@/components/ui/Card';
 import { EmptyPanel } from '@/components/ui/EmptyPanel';
 import { ErrorPanel } from '@/components/ui/ErrorPanel';
 import { LoadingPanel } from '@/components/ui/LoadingPanel';
+import { FilterSelect } from '@/components/ui/FilterSelect';
 
 /**
  * Aba DAS Simples — guia DAS do Simples Nacional por competência.
@@ -506,19 +507,3 @@ function SummaryChip({ label, value, tone }) {
   );
 }
 
-function FilterSelect({ label, value, onChange, options }) {
-  return (
-    <label className="inline-flex h-10 items-center gap-2 rounded-[12px] border border-[var(--card-border)] bg-[var(--card-bg)] px-3 text-xs">
-      <span className="text-[var(--text-muted)]">{label}:</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="bg-transparent text-sm font-medium text-[var(--text-primary)] focus:outline-none"
-      >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>{opt.label}</option>
-        ))}
-      </select>
-    </label>
-  );
-}

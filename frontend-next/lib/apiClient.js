@@ -157,6 +157,11 @@ export const apiClient = {
       method: 'PUT',
       body: body !== undefined ? JSON.stringify(body) : undefined,
     }, timeoutMs),
+  patch: (path, body, { timeoutMs } = {}) =>
+    requestJson(path, {
+      method: 'PATCH',
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }, timeoutMs),
   delete: (path, { timeoutMs } = {}) => requestJson(path, { method: 'DELETE' }, timeoutMs),
   download: (path, { timeoutMs } = {}) => downloadBinary(path, timeoutMs),
 };

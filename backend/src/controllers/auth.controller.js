@@ -89,6 +89,15 @@ export const processRecoveryHash = async (req, res, next) => {
   }
 };
 
+export const verifyRecoveryOtp = async (req, res, next) => {
+  try {
+    const result = await authService.verifyRecoveryOtp(req.body);
+    return sendSuccess(res, result, 'Recovery validado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export const exchangeCodeForSession = async (req, res, next) => {
   try {
     const result = await authService.exchangeCodeForSession(req.body.code);

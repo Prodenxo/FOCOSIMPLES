@@ -22,6 +22,7 @@ import {
   lookupCep,
 } from '@/lib/fiscalApi';
 import { maskCep, maskCpfCnpj, onlyDigits, isValidCpfCnpj } from '@/lib/fiscalEmit';
+import { AppSelect } from '@/components/ui/AppSelect';
 
 /**
  * Modal para criar ou editar um cliente do catálogo.
@@ -347,16 +348,18 @@ export function ClienteModal({ cliente, onClose, onSuccess }) {
             {/* IE */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">Indicador de IE</label>
-                <select
+                <AppSelect
+                  label="Indicador de IE"
                   value={form.indIEDest}
-                  onChange={(e) => handleChange('indIEDest', e.target.value)}
-                  className="w-full rounded-[10px] border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-sm"
-                >
-                  <option value="9">Não contribuinte</option>
-                  <option value="1">Contribuinte ICMS</option>
-                  <option value="2">Isento</option>
-                </select>
+                  onChange={(v) => handleChange('indIEDest', v)}
+                  searchable={false}
+                  compact
+                  options={[
+                    { value: '9', label: 'Não contribuinte' },
+                    { value: '1', label: 'Contribuinte ICMS' },
+                    { value: '2', label: 'Isento' },
+                  ]}
+                />
               </div>
               {form.indIEDest === '1' && (
                 <div>

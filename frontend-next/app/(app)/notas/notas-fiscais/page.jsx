@@ -58,6 +58,7 @@ import { EmptyPanel } from '@/components/ui/EmptyPanel';
 import { ErrorPanel } from '@/components/ui/ErrorPanel';
 import { LoadingPanel } from '@/components/ui/LoadingPanel';
 import { Pagination } from '@/components/ui/Pagination';
+import { FilterSelect } from '@/components/ui/FilterSelect';
 import { NotasEmptyIllustration } from '@/components/illustrations/NotasEmptyIllustration';
 import { EmitirNotaModal } from '@/components/notas/EmitirNotaModal';
 import { ClienteModal } from '@/components/notas/ClienteModal';
@@ -1081,20 +1082,3 @@ function DetailItem({ label, value }) {
   );
 }
 
-function FilterSelect({ label, icon: Icon, value, onChange, options }) {
-  return (
-    <label className="inline-flex h-10 items-center gap-2 rounded-[12px] border border-[var(--card-border)] bg-[var(--card-bg)] px-3 text-xs">
-      {Icon ? <Icon className="h-3.5 w-3.5 text-[var(--text-muted)]" aria-hidden /> : null}
-      <span className="text-[var(--text-muted)]">{label}:</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="bg-transparent text-sm font-medium text-[var(--text-primary)] focus:outline-none"
-      >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>{opt.label}</option>
-        ))}
-      </select>
-    </label>
-  );
-}

@@ -1,6 +1,7 @@
 'use client';
 
-import { ChevronRight, Wallet } from 'lucide-react';
+import { ChevronRight, Repeat, Wallet } from 'lucide-react';
+import { isProjecao } from '@/lib/recorrenciaProjection';
 import { Card } from '@/components/ui/Card';
 import { formatBrl } from '@/lib/format';
 import { normalizarTipo } from '@/lib/dashboardUtils';
@@ -96,7 +97,8 @@ export function TransactionsExtract({
               {section.items.map((tx) => {
                 const isEntrada = normalizarTipo(tx.tipo) === 'entrada';
                 const selected = selectedId === tx.id;
-                const subtitle = getTransactionSubtitle(tx);
+                const projected = isProjecao(tx);
+                const subtitle = projected ? 'Recorrente (projeção)' : getTransactionSubtitle(tx);
                 return (
                   <li key={tx.id}>
                     <button
@@ -105,7 +107,9 @@ export function TransactionsExtract({
                       className={`flex min-h-[5rem] w-full items-center gap-2.5 rounded-[12px] border px-3 py-2 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] ${
                         selected
                           ? 'border-[var(--accent)]/25 bg-[var(--accent-soft)]'
-                          : 'border-transparent hover:bg-[var(--canvas)]'
+                          : projected
+                            ? 'border-dashed border-[var(--card-border)] hover:bg-[var(--canvas)]'
+                            : 'border-transparent hover:bg-[var(--canvas)]'
                       }`}
                     >
                       <span
@@ -116,7 +120,8 @@ export function TransactionsExtract({
                         <Wallet className="h-4 w-4" strokeWidth={1.75} aria-hidden />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold leading-snug text-[var(--text-primary)]">
+                        <span className="flex items-center gap-1.5 truncate text-sm font-semibold leading-snug text-[var(--text-primary)]">
+                          {projected ? <Repeat className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" aria-hidden /> : null}
                           {tx.classificacao}
                         </span>
                         <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">

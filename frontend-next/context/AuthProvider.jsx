@@ -15,8 +15,12 @@ import { unwrapAuthSession } from '@/lib/authApi';
 import { acceptInviteRequest } from '@/lib/invitesService';
 import { updateDisplayName as apiUpdateDisplayName, updatePhone as apiUpdatePhone } from '@/lib/profileApi';
 import {
+  backupLocalAdminSnapshot,
   buildLocalUser,
+  clearLocalAdminBackup,
   clearLocalAuthSnapshot,
+  hasLocalAdminBackup,
+  readLocalAdminBackup,
   readLocalAuthSnapshot,
   writeLocalAuthSnapshot,
 } from '@/lib/authSession';
@@ -55,6 +59,8 @@ export function AuthProvider({ children }) {
   const [phone, setPhone] = useState(null);
   const [role, setRole] = useState(null);
   const [mei, setMei] = useState(null);
+  const [empresaId, setEmpresaId] = useState(null);
+  const [isImpersonating, setIsImpersonating] = useState(false);
 
   const hydrateFromSnapshot = useCallback((snap) => {
     setUserId(snap.user?.id || null);
@@ -63,6 +69,7 @@ export function AuthProvider({ children }) {
     setPhone(snap.phone || snap.user?.user_metadata?.phone || null);
     setRole(snap.role ?? null);
     setMei(snap.mei ?? null);
+    setEmpresaId(snap.empresaId ?? null);
   }, []);
 
   const persistSnapshot = useCallback(
@@ -119,6 +126,8 @@ export function AuthProvider({ children }) {
         setPhone(null);
         setRole(null);
         setMei(null);
+        setEmpresaId(null);
+        setIsImpersonating(false);
       }
       return false;
     }
@@ -134,6 +143,7 @@ export function AuthProvider({ children }) {
 
     setHydrated(true);
     setBooting(false);
+    setIsImpersonating(hasLocalAdminBackup());
     refreshSessionRef.current().catch(() => {});
   }, [hydrateFromSnapshot]);
 
@@ -184,8 +194,39 @@ export function AuthProvider({ children }) {
     setPhone(null);
     setRole(null);
     setMei(null);
+    setEmpresaId(null);
+    setIsImpersonating(false);
+    clearLocalAdminBackup();
     router.replace('/login');
   }, [router]);
+
+  const impersonate = useCallback(async (targetUserId) => {
+    const snap = readLocalAuthSnapshot();
+    if (!snap?.accessToken) throw new Error('Sessão não encontrada. Faça login novamente.');
+    backupLocalAdminSnapshot(snap);
+    try {
+      const result = await apiClient.post('/auth/impersonate', { userId: targetUserId });
+      persistSnapshot(buildSnapshotFromSignInResult(result, result.user?.email || snap.user?.email));
+      setIsImpersonating(true);
+      router.replace('/');
+    } catch (err) {
+      clearLocalAdminBackup();
+      throw err;
+    }
+  }, [persistSnapshot, router]);
+
+  const stopImpersonating = useCallback(async () => {
+    const backup = readLocalAdminBackup();
+    if (!backup) {
+      await signOut();
+      return;
+    }
+    writeLocalAuthSnapshot(backup);
+    hydrateFromSnapshot(backup);
+    clearLocalAdminBackup();
+    setIsImpersonating(false);
+    router.replace('/minha-conta/usuarios');
+  }, [hydrateFromSnapshot, router, signOut]);
 
   const updateDisplayName = useCallback(async (name) => {
     const trimmed = String(name || '').trim();
@@ -233,9 +274,13 @@ export function AuthProvider({ children }) {
       phone,
       role,
       mei,
+      empresaId,
+      isImpersonating,
       signIn,
       signUp,
       signOut,
+      impersonate,
+      stopImpersonating,
       refreshSession,
       updateDisplayName,
       updatePhone,
@@ -250,9 +295,13 @@ export function AuthProvider({ children }) {
       phone,
       role,
       mei,
+      empresaId,
+      isImpersonating,
       signIn,
       signUp,
       signOut,
+      impersonate,
+      stopImpersonating,
       refreshSession,
       updateDisplayName,
       updatePhone,

@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, X } from 'lucide-react';
+import { Loader2, Repeat, X } from 'lucide-react';
 import { normalizarTipo } from '@/lib/dashboardUtils';
+import { isProjecao } from '@/lib/recorrenciaProjection';
 import {
   formatCurrencyInput,
   isoToBrDate,
@@ -10,6 +11,7 @@ import {
   parseBrDateToIso,
   parseCurrencyInput,
 } from '@/lib/transactionUtils';
+import { AppSelect } from '@/components/ui/AppSelect';
 
 const EMPTY = {
   tipo: 'saida',
@@ -21,18 +23,28 @@ const EMPTY = {
   conta_id: '',
 };
 
+const DURATION_PRESETS = [
+  { id: 'indef', label: 'Sem fim', months: null },
+  { id: '3', label: '3 meses', months: 3 },
+  { id: '6', label: '6 meses', months: 6 },
+  { id: '12', label: '12 meses', months: 12 },
+];
+
 export function TransactionFormModal({
   open,
   onClose,
   draft,
   categories,
   contas,
+  recorrencias = [],
   onSubmit,
   saving,
   error,
 }) {
   const [form, setForm] = useState(EMPTY);
   const [localError, setLocalError] = useState('');
+  const [recorrente, setRecorrente] = useState(false);
+  const [durationPreset, setDurationPreset] = useState('indef');
 
   useEffect(() => {
     if (!open) return;
@@ -58,11 +70,61 @@ export function TransactionFormModal({
       obs: String(draft.obs || ''),
       conta_id: draft.conta_id ? String(draft.conta_id) : '',
     });
-  }, [open, draft]);
+
+    const linked = Boolean(draft.recorrencia_id) && !draft._draftDuplicate && !isProjecao(draft);
+    setRecorrente(linked || Boolean(draft.recorrencia_id));
+    if (linked && draft.recorrencia_id) {
+      const tpl = recorrencias.find((r) => r.id === draft.recorrencia_id);
+      const max = tpl?.max_ocorrencias ?? null;
+      if (max === 3) setDurationPreset('3');
+      else if (max === 6) setDurationPreset('6');
+      else if (max === 12) setDurationPreset('12');
+      else setDurationPreset('indef');
+    } else {
+      setDurationPreset('indef');
+    }
+  }, [open, draft, recorrencias]);
+
+  const vinculadaARecorrencia = Boolean(draft?.recorrencia_id) && !draft?._draftDuplicate && !isProjecao(draft);
+  const isNewOrDuplicate = !draft?.id || draft?._draftDuplicate || isProjecao(draft);
+  const showRecurrenceToggle = isNewOrDuplicate || vinculadaARecorrencia;
 
   const filteredCategories = useMemo(
     () => categories.filter((c) => normalizarTipo(c.tipo) === form.tipo),
     [categories, form.tipo],
+  );
+
+  const categoryOptions = useMemo(
+    () => [
+      { value: '', label: 'Selecione…' },
+      ...filteredCategories.map((c) => ({
+        value: c.nome,
+        label: c.nome,
+      })),
+    ],
+    [filteredCategories],
+  );
+
+  const contaOptions = useMemo(
+    () => [
+      { value: '', label: 'Sem conta' },
+      ...contas.filter((c) => c.ativo).map((c) => ({ value: String(c.id), label: c.nome })),
+    ],
+    [contas],
+  );
+
+  const statusOptions = useMemo(
+    () => [
+      {
+        value: 'realizado',
+        label: form.tipo === 'entrada' ? 'Recebido' : 'Pago',
+      },
+      {
+        value: 'pendente',
+        label: form.tipo === 'entrada' ? 'A receber' : 'A pagar',
+      },
+    ],
+    [form.tipo],
   );
 
   if (!open) return null;
@@ -85,6 +147,7 @@ export function TransactionFormModal({
     }
     setLocalError('');
 
+    const preset = DURATION_PRESETS.find((p) => p.id === durationPreset);
     await onSubmit({
       tipo: form.tipo,
       valor,
@@ -93,6 +156,15 @@ export function TransactionFormModal({
       status: normalizeStatusForSave(form.tipo, form.statusRealized),
       obs: form.obs.trim() || null,
       conta_id: form.conta_id || null,
+      _recurrenceMeta: showRecurrenceToggle
+        ? {
+            recorrente: recorrente || vinculadaARecorrencia,
+            maxOcorrencias: preset?.months ?? null,
+            recorrenciaId: draft?.recorrencia_id || null,
+            vinculadaARecorrencia,
+            materializeFromProjection: isProjecao(draft),
+          }
+        : null,
     });
   };
 
@@ -151,34 +223,21 @@ export function TransactionFormModal({
             />
           </label>
 
-          <label className="block text-sm">
-            <span className="mb-1 block text-[var(--text-muted)]">Categoria</span>
-            <select
-              required
-              value={form.classificacao}
-              onChange={(e) => setForm((f) => ({ ...f, classificacao: e.target.value }))}
-              className="h-11 w-full rounded-[14px] border border-[var(--card-border)] px-3"
-            >
-              <option value="">Selecione…</option>
-              {filteredCategories.map((c) => (
-                <option key={c.id || c.nome} value={c.nome}>{c.nome}</option>
-              ))}
-            </select>
-          </label>
+          <AppSelect
+            label="Categoria"
+            value={form.classificacao}
+            onChange={(classificacao) => setForm((f) => ({ ...f, classificacao }))}
+            options={categoryOptions}
+            placeholder="Selecione…"
+          />
 
-          <label className="block text-sm">
-            <span className="mb-1 block text-[var(--text-muted)]">Conta</span>
-            <select
-              value={form.conta_id}
-              onChange={(e) => setForm((f) => ({ ...f, conta_id: e.target.value }))}
-              className="h-11 w-full rounded-[14px] border border-[var(--card-border)] px-3"
-            >
-              <option value="">Sem conta</option>
-              {contas.filter((c) => c.ativo).map((c) => (
-                <option key={c.id} value={c.id}>{c.nome}</option>
-              ))}
-            </select>
-          </label>
+          <AppSelect
+            label="Conta"
+            value={form.conta_id}
+            onChange={(conta_id) => setForm((f) => ({ ...f, conta_id }))}
+            options={contaOptions}
+            placeholder="Sem conta"
+          />
 
           <label className="block text-sm">
             <span className="mb-1 block text-[var(--text-muted)]">Data (dd/mm/aaaa)</span>
@@ -191,17 +250,13 @@ export function TransactionFormModal({
             />
           </label>
 
-          <label className="block text-sm">
-            <span className="mb-1 block text-[var(--text-muted)]">Status</span>
-            <select
-              value={form.statusRealized ? 'realizado' : 'pendente'}
-              onChange={(e) => setForm((f) => ({ ...f, statusRealized: e.target.value === 'realizado' }))}
-              className="h-11 w-full rounded-[14px] border border-[var(--card-border)] px-3"
-            >
-              <option value="realizado">{form.tipo === 'entrada' ? 'Recebido' : 'Pago'}</option>
-              <option value="pendente">{form.tipo === 'entrada' ? 'A receber' : 'A pagar'}</option>
-            </select>
-          </label>
+          <AppSelect
+            label="Status"
+            value={form.statusRealized ? 'realizado' : 'pendente'}
+            onChange={(v) => setForm((f) => ({ ...f, statusRealized: v === 'realizado' }))}
+            options={statusOptions}
+            searchable={false}
+          />
 
           <label className="block text-sm">
             <span className="mb-1 block text-[var(--text-muted)]">Observação</span>
@@ -212,6 +267,49 @@ export function TransactionFormModal({
               className="w-full rounded-[14px] border border-[var(--card-border)] px-3 py-2"
             />
           </label>
+
+          {showRecurrenceToggle ? (
+            <div className="rounded-[14px] border border-[var(--card-border)] bg-[var(--canvas)] p-4">
+              <label className="flex cursor-pointer items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={recorrente || vinculadaARecorrencia}
+                  disabled={vinculadaARecorrencia}
+                  onChange={(e) => setRecorrente(e.target.checked)}
+                  className="mt-1"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+                    <Repeat className="h-4 w-4 text-[var(--accent)]" aria-hidden />
+                    {vinculadaARecorrencia ? 'Faz parte de uma recorrência' : 'Repetir todo mês'}
+                  </span>
+                  <span className="mt-1 block text-xs text-[var(--text-muted)]">
+                    {vinculadaARecorrencia
+                      ? 'Ajuste a duração abaixo (vale para todos os meses).'
+                      : 'Cria um template mensal a partir deste lançamento.'}
+                  </span>
+                </span>
+              </label>
+              {(recorrente || vinculadaARecorrencia) ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {DURATION_PRESETS.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setDurationPreset(p.id)}
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                        durationPreset === p.id
+                          ? 'bg-[var(--accent)] text-white'
+                          : 'bg-[var(--card-bg)] text-[var(--text-muted)]'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           {localError || error ? (
             <p className="rounded-[14px] bg-[var(--expense-soft)] px-3 py-2 text-sm text-red-600">{localError || error}</p>

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { GOOGLE_CALENDAR_COLORS } from '@/lib/googleCalendarColors';
 import { parseGoogleEventForForm } from '@/lib/googleCalendarService';
+import { AppSelect } from '@/components/ui/AppSelect';
 
 const RECURRENCE_OPTIONS = [
   { label: 'Não se repete', value: null },
@@ -250,25 +251,30 @@ export function AgendaEventModal({
             Repetir
           </label>
           {repeatEnabled ? (
-            <select value={recurrence || ''} onChange={(e) => setRecurrence(e.target.value || null)} className="h-10 w-full rounded-[12px] border border-[var(--card-border)] bg-[var(--canvas)] px-3 text-sm">
-              {RECURRENCE_OPTIONS.filter((o) => o.value).map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
+            <AppSelect
+              ariaLabel="Repetição do evento"
+              value={recurrence || ''}
+              onChange={(v) => setRecurrence(v || null)}
+              searchable={false}
+              compact
+              options={RECURRENCE_OPTIONS.filter((o) => o.value).map((o) => ({
+                value: o.value,
+                label: o.label,
+              }))}
+            />
           ) : null}
 
-          <div>
-            <label className="mb-1 block text-[10px] font-bold uppercase text-[var(--text-muted)]">Lembrete</label>
-            <select
-              value={reminderMinutes ?? ''}
-              onChange={(e) => setReminderMinutes(e.target.value === '' ? null : Number(e.target.value))}
-              className="h-10 w-full rounded-[12px] border border-[var(--card-border)] bg-[var(--canvas)] px-3 text-sm"
-            >
-              {REMINDER_OPTIONS.map((o) => (
-                <option key={String(o.value)} value={o.value ?? ''}>{o.label}</option>
-              ))}
-            </select>
-          </div>
+          <AppSelect
+            label="Lembrete"
+            value={String(reminderMinutes ?? '')}
+            onChange={(v) => setReminderMinutes(v === '' ? null : Number(v))}
+            searchable={false}
+            compact
+            options={REMINDER_OPTIONS.map((o) => ({
+              value: String(o.value ?? ''),
+              label: o.label,
+            }))}
+          />
 
           {!isAllDay ? (
             <label className="inline-flex items-center gap-2 text-sm">

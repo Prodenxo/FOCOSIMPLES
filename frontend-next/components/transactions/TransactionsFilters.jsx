@@ -2,6 +2,7 @@
 
 import { CalendarDays, ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
+import { AppSelect } from '@/components/ui/AppSelect';
 import { MONTH_NAMES } from '@/lib/format';
 
 const PERIOD_PRESETS = [
@@ -120,27 +121,31 @@ export function TransactionsFilters({
           />
         </label>
 
-        <select
+        <AppSelect
+          ariaLabel="Tipo"
           value={typeFilter}
-          onChange={(e) => onTypeFilterChange(e.target.value)}
-          aria-label="Tipo"
-          className="h-11 rounded-[14px] border border-[var(--card-border)] bg-[var(--card-bg)] px-3 text-sm text-[var(--text-primary)]"
-        >
-          <option value="all">Todos</option>
-          <option value="entrada">Entradas</option>
-          <option value="saida">Saídas</option>
-        </select>
+          onChange={onTypeFilterChange}
+          searchable={false}
+          className="w-[140px]"
+          options={[
+            { value: 'all', label: 'Todos' },
+            { value: 'entrada', label: 'Entradas' },
+            { value: 'saida', label: 'Saídas' },
+          ]}
+        />
 
-        <select
+        <AppSelect
+          ariaLabel="Status"
           value={statusFilter}
-          onChange={(e) => onStatusFilterChange(e.target.value)}
-          aria-label="Status"
-          className="h-11 min-w-[150px] rounded-[14px] border border-[var(--card-border)] bg-[var(--card-bg)] px-3 text-sm text-[var(--text-primary)]"
-        >
-          <option value="all">Todos os status</option>
-          <option value="pago">Realizados</option>
-          <option value="pendente">Pendentes</option>
-        </select>
+          onChange={onStatusFilterChange}
+          searchable={false}
+          className="min-w-[150px]"
+          options={[
+            { value: 'all', label: 'Todos os status' },
+            { value: 'pago', label: 'Realizados' },
+            { value: 'pendente', label: 'Pendentes' },
+          ]}
+        />
 
         <button
           type="button"
