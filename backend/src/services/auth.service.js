@@ -511,31 +511,6 @@ export const resetPasswordForEmail = async (email) => {
   await sendPasswordResetViaSupabase(normalized, redirectTo);
 };
 
-export const verifyRecoveryOtp = async ({ token_hash }) => {
-  const hash = String(token_hash || '').trim();
-  if (!hash) throw badRequest('token_hash obrigatório');
-
-  const supabase = createSupabaseClient();
-  const { data, error } = await supabase.auth.verifyOtp({
-    token_hash: hash,
-    type: 'recovery',
-  });
-
-  if (error || !data?.session) {
-    throw badRequest(error?.message || 'Token inválido ou expirado');
-  }
-
-  const session = data.session;
-  return {
-    session: {
-      access_token: session.access_token,
-      refresh_token: session.refresh_token,
-      expires_at: session.expires_at,
-      user: session.user,
-    },
-  };
-};
-
 export const processRecoveryHash = async ({ access_token, refresh_token, type }) => {
   if (type !== 'recovery' || !access_token) {
     throw badRequest('Hash inválido');
@@ -671,29 +646,6 @@ export const updateDisplayName = async (accessToken, displayName) => {
     .from('profiles')
     .update({ display_name: displayName })
     .eq('id', user.id);
-};
-
-/** Solicita alteração de e-mail via Supabase Auth (confirmação por link). */
-export const updateEmail = async (accessToken, email) => {
-  if (!accessToken) throw unauthorized();
-  const trimmed = String(email || '').trim().toLowerCase();
-  if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
-    throw badRequest('E-mail inválido');
-  }
-
-  const supabase = createSupabaseClient({ accessToken });
-  const { data: { user } = {}, error: userError } = await supabase.auth.getUser();
-  if (userError || !user) throw unauthorized();
-
-  const current = String(user.email || '').trim().toLowerCase();
-  if (trimmed === current) {
-    throw badRequest('Informe um e-mail diferente do atual.');
-  }
-
-  const { error } = await supabase.auth.updateUser({ email: trimmed });
-  if (error) throw badRequest(error.message);
-
-  return { pendingConfirmation: true, email: trimmed };
 };
 
 export const getLastSeenUpdate = async (accessToken) => {

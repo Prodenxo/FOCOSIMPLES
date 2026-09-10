@@ -89,15 +89,6 @@ export const processRecoveryHash = async (req, res, next) => {
   }
 };
 
-export const verifyRecoveryOtp = async (req, res, next) => {
-  try {
-    const result = await authService.verifyRecoveryOtp(req.body);
-    return sendSuccess(res, result, 'Recovery validado');
-  } catch (error) {
-    return next(error);
-  }
-};
-
 export const exchangeCodeForSession = async (req, res, next) => {
   try {
     const result = await authService.exchangeCodeForSession(req.body.code);
@@ -133,19 +124,6 @@ export const updateDisplayName = async (req, res, next) => {
   try {
     await authService.updateDisplayName(req.accessToken, req.body.displayName);
     return sendSuccess(res, { success: true }, 'Nome atualizado');
-  } catch (error) {
-    return next(error);
-  }
-};
-
-export const updateEmail = async (req, res, next) => {
-  try {
-    const result = await authService.updateEmail(req.accessToken, req.body.email);
-    return sendSuccess(
-      res,
-      result,
-      'Enviamos um link de confirmação para o novo e-mail.',
-    );
   } catch (error) {
     return next(error);
   }

@@ -174,25 +174,9 @@ const parseValorOrcado = (valorOrcado) => {
   return parsed;
 };
 
-const pad2 = (value) => String(value).padStart(2, '0');
-
 const getMonthStartDateString = (date = new Date()) => {
   const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
-  return `${monthStart.getFullYear()}-${pad2(monthStart.getMonth() + 1)}-01`;
-};
-
-/** Evita deslocamento de mês ao parsear `YYYY-MM-DD` como UTC (`new Date('2026-09-01')`). */
-const resolveBudgetMonthStart = (date) => {
-  if (typeof date === 'string') {
-    const match = date.trim().match(/^(\d{4})-(\d{2})(?:-\d{2})?/);
-    if (match) {
-      return `${match[1]}-${match[2]}-01`;
-    }
-  }
-  if (date instanceof Date && !Number.isNaN(date.getTime())) {
-    return getMonthStartDateString(date);
-  }
-  return getMonthStartDateString(new Date());
+  return monthStart.toISOString().split('T')[0];
 };
 
 const ensureMonthlyBudgets = async (dbClient, userId, targetDate = new Date()) => {
@@ -255,12 +239,10 @@ const getMonthRangeFromInput = (year, month) => {
   if (month < 1 || month > 12) {
     throw badRequest('Mês inválido');
   }
-  const y = Number(year);
-  const m = Number(month);
-  const start = new Date(y, m - 1, 1);
-  const end = new Date(y, m, 0);
-  const startDate = `${y}-${pad2(m)}-01`;
-  const endDate = `${y}-${pad2(m)}-${pad2(end.getDate())}`;
+  const start = new Date(year, month - 1, 1);
+  const end = new Date(year, month, 0);
+  const startDate = start.toISOString().split('T')[0];
+  const endDate = end.toISOString().split('T')[0];
   return { startDate, endDate, start };
 };
 
@@ -500,7 +482,7 @@ export const upsertCategoryBudget = async (userId, payload) => {
   if (!categoriaId) throw badRequest('ID da categoria é obrigatório');
 
   const valorOrcadoNormalizado = parseValorOrcado(valorOrcado);
-  const currentMonthStart = resolveBudgetMonthStart(date);
+  const currentMonthStart = getMonthStartDateString(date ? new Date(date) : new Date());
 
   if (isLocalAuthMode()) {
     await ensureGlobalCategoriesCopiedForUserPg(userId);
