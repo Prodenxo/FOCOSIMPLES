@@ -1,54 +1,87 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 
-const STORAGE_KEY = '@financas_pessoais:theme';
+export const THEME_STORAGE_KEY = '@financas_pessoais:theme';
 
 const ThemeContext = createContext(null);
 
+function resolveIsDark(preference) {
+  if (preference === 'dark') return true;
+  if (preference === 'light') return false;
+  if (typeof window !== 'undefined') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+  return false;
+}
+
+function applyDomTheme(isDark) {
+  if (typeof document === 'undefined') return;
+  document.documentElement.classList.toggle('dark', isDark);
+  document.documentElement.dataset.theme = isDark ? 'dark' : 'light';
+}
+
 function readStoredPreference() {
-  if (typeof window === 'undefined') return 'light';
+  if (typeof window === 'undefined') return 'system';
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw === 'dark' || raw === 'light') return raw;
-    /* Migra preferência "system" antiga para claro (referência aprovada). */
-    if (raw === 'system') return 'light';
+    const raw = localStorage.getItem(THEME_STORAGE_KEY);
+    if (raw === 'dark' || raw === 'light' || raw === 'system') return raw;
   } catch {
     /* ignore */
   }
-  return 'light';
+  return 'system';
 }
 
 export function ThemeProvider({ children }) {
-  const [preference, setPreferenceState] = useState('light');
+  const [preference, setPreferenceState] = useState('system');
   const [isDark, setIsDark] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     const pref = readStoredPreference();
     setPreferenceState(pref);
-    setIsDark(pref === 'dark');
+    setIsDark(resolveIsDark(pref));
+    setHydrated(true);
   }, []);
 
   useEffect(() => {
-    const root = document.documentElement;
-    root.classList.toggle('dark', isDark);
-    root.dataset.theme = isDark ? 'dark' : 'light';
-  }, [isDark]);
+    if (!hydrated) return undefined;
+    applyDomTheme(isDark);
+  }, [isDark, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated || preference !== 'system') return undefined;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = () => setIsDark(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, [preference, hydrated]);
 
   const setPreference = useCallback((next) => {
-    const normalized = next === 'dark' ? 'dark' : 'light';
+    const normalized = next === 'dark' || next === 'light' || next === 'system' ? next : 'system';
     setPreferenceState(normalized);
-    localStorage.setItem(STORAGE_KEY, normalized);
-    setIsDark(normalized === 'dark');
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, normalized);
+    } catch {
+      /* ignore */
+    }
+    setIsDark(resolveIsDark(normalized));
   }, []);
 
   const toggleTheme = useCallback(() => {
-    setPreference(preference === 'dark' ? 'light' : 'dark');
-  }, [preference, setPreference]);
+    setPreference(isDark ? 'light' : 'dark');
+  }, [isDark, setPreference]);
 
   const value = useMemo(
-    () => ({ preference, isDark, setPreference, toggleTheme }),
-    [preference, isDark, setPreference, toggleTheme],
+    () => ({ preference, isDark, setPreference, toggleTheme, hydrated }),
+    [preference, isDark, setPreference, toggleTheme, hydrated],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

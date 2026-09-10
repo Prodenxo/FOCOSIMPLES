@@ -648,6 +648,29 @@ export const updateDisplayName = async (accessToken, displayName) => {
     .eq('id', user.id);
 };
 
+/** Solicita alteração de e-mail via Supabase Auth (confirmação por link). */
+export const updateEmail = async (accessToken, email) => {
+  if (!accessToken) throw unauthorized();
+  const trimmed = String(email || '').trim().toLowerCase();
+  if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    throw badRequest('E-mail inválido');
+  }
+
+  const supabase = createSupabaseClient({ accessToken });
+  const { data: { user } = {}, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) throw unauthorized();
+
+  const current = String(user.email || '').trim().toLowerCase();
+  if (trimmed === current) {
+    throw badRequest('Informe um e-mail diferente do atual.');
+  }
+
+  const { error } = await supabase.auth.updateUser({ email: trimmed });
+  if (error) throw badRequest(error.message);
+
+  return { pendingConfirmation: true, email: trimmed };
+};
+
 export const getLastSeenUpdate = async (accessToken) => {
   if (!accessToken) throw unauthorized();
   const supabase = createSupabaseClient({ accessToken });

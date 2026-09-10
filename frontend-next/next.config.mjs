@@ -5,6 +5,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  async redirects() {
+    return [
+      { source: '/configuracoes', destination: '/minha-conta', permanent: false },
+      { source: '/configuracoes/:path*', destination: '/minha-conta/:path*', permanent: false },
+    ];
+  },
   images: {
     remotePatterns: [],
   },

@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/apiClient';
 import { unwrapAuthSession } from '@/lib/authApi';
 import { acceptInviteRequest } from '@/lib/invitesService';
+import { updateDisplayName as apiUpdateDisplayName, updatePhone as apiUpdatePhone } from '@/lib/profileApi';
 import {
   buildLocalUser,
   clearLocalAuthSnapshot,
@@ -51,6 +52,7 @@ export function AuthProvider({ children }) {
   const [userId, setUserId] = useState(null);
   const [displayName, setDisplayName] = useState(null);
   const [email, setEmail] = useState(null);
+  const [phone, setPhone] = useState(null);
   const [role, setRole] = useState(null);
   const [mei, setMei] = useState(null);
 
@@ -58,6 +60,7 @@ export function AuthProvider({ children }) {
     setUserId(snap.user?.id || null);
     setDisplayName(snap.displayName || snap.user?.user_metadata?.display_name || null);
     setEmail(snap.user?.email || null);
+    setPhone(snap.phone || snap.user?.user_metadata?.phone || null);
     setRole(snap.role ?? null);
     setMei(snap.mei ?? null);
   }, []);
@@ -86,11 +89,17 @@ export function AuthProvider({ children }) {
         role: session.role ?? snap.role,
         empresaId: session.empresaId ?? snap.empresaId,
         mei: session.mei ?? snap.mei,
+        phone: session.user?.phone ?? snap.phone,
         displayName: session.user?.displayName || snap.displayName,
         user: {
           ...snap.user,
           id: session.user.id,
           email: session.user.email || snap.user?.email,
+          user_metadata: {
+            ...snap.user?.user_metadata,
+            display_name: session.user?.displayName || snap.user?.user_metadata?.display_name,
+            phone: session.user?.phone ?? snap.user?.user_metadata?.phone,
+          },
         },
       };
       persistSnapshot(next);
@@ -107,6 +116,7 @@ export function AuthProvider({ children }) {
         setUserId(null);
         setDisplayName(null);
         setEmail(null);
+        setPhone(null);
         setRole(null);
         setMei(null);
       }
@@ -136,11 +146,11 @@ export function AuthProvider({ children }) {
     router.replace('/');
   }, [persistSnapshot, router]);
 
-  const signUp = useCallback(async ({ email: emailInput, password, phone, displayName: name, inviteToken }) => {
+  const signUp = useCallback(async ({ email: emailInput, password, phone: phoneInput, displayName: name, inviteToken }) => {
     const result = await apiClient.postPublic('/auth/signup', {
       email: emailInput.trim().toLowerCase(),
       password,
-      phone: phone || null,
+      phone: phoneInput || null,
       displayName: name || null,
       inviteToken: inviteToken || null,
     });
@@ -151,7 +161,7 @@ export function AuthProvider({ children }) {
         try {
           await acceptInviteRequest({ token: inviteToken.trim() });
         } catch {
-          /* cadastro ok; vínculo pode ser feito depois */
+          /* cadastro ok */
         }
       }
       router.replace('/');
@@ -170,8 +180,49 @@ export function AuthProvider({ children }) {
     clearLocalAuthSnapshot();
     setUserId(null);
     setDisplayName(null);
+    setEmail(null);
+    setPhone(null);
+    setRole(null);
+    setMei(null);
     router.replace('/login');
   }, [router]);
+
+  const updateDisplayName = useCallback(async (name) => {
+    const trimmed = String(name || '').trim();
+    if (!trimmed) throw new Error('Nome inválido');
+    await apiUpdateDisplayName(trimmed);
+    const snap = readLocalAuthSnapshot();
+    if (snap) {
+      persistSnapshot({
+        ...snap,
+        displayName: trimmed,
+        user: {
+          ...snap.user,
+          user_metadata: { ...snap.user?.user_metadata, display_name: trimmed },
+        },
+      });
+    } else {
+      setDisplayName(trimmed);
+    }
+  }, [persistSnapshot]);
+
+  const updatePhone = useCallback(async (phoneDigits) => {
+    const cleaned = await apiUpdatePhone(phoneDigits);
+    const snap = readLocalAuthSnapshot();
+    if (snap) {
+      persistSnapshot({
+        ...snap,
+        phone: cleaned,
+        user: {
+          ...snap.user,
+          user_metadata: { ...snap.user?.user_metadata, phone: cleaned },
+        },
+      });
+    } else {
+      setPhone(cleaned);
+    }
+    return cleaned;
+  }, [persistSnapshot]);
 
   const value = useMemo(
     () => ({
@@ -179,15 +230,33 @@ export function AuthProvider({ children }) {
       userId,
       displayName,
       email,
+      phone,
       role,
       mei,
       signIn,
       signUp,
       signOut,
       refreshSession,
+      updateDisplayName,
+      updatePhone,
       isAuthenticated: Boolean(userId),
     }),
-    [booting, hydrated, userId, displayName, email, role, mei, signIn, signUp, signOut, refreshSession],
+    [
+      booting,
+      hydrated,
+      userId,
+      displayName,
+      email,
+      phone,
+      role,
+      mei,
+      signIn,
+      signUp,
+      signOut,
+      refreshSession,
+      updateDisplayName,
+      updatePhone,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

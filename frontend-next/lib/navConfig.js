@@ -28,8 +28,6 @@ export const NAV_ITEMS = [
 
 export const MIGRATION_STUB_ROUTES = [
   '/notas',
-  '/configuracoes',
-  '/minha-conta',
 ];
 
 export function isNavActive(pathname, href) {

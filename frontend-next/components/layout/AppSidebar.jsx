@@ -24,12 +24,14 @@ export function AppSidebar({ className = '' }) {
   const pathname = usePathname();
   const { displayName, signOut, mei } = useAuth();
   const { isDark, toggleTheme, preference } = useTheme();
+  const accountActive = pathname === '/minha-conta' || pathname.startsWith('/minha-conta/');
 
   const visibleItems = NAV_ITEMS.filter(
     (item) => !item.requiresFiscalAccess || mei,
   );
 
-  const themeLabel = preference === 'dark' ? 'Tema escuro' : 'Tema claro';
+  const themeLabel =
+    preference === 'dark' ? 'Tema escuro' : preference === 'system' ? 'Tema automático' : 'Tema claro';
 
   return (
     <aside
@@ -81,7 +83,10 @@ export function AppSidebar({ className = '' }) {
 
         <Link
           href="/minha-conta"
-          className="flex h-12 items-center justify-between rounded-[14px] px-3 hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          className={`flex h-12 items-center justify-between rounded-[14px] px-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
+            accountActive ? 'bg-[var(--accent)] text-white' : 'hover:bg-white/5'
+          }`}
+          aria-current={accountActive ? 'page' : undefined}
         >
           <span className="flex min-w-0 items-center gap-3">
             <UserInitials name={displayName} />

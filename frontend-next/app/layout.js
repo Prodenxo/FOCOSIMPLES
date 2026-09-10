@@ -13,7 +13,7 @@ export const metadata = {
   description: 'Gestão financeira simples para o seu negócio.',
 };
 
-const themeInitScript = `(function(){try{var k='@financas_pessoais:theme';var t=localStorage.getItem(k);var d=t==='dark';if(t==='system'){localStorage.setItem(k,'light');d=false;}document.documentElement.classList.toggle('dark',d);document.documentElement.dataset.theme=d?'dark':'light';}catch(e){}})();`;
+const themeInitScript = `(function(){try{var k='@financas_pessoais:theme';var t=localStorage.getItem(k)||'system';var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);document.documentElement.dataset.theme=d?'dark':'light';}catch(e){}})();`;
 
 export default function RootLayout({ children }) {
   return (
