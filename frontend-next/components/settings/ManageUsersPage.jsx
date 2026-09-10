@@ -50,6 +50,8 @@ import { ErrorPanel } from '@/components/ui/ErrorPanel';
 import { LoadingPanel } from '@/components/ui/LoadingPanel';
 import { Pagination } from '@/components/ui/Pagination';
 import { AppSelect } from '@/components/ui/AppSelect';
+import { formatCnpj } from '@/lib/fiscalFormat';
+import { onlyDigits } from '@/lib/fiscalEmit';
 
 const PAGE_SIZE = 10;
 
@@ -182,6 +184,14 @@ export function ManageUsersPage() {
     [empresas],
   );
 
+  const cnpjFromEmpresaId = useCallback(
+    (empresaId) => {
+      const emp = empresas.find((e) => e.id === empresaId);
+      return emp?.cnpj ? formatCnpj(emp.cnpj) : '';
+    },
+    [empresas],
+  );
+
   const openEditUser = async (user) => {
     setEditingUser(user);
     setEditForm({
@@ -191,6 +201,7 @@ export function ManageUsersPage() {
       phone: user.phone || '',
       role: user.role || 'usuario',
       empresaId: user.empresaId || '',
+      empresaCnpj: cnpjFromEmpresaId(user.empresaId || ''),
       mei: user.mei === true,
       expiresAt: user.expires_at ? String(user.expires_at).slice(0, 10) : '',
       docNfse: true,
@@ -228,6 +239,12 @@ export function ManageUsersPage() {
       if (editForm.mei && !editForm.docNfse && !editForm.docNfe && !editForm.docNfce) {
         throw new Error('Com emissão fiscal, libere ao menos um tipo de nota.');
       }
+      if (isSuperadmin && editForm.empresaId && editForm.mei) {
+        const cnpjDigits = onlyDigits(editForm.empresaCnpj || '');
+        if (cnpjDigits && cnpjDigits.length !== 14) {
+          throw new Error('Informe o CNPJ da empresa com 14 dígitos (igual ao certificado).');
+        }
+      }
       const payload = {
         displayName: editForm.displayName || undefined,
         phone: normalizePhoneDigits(editForm.phone) || undefined,
@@ -243,6 +260,13 @@ export function ManageUsersPage() {
         }
       }
       await updateUser(editingUser.id, payload);
+      if (isSuperadmin && editForm.empresaId && editForm.mei) {
+        const cnpjDigits = onlyDigits(editForm.empresaCnpj || '');
+        const prev = onlyDigits(cnpjFromEmpresaId(editForm.empresaId));
+        if (cnpjDigits.length === 14 && cnpjDigits !== prev) {
+          await updateEmpresa(editForm.empresaId, { cnpj: cnpjDigits });
+        }
+      }
       if (editForm.mei) {
         await patchAdminMeiDocumentosAtivos(editingUser.id, {
           nfse: editForm.docNfse,
@@ -729,10 +753,34 @@ export function ManageUsersPage() {
                 <AppSelect
                   label="Empresa"
                   value={editForm.empresaId}
-                  onChange={(empresaId) => setEditForm({ ...editForm, empresaId })}
+                  onChange={(empresaId) => setEditForm({
+                    ...editForm,
+                    empresaId,
+                    empresaCnpj: cnpjFromEmpresaId(empresaId),
+                  })}
                   options={empresaOptions}
                   placeholder="Empresa"
                 />
+                {editForm.mei && editForm.empresaId ? (
+                  <label className="block text-sm">
+                    <span className="mb-1 block text-xs font-semibold text-[var(--text-muted)]">
+                      CNPJ da empresa
+                    </span>
+                    <input
+                      className="h-10 w-full rounded-[12px] border border-[var(--card-border)] bg-[var(--canvas)] px-3 text-sm"
+                      placeholder="00.000.000/0000-00"
+                      value={editForm.empresaCnpj || ''}
+                      onChange={(e) => setEditForm({
+                        ...editForm,
+                        empresaCnpj: formatCnpj(e.target.value),
+                      })}
+                      inputMode="numeric"
+                    />
+                    <span className="mt-1 block text-xs text-[var(--text-muted)]">
+                      Deve ser o mesmo CNPJ do certificado e-CNPJ (evita erro no DAS).
+                    </span>
+                  </label>
+                ) : null}
                 {editForm.role === 'usuario' ? (
                   <input type="date" className="h-10 w-full rounded-[12px] border border-[var(--card-border)] bg-[var(--canvas)] px-3 text-sm" value={editForm.expiresAt} onChange={(e) => setEditForm({ ...editForm, expiresAt: e.target.value })} />
                 ) : null}
