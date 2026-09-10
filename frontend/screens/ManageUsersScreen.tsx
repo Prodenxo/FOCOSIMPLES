@@ -57,9 +57,15 @@ import {
   deleteEmpresa,
   getEmpresaById,
   listEmpresas,
+  updateEmpresa,
   type EmpresaFullData,
   type EmpresaOption,
 } from "../services/empresaService";
+import {
+  formatEmpresaCnpj,
+  onlyEmpresaCnpjDigits,
+} from "../lib/empresaCnpj";
+import { FISCAL_CNPJ_FIELD_LABEL } from "../lib/fiscalBranding";
 import EmpresaModal from "../components/EmpresaModal";
 import { EmpresaStripeMeiBillingModal } from "../components/EmpresaStripeMeiBillingModal";
 import { InvitesTab } from "../components/admin/InvitesTab";
@@ -1112,6 +1118,8 @@ export default function ManageUsersScreen({
   const [editDocNfce, setEditDocNfce] = useState(false);
   const [editDocsLoading, setEditDocsLoading] = useState(false);
   const [editExpiresAt, setEditExpiresAt] = useState("");
+  const [editEmpresaCnpj, setEditEmpresaCnpj] = useState("");
+  const [editEmpresaCnpjInitial, setEditEmpresaCnpjInitial] = useState("");
   const [editEmpresaModalOpen, setEditEmpresaModalOpen] = useState(false);
 
   // Reset senha
@@ -1438,6 +1446,23 @@ export default function ManageUsersScreen({
     }
   };
 
+  const loadEditEmpresaCnpj = async (empresaId: string | undefined) => {
+    if (role !== "superadmin" || !empresaId) {
+      setEditEmpresaCnpj("");
+      setEditEmpresaCnpjInitial("");
+      return;
+    }
+    try {
+      const full = await getEmpresaById(empresaId);
+      const digits = onlyEmpresaCnpjDigits(full?.cnpj || "");
+      setEditEmpresaCnpjInitial(digits);
+      setEditEmpresaCnpj(digits ? formatEmpresaCnpj(digits) : "");
+    } catch {
+      setEditEmpresaCnpj("");
+      setEditEmpresaCnpjInitial("");
+    }
+  };
+
   const startEditUser = (user: ManagedUser) => {
     setEditingUser(user);
     setEditRole(
@@ -1453,6 +1478,7 @@ export default function ManageUsersScreen({
         ? { id: user.empresaId, empresa: user.empresaName || "Empresa atual" }
         : null);
     setEditEmpresa(empresa);
+    void loadEditEmpresaCnpj(empresa?.id);
     setEditDisplayName(user.displayName || "");
     setEditPhone(user.phone || "");
     setEditEmail(user.email || "");
@@ -1501,6 +1527,14 @@ export default function ManageUsersScreen({
           "Com emissão fiscal ativa, libere ao menos um tipo de nota (NFS-e, NF-e ou NFC-e).",
         );
       }
+      if (role === "superadmin" && editEmpresa?.id && editMei) {
+        const cnpjDigits = onlyEmpresaCnpjDigits(editEmpresaCnpj);
+        if (cnpjDigits && cnpjDigits.length !== 14) {
+          throw new Error(
+            "Informe o CNPJ da empresa com 14 dígitos (igual ao certificado).",
+          );
+        }
+      }
       const expiresAtValue =
         editExpiresAt.trim() && editingUser.role === "usuario"
           ? (() => {
@@ -1538,6 +1572,16 @@ export default function ManageUsersScreen({
               expiresAt: expiresAtValue ?? null,
             };
       await updateUser(editingUser.id, payload);
+      if (role === "superadmin" && editEmpresa?.id && editMei) {
+        const cnpjDigits = onlyEmpresaCnpjDigits(editEmpresaCnpj);
+        if (
+          cnpjDigits.length === 14 &&
+          cnpjDigits !== editEmpresaCnpjInitial
+        ) {
+          await updateEmpresa(editEmpresa.id, { cnpj: cnpjDigits });
+          await fetchEmpresas();
+        }
+      }
       if (editMei) {
         await patchAdminMeiDocumentosAtivos(editingUser.id, {
           nfse: editDocNfse,
@@ -2799,6 +2843,25 @@ export default function ManageUsersScreen({
           </Field>
         ) : null}
 
+        {role === "superadmin" && editMei && editEmpresa ? (
+          <Field
+            label={FISCAL_CNPJ_FIELD_LABEL}
+            helper="Deve ser o mesmo CNPJ do certificado e-CNPJ (evita erro no DAS)."
+            styles={styles}
+          >
+            <TextInput
+              style={styles.textInput}
+              placeholder="00.000.000/0000-00"
+              placeholderTextColor={theme.placeholder}
+              value={editEmpresaCnpj}
+              onChangeText={(value) =>
+                setEditEmpresaCnpj(formatEmpresaCnpj(value))
+              }
+              keyboardType="number-pad"
+            />
+          </Field>
+        ) : null}
+
         <View style={styles.switchRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.switchLabel}>
@@ -3125,6 +3188,7 @@ export default function ManageUsersScreen({
                         ]}
                         onPress={() => {
                           setEditEmpresa(empresa);
+                          void loadEditEmpresaCnpj(empresa.id);
                           setEditEmpresaModalOpen(false);
                           setEmpresaSearch("");
                         }}
