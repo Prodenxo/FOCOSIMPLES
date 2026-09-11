@@ -43,6 +43,7 @@ import { Card } from '@/components/ui/Card';
 import { ErrorPanel } from '@/components/ui/ErrorPanel';
 import { LoadingPanel } from '@/components/ui/LoadingPanel';
 import { CertificateIllustration } from '@/components/illustrations/CertificateIllustration';
+import { humanizePlugNotasEmpresaError } from '@/lib/plugNotasEmpresaErrorHints';
 
 /**
  * Aba Certificado — gerencia o certificado digital e dados da empresa fiscal.
@@ -316,7 +317,8 @@ export default function CertificadoPage() {
       setCompanyDirty(false);
       setCompanySavedAt(new Date());
     } catch (err) {
-      setCompanyError(err instanceof Error ? err.message : 'Falha ao salvar dados da empresa.');
+      const raw = err instanceof Error ? err.message : 'Falha ao salvar dados da empresa.';
+      setCompanyError(humanizePlugNotasEmpresaError(raw));
     } finally {
       setCompanySaving(false);
     }

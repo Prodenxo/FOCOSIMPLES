@@ -1,8 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { EMPRESA_BUSINESS_TYPE_OPTIONS } from '@/lib/empresaBusinessType';
 import { formatCnpj } from '@/lib/fiscalFormat';
+import { lookupCep } from '@/lib/fiscalApi';
 
 /**
  * Formulário completo da empresa emissora (PlugNotas).
@@ -23,6 +25,34 @@ export function EmpresaFiscalForm({
   readOnlyCnpj = true,
   showDocumentFlags = false,
 }) {
+  const [cepLoading, setCepLoading] = useState(false);
+
+  const handleCepBlur = async () => {
+    const cep = String(form?.cep || '').replace(/\D/g, '').slice(0, 8);
+    if (cep.length !== 8) return;
+    setCepLoading(true);
+    try {
+      const data = await lookupCep(cep);
+      if (!data) return;
+      const ibge = data.codigoCidade || data.ibge || data.city_ibge_code;
+      if (data.logradouro) onChange('logradouro', data.logradouro);
+      if (data.bairro) onChange('bairro', data.bairro);
+      const cidade = data.descricaoCidade || data.cidade || data.localidade;
+      if (cidade) onChange('municipio', cidade);
+      if (data.estado || data.uf) {
+        onChange('uf', String(data.estado || data.uf).toUpperCase().slice(0, 2));
+      }
+      if (ibge) onChange('codigoCidade', String(ibge).replace(/\D/g, '').slice(0, 7));
+      onChange('cep', cep);
+      const log = String(data.logradouro || form.logradouro || '').trim();
+      if (/^av\.?\s|^avenida\s/i.test(log)) onChange('tipoLogradouro', 'Avenida');
+    } catch {
+      /* CEP opcional — usuário pode preencher manualmente */
+    } finally {
+      setCepLoading(false);
+    }
+  };
+
   if (!form) return null;
 
   return (
@@ -57,8 +87,14 @@ export function EmpresaFiscalForm({
       <section className="space-y-3 border-t border-[var(--card-border)] pt-4">
         <h3 className="text-sm font-semibold text-[var(--text-primary)]">Endereço fiscal</h3>
         <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="CEP" value={form.cep} onChange={(v) => onChange('cep', v)} />
-          <Field label="Código IBGE" value={form.codigoCidade} onChange={(v) => onChange('codigoCidade', v)} required hint="7 dígitos do município." />
+          <Field
+            label="CEP"
+            value={form.cep}
+            onChange={(v) => onChange('cep', v)}
+            onBlur={() => void handleCepBlur()}
+            hint={cepLoading ? 'Consultando CEP…' : 'Use o CEP da nota autorizada (ex.: 28495376).'}
+          />
+          <Field label="Código IBGE" value={form.codigoCidade} onChange={(v) => onChange('codigoCidade', v)} required hint="7 dígitos — Aperibé/RJ: 3300159." />
           <Field label="UF" value={form.uf} onChange={(v) => onChange('uf', v.toUpperCase().slice(0, 2))} maxLength={2} />
         </div>
         <Field label="Município" value={form.municipio} onChange={(v) => onChange('municipio', v)} />
@@ -148,7 +184,7 @@ export function EmpresaFiscalForm({
 }
 
 function Field({
-  label, value, onChange, readOnly, maxLength, type = 'text', hint, placeholder, required, inputMode,
+  label, value, onChange, onBlur, readOnly, maxLength, type = 'text', hint, placeholder, required, inputMode,
 }) {
   return (
     <label className="flex flex-col gap-1 text-xs">
@@ -162,6 +198,7 @@ function Field({
         value={value ?? ''}
         placeholder={placeholder}
         onChange={(e) => onChange && onChange(e.target.value)}
+        onBlur={onBlur}
         readOnly={readOnly}
         maxLength={maxLength}
         className={`h-10 rounded-[10px] border border-[var(--card-border)] bg-[var(--canvas)] px-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none ${readOnly ? 'opacity-70' : ''}`}
