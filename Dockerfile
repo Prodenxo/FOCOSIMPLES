@@ -1,64 +1,56 @@
-# Easypanel pode apontar para a raiz. O site está em frontend/.
-# ── Stage 1: build ───────────────────────────────────────────────────────────
+# Easypanel — site Foco Simples (Next.js frontend-next)
+# Expo legado: Dockerfile.expo
+# ── deps ─────────────────────────────────────────────────────────────────────
+FROM node:20-bookworm-slim AS deps
+
+WORKDIR /app
+COPY frontend-next/package.json frontend-next/package-lock.json ./
+RUN npm ci
+
+# ── build ────────────────────────────────────────────────────────────────────
 FROM node:20-bookworm-slim AS builder
 
-ARG EXPO_PUBLIC_SUPABASE_URL
-ARG EXPO_PUBLIC_SUPABASE_ANON_KEY
-ARG EXPO_PUBLIC_MEI_API_URL
-ARG EXPO_PUBLIC_APP_PRODUCT
-ARG EXPO_PUBLIC_INVITE_APP_BASE_URL
-ARG EXPO_PUBLIC_AUTH_MODE
-ARG VITE_SUPABASE_URL
-ARG VITE_SUPABASE_ANON_KEY
-ARG VITE_API_URL
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY frontend-next/ .
 
-ENV EXPO_PUBLIC_SUPABASE_URL=${EXPO_PUBLIC_SUPABASE_URL}
-ENV EXPO_PUBLIC_SUPABASE_ANON_KEY=${EXPO_PUBLIC_SUPABASE_ANON_KEY}
-ENV EXPO_PUBLIC_MEI_API_URL=${EXPO_PUBLIC_MEI_API_URL}
-ENV EXPO_PUBLIC_APP_PRODUCT=${EXPO_PUBLIC_APP_PRODUCT}
-ENV EXPO_PUBLIC_INVITE_APP_BASE_URL=${EXPO_PUBLIC_INVITE_APP_BASE_URL}
-ENV EXPO_PUBLIC_AUTH_MODE=${EXPO_PUBLIC_AUTH_MODE}
-ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
-ENV VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
-ENV VITE_API_URL=${VITE_API_URL}
+ARG NEXT_PUBLIC_API_URL=
+ARG NEXT_PUBLIC_APP_PRODUCT=focosimples
+ARG EXPO_PUBLIC_MEI_API_URL=
+ARG VITE_API_URL=
+ARG EXPO_PUBLIC_APP_PRODUCT=focosimples
 
-ENV CI=1
-ENV EXPO_NO_TELEMETRY=1
+ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_OPTIONS=--max-old-space-size=4096
+
+RUN set -e; \
+  API="${NEXT_PUBLIC_API_URL:-${EXPO_PUBLIC_MEI_API_URL:-${VITE_API_URL}}}"; \
+  PRODUCT="${NEXT_PUBLIC_APP_PRODUCT:-${EXPO_PUBLIC_APP_PRODUCT:-focosimples}}"; \
+  export NEXT_PUBLIC_API_URL="$API"; \
+  export NEXT_PUBLIC_APP_PRODUCT="$PRODUCT"; \
+  npm run build
+
+# ── run ──────────────────────────────────────────────────────────────────────
+FROM node:20-bookworm-slim AS runner
 
 WORKDIR /app
 
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
+ENV NODE_ENV=production
+ENV HOSTNAME=0.0.0.0
+ENV PORT=3000
 
-COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci --legacy-peer-deps
+RUN addgroup --system --gid 1001 nodejs \
+  && adduser --system --uid 1001 nextjs
 
-COPY frontend/ .
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY frontend-next/docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh \
+  && chown -R nextjs:nodejs /app
 
-RUN set -e; \
-  export EXPO_PUBLIC_SUPABASE_URL="${EXPO_PUBLIC_SUPABASE_URL:-$VITE_SUPABASE_URL}"; \
-  export EXPO_PUBLIC_SUPABASE_ANON_KEY="${EXPO_PUBLIC_SUPABASE_ANON_KEY:-$VITE_SUPABASE_ANON_KEY}"; \
-  export EXPO_PUBLIC_MEI_API_URL="${EXPO_PUBLIC_MEI_API_URL:-$VITE_API_URL}"; \
-  if [ ! -f assets/brand-mark.jpg ]; then \
-    echo "BUILD ERROR: frontend/assets/brand-mark.jpg ausente."; \
-    exit 1; \
-  fi; \
-  echo "BUILD: iniciando expo export..."; \
-  npx expo export --platform web --clear
+USER nextjs
 
-RUN node scripts/patch-web-index.mjs dist/index.html \
-  && cp -f public/legal.css public/privacidade.html public/termos.html dist/
-
-# ── Stage 2: serve ────────────────────────────────────────────────────────────
-FROM nginx:alpine
-
-COPY --from=builder /app/dist /usr/share/nginx/html
-COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
-COPY frontend/docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
-
-EXPOSE 80
+EXPOSE 3000
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
