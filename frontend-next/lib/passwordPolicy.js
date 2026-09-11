@@ -10,3 +10,11 @@ export function validateStrongPassword(password) {
   }
   return { ok: true };
 }
+
+export function strongPasswordRequirementBullets() {
+  return [
+    'Mínimo de 8 caracteres',
+    'Pelo menos uma letra maiúscula (A-Z)',
+    'Pelo menos um caractere especial (! @ # $ % & *)',
+  ];
+}
