@@ -52,6 +52,7 @@ import { Pagination } from '@/components/ui/Pagination';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { formatCnpj } from '@/lib/fiscalFormat';
 import { onlyDigits } from '@/lib/fiscalEmit';
+import { getManagedUserActions } from '@/lib/managedUserActions';
 
 const PAGE_SIZE = 10;
 
@@ -72,7 +73,7 @@ function BackLink() {
 }
 
 export function ManageUsersPage() {
-  const { role, userId, impersonate } = useAuth();
+  const { role, userId, impersonate, refreshSession } = useAuth();
   const canManage = hasRole(role, ['admin']);
   const isSuperadmin = role === 'superadmin';
 
@@ -251,13 +252,18 @@ export function ManageUsersPage() {
         mei: editForm.mei === true,
         ...(emailChanged ? { email: trimmedEmail } : {}),
       };
-      if (isSuperadmin && editingUser.id !== userId) {
+      const isEditingSelf = editingUser.id === userId;
+      if (isSuperadmin && !isEditingSelf) {
         payload.role = editForm.role;
         if (editForm.empresaId) payload.empresaId = editForm.empresaId;
         if (editForm.role === 'usuario' && editForm.expiresAt) {
           const d = new Date(editForm.expiresAt);
           if (!Number.isNaN(d.getTime())) payload.expiresAt = d.toISOString();
         }
+      }
+      if (!isSuperadmin && isEditingSelf && editingUser.role === 'usuario' && editForm.expiresAt) {
+        const d = new Date(editForm.expiresAt);
+        if (!Number.isNaN(d.getTime())) payload.expiresAt = d.toISOString();
       }
       await updateUser(editingUser.id, payload);
       if (isSuperadmin && editForm.empresaId && editForm.mei) {
@@ -279,6 +285,9 @@ export function ManageUsersPage() {
         text: emailChanged ? 'Usuário atualizado. Confirmação enviada por e-mail se aplicável.' : 'Usuário atualizado.',
       });
       setEditingUser(null);
+      if (isEditingSelf) {
+        await refreshSession();
+      }
       await load();
     } catch (err) {
       setMsg({ type: 'error', text: err instanceof Error ? err.message : 'Falha ao salvar.' });
@@ -488,10 +497,18 @@ export function ManageUsersPage() {
           ) : (
             <>
               <ul className="divide-y divide-[var(--card-border)]">
-                {paginatedUsers.map((u) => (
+                {paginatedUsers.map((u) => {
+                  const actions = getManagedUserActions(role, u, userId);
+                  const isSelf = u.id === userId;
+                  return (
                   <li key={u.id} className="flex flex-col gap-3 py-3 lg:flex-row lg:items-center lg:justify-between">
                     <div>
-                      <p className="font-medium text-[var(--text-primary)]">{u.displayName || u.email}</p>
+                      <p className="font-medium text-[var(--text-primary)]">
+                        {u.displayName || u.email}
+                        {isSelf ? (
+                          <span className="ml-2 text-xs font-normal text-[var(--text-muted)]">(você)</span>
+                        ) : null}
+                      </p>
                       <p className="text-xs text-[var(--text-muted)]">
                         {u.email} · {u.role}
                         {u.mei ? ' · fiscal' : ''}
@@ -499,25 +516,30 @@ export function ManageUsersPage() {
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-1.5">
-                      {u.id !== userId && u.role !== 'superadmin' ? (
-                        <>
-                          <IconBtn label="Editar" onClick={() => openEditUser(u)} icon={Pencil} />
-                          <IconBtn label="Acessar como" onClick={() => setImpersonateTarget(u)} icon={LogIn} />
-                          <IconBtn label="Redefinir senha" onClick={() => setResetPwdUser(u)} icon={KeyRound} />
-                          <IconBtn
-                            label={u.status === false ? 'Desbloquear' : 'Bloquear'}
-                            onClick={() => (u.status === false ? handleBanToggle(u) : setConfirmBan(u))}
-                            icon={u.status === false ? UserCheck : UserX}
-                            disabled={acting === u.id}
-                          />
-                          {isSuperadmin ? (
-                            <IconBtn label="Excluir" onClick={() => setConfirmDeleteUser(u)} icon={Trash2} destructive />
-                          ) : null}
-                        </>
+                      {actions.canEdit ? (
+                        <IconBtn label="Editar" onClick={() => openEditUser(u)} icon={Pencil} />
+                      ) : null}
+                      {actions.canImpersonate ? (
+                        <IconBtn label="Acessar como" onClick={() => setImpersonateTarget(u)} icon={LogIn} />
+                      ) : null}
+                      {actions.canEdit && !isSelf ? (
+                        <IconBtn label="Redefinir senha" onClick={() => setResetPwdUser(u)} icon={KeyRound} />
+                      ) : null}
+                      {actions.canBan ? (
+                        <IconBtn
+                          label={u.status === false ? 'Desbloquear' : 'Bloquear'}
+                          onClick={() => (u.status === false ? handleBanToggle(u) : setConfirmBan(u))}
+                          icon={u.status === false ? UserCheck : UserX}
+                          disabled={acting === u.id}
+                        />
+                      ) : null}
+                      {actions.canDelete && isSuperadmin ? (
+                        <IconBtn label="Excluir" onClick={() => setConfirmDeleteUser(u)} icon={Trash2} destructive />
                       ) : null}
                     </div>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
               <Pagination
                 page={pageSafe}
@@ -786,9 +808,18 @@ export function ManageUsersPage() {
                 ) : null}
               </>
             ) : null}
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={editForm.mei} onChange={(e) => setEditForm({ ...editForm, mei: e.target.checked })} />
-              Emissão fiscal
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="flex items-center gap-2">
+                <input type="checkbox" checked={editForm.mei} onChange={(e) => setEditForm({ ...editForm, mei: e.target.checked })} />
+                Habilitar notas (emissão fiscal)
+              </span>
+              {editingUser.id === userId ? (
+                <span className="text-xs text-[var(--text-muted)]">
+                  {editForm.mei
+                    ? 'Com isto ligado, a aba Notas aparece no menu.'
+                    : 'Ligue para liberar NFS-e, NF-e e NFC-e na sua conta.'}
+                </span>
+              ) : null}
             </label>
             {editForm.mei ? (
               <div className="space-y-1 text-sm">
