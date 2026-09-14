@@ -1389,6 +1389,94 @@ const parseEmitenteFromPayload = (payload) => {
   };
 };
 
+/**
+ * Envia ou resolve certificado A1 na PlugNotas (best-effort no upload; explícito no sync).
+ * @returns {Promise<{ status: 'ok'|'failed'|'skipped', source?: string, certId?: string, reason?: string }>}
+ */
+export const integratePfxWithPlugNotas = async (userId, { fileBuffer, password, cpfCnpj14 }) => {
+  let plugnotasIntegration = { status: 'skipped', reason: 'no_cnpj_in_cert' };
+  const certDocument = normalizeDoc(cpfCnpj14 || '');
+  if (certDocument.length !== 14) {
+    return plugnotasIntegration;
+  }
+  if (!fileBuffer?.length || !password) {
+    return { status: 'failed', reason: 'missing_pfx_or_password' };
+  }
+
+  try {
+    let plugnotasCertId = await resolverCertificadoIdPorCnpj(certDocument);
+    let source = plugnotasCertId ? 'resolved_existing' : null;
+
+    if (!plugnotasCertId) {
+      const result = await cadastrarCertificadoPlugNotas({
+        fileBuffer,
+        fileName: 'certificado.pfx',
+        mimeType: 'application/x-pkcs12',
+        password,
+        cpfCnpj: certDocument
+      });
+      if (typeof result?.id === 'string' && result.id) {
+        plugnotasCertId = result.id;
+        source = 'uploaded_new';
+      }
+    }
+
+    if (plugnotasCertId) {
+      await savePlugNotasCertId(userId, plugnotasCertId);
+      plugnotasIntegration = { status: 'ok', source, certId: plugnotasCertId };
+    } else {
+      plugnotasIntegration = { status: 'failed', reason: 'no_id_returned' };
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[mei-guide.integratePfxWithPlugNotas] PlugNotas falhou', {
+      userId,
+      cnpj14: certDocument,
+      error: msg
+    });
+    plugnotasIntegration = { status: 'failed', reason: msg };
+  }
+
+  return plugnotasIntegration;
+};
+
+/** Reenvia o .pfx já salvo para a PlugNotas (quando o upload local ok mas a integração falhou). */
+export const syncStoredCertificateToPlugNotas = async (userId) => {
+  if (!userId) throw badRequest('Usuário não identificado');
+  await ensureUserCertLoaded(userId);
+  const userCert = getUserCert(userId);
+  if (!userCert?.pfx?.length) {
+    throw badRequest('Envie o certificado .pfx antes de sincronizar com a PlugNotas.');
+  }
+  const passphrase = userCert.passphrase;
+  if (!passphrase) {
+    throw badRequest('Senha do certificado indisponível. Envie o .pfx novamente com a senha.');
+  }
+  let doc = normalizeDoc(getUserCertDocument(userId) || '');
+  if (doc.length !== 14) {
+    try {
+      doc = normalizeDoc((await getCertificateDocument(userId)) || '');
+    } catch {
+      doc = '';
+    }
+  }
+  if (doc.length !== 14) {
+    throw badRequest('CNPJ do certificado não identificado. Reenvie o arquivo .pfx.');
+  }
+  const integration = await integratePfxWithPlugNotas(userId, {
+    fileBuffer: userCert.pfx,
+    password: passphrase,
+    cpfCnpj14: doc
+  });
+  if (integration.status === 'failed') {
+    throw badRequest(
+      `Não foi possível registrar o certificado na PlugNotas: ${integration.reason || 'erro desconhecido'}`,
+      { plugnotasIntegration: integration }
+    );
+  }
+  return integration;
+};
+
 export const uploadCertificate = async (userId, payload) => {
   if (!userId) {
     throw badRequest('Usuário não identificado');
@@ -1489,46 +1577,11 @@ export const uploadCertificate = async (userId, payload) => {
     certInfo
   });
 
-  // Integração com PlugNotas: best-effort, não interrompe o upload se falhar.
-  // 1) Tenta resolver cert_id já existente no PlugNotas por CNPJ.
-  // 2) Se não achou, faz upload do .pfx para o PlugNotas.
-  // 3) Salva o cert_id retornado em user_mei_certificates.plugnotas_cert_id.
-  let plugnotasIntegration = { status: 'skipped', reason: 'no_cnpj_in_cert' };
-  if (certDocument && certDocument.length === 14) {
-    try {
-      let plugnotasCertId = await resolverCertificadoIdPorCnpj(certDocument);
-      let source = plugnotasCertId ? 'resolved_existing' : null;
-
-      if (!plugnotasCertId) {
-        const result = await cadastrarCertificadoPlugNotas({
-          fileBuffer: file.buffer,
-          fileName: 'certificado.pfx',
-          mimeType: 'application/x-pkcs12',
-          password,
-          cpfCnpj: certDocument
-        });
-        if (typeof result?.id === 'string' && result.id) {
-          plugnotasCertId = result.id;
-          source = 'uploaded_new';
-        }
-      }
-
-      if (plugnotasCertId) {
-        await savePlugNotasCertId(userId, plugnotasCertId);
-        plugnotasIntegration = { status: 'ok', source, certId: plugnotasCertId };
-      } else {
-        plugnotasIntegration = { status: 'failed', reason: 'no_id_returned' };
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn('[mei-guide.uploadCertificate] PlugNotas integration falhou (não-fatal)', {
-        userId,
-        cnpj14: certDocument,
-        error: msg
-      });
-      plugnotasIntegration = { status: 'failed', reason: msg };
-    }
-  }
+  const plugnotasIntegration = await integratePfxWithPlugNotas(userId, {
+    fileBuffer: file.buffer,
+    password,
+    cpfCnpj14: certDocument
+  });
 
   const status = await getCertificateStatus(userId);
   return { ...status, publicCertificate: publicCert, plugnotasIntegration };
@@ -1635,6 +1688,13 @@ export const getCertificateStatus = async (userId) => {
       nearExpiry = expiresInDays >= 0 && expiresInDays <= 30
     }
   }
+  let plugnotasCertLinked = false;
+  try {
+    plugnotasCertLinked = Boolean(await getPlugNotasCertId(userId));
+  } catch {
+    plugnotasCertLinked = false;
+  }
+
   return {
     hasUserCertificate: hasCert,
     hasEnvCertificate: Boolean(env.SERPRO_CERT_PFX_BASE64),
@@ -1644,7 +1704,10 @@ export const getCertificateStatus = async (userId) => {
     nearExpiry,
     expiresInDays,
     nfseEmitente,
-    documentosAtivos
+    documentosAtivos,
+    plugnotasCertificado: {
+      linked: plugnotasCertLinked,
+    },
   };
 };
 

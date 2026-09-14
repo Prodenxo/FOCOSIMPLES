@@ -263,6 +263,11 @@ export function getPlugNotasCompanyValidationMessage(form) {
   if (form.nfseAtivo && !hasRequiredText(form.inscricaoMunicipal)) {
     return 'Informe a Inscrição Municipal (IM) para emitir NFS-e.';
   }
+  const cnpjDigits = normalizeDoc(form.cpfCnpj);
+  const imDigits = normalizeDoc(form.inscricaoMunicipal);
+  if (form.nfseAtivo && cnpjDigits.length === 14 && imDigits === cnpjDigits) {
+    return 'A Inscrição Municipal não pode ser igual ao CNPJ. Use o número da prefeitura (como na nota autorizada).';
+  }
   if (!form.nfseAtivo && !form.nfeAtivo && !form.nfceAtivo) {
     return 'Selecione pelo menos um tipo de nota fiscal (NFS-e, NF-e ou NFC-e).';
   }

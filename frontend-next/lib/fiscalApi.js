@@ -116,6 +116,11 @@ export async function removeCertificate() {
   return apiClient.delete('/mei-guide/certificate');
 }
 
+/** Reenvia o .pfx já salvo para a PlugNotas (integração de emissão). */
+export async function syncCertificatePlugnotas() {
+  return apiClient.post('/mei-guide/certificate/plugnotas-sync', {});
+}
+
 /** Consulta dados da empresa fiscal (CNPJ) no serviço de emissão. */
 export async function fetchFiscalCompany(cnpj) {
   const params = new URLSearchParams();

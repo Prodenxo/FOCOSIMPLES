@@ -21,6 +21,7 @@ import {
   fetchNfsePrestadorPrefill,
   lookupCnpj,
   removeCertificate,
+  syncCertificatePlugnotas,
   updateFiscalCompany,
   uploadCertificate,
   importCnaesProdutos,
@@ -79,6 +80,8 @@ export default function CertificadoPage() {
 
   const [removing, setRemoving] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [plugnotasSyncLoading, setPlugnotasSyncLoading] = useState(false);
+  const [plugnotasSyncMsg, setPlugnotasSyncMsg] = useState(null);
 
   const [importCnaesLoading, setImportCnaesLoading] = useState(false);
   const [importCnaesMsg, setImportCnaesMsg] = useState(null);
@@ -228,7 +231,18 @@ export default function CertificadoPage() {
     setUploadSubmitting(true);
     setUploadError(null);
     try {
-      await uploadCertificate(uploadFile, uploadPassword);
+      const uploadResult = await uploadCertificate(uploadFile, uploadPassword);
+      const integration = uploadResult?.plugnotasIntegration;
+      if (integration?.status === 'failed') {
+        setPlugnotasSyncMsg({
+          type: 'error',
+          text: `Certificado salvo no Foco Simples, mas a PlugNotas não aceitou: ${integration.reason || 'erro desconhecido'}. Use "Enviar certificado à PlugNotas".`,
+        });
+      } else if (integration?.status === 'ok') {
+        setPlugnotasSyncMsg({ type: 'success', text: 'Certificado registrado na PlugNotas.' });
+      } else {
+        setPlugnotasSyncMsg(null);
+      }
       setUploadFile(null);
       setUploadPassword('');
       // Limpa input file.
@@ -261,6 +275,23 @@ export default function CertificadoPage() {
       setUploadError(err instanceof Error ? err.message : 'Falha no envio do certificado.');
     } finally {
       setUploadSubmitting(false);
+    }
+  };
+
+  const handleSyncPlugnotas = async () => {
+    setPlugnotasSyncLoading(true);
+    setPlugnotasSyncMsg(null);
+    try {
+      await syncCertificatePlugnotas();
+      setPlugnotasSyncMsg({ type: 'success', text: 'Certificado enviado à PlugNotas com sucesso.' });
+      await loadCert();
+    } catch (err) {
+      setPlugnotasSyncMsg({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Falha ao enviar certificado à PlugNotas.',
+      });
+    } finally {
+      setPlugnotasSyncLoading(false);
     }
   };
 
@@ -364,6 +395,7 @@ export default function CertificadoPage() {
   };
 
   const hasCert = hasUserCert;
+  const plugnotasCertLinked = Boolean(certStatus?.plugnotasCertificado?.linked);
 
   return (
     <div className="flex flex-col gap-5">
@@ -437,6 +469,19 @@ export default function CertificadoPage() {
                         .join(', ') || '—'}
                     </p>
                   ) : null}
+                  {hasUserCert ? (
+                    <p className="mt-2 text-xs">
+                      <span className="text-[var(--text-muted)]">PlugNotas (emissão): </span>
+                      <span className={plugnotasCertLinked ? 'font-semibold text-emerald-600 dark:text-emerald-400' : 'font-semibold text-amber-700 dark:text-amber-400'}>
+                        {plugnotasCertLinked ? 'Certificado vinculado' : 'Ainda não vinculado'}
+                      </span>
+                    </p>
+                  ) : null}
+                  {plugnotasSyncMsg ? (
+                    <p className={`mt-2 text-xs ${plugnotasSyncMsg.type === 'success' ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}`}>
+                      {plugnotasSyncMsg.text}
+                    </p>
+                  ) : null}
                 </>
               )}
             </div>
@@ -495,6 +540,18 @@ export default function CertificadoPage() {
                 {uploadSubmitting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <KeyRound className="h-4 w-4" aria-hidden />}
                 {hasCert ? 'Substituir' : 'Enviar certificado'}
               </button>
+
+              {hasCert && !plugnotasCertLinked ? (
+                <button
+                  type="button"
+                  onClick={() => void handleSyncPlugnotas()}
+                  disabled={plugnotasSyncLoading}
+                  className="inline-flex h-10 items-center gap-2 rounded-[12px] border border-[var(--accent)]/40 px-4 text-sm font-semibold text-[var(--accent)]"
+                >
+                  {plugnotasSyncLoading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+                  Enviar certificado à PlugNotas
+                </button>
+              ) : null}
 
               {hasCert ? (
                 <button
@@ -572,6 +629,16 @@ export default function CertificadoPage() {
             <form onSubmit={handleSaveCompany} className="mt-4 space-y-4">
               {companyError ? (
                 <div className="rounded-[12px] border border-red-200 bg-red-50 p-4 dark:border-red-900/40 dark:bg-red-950/30">
+                  {hasUserCert && !plugnotasCertLinked ? (
+                    <p className="mb-2 text-xs font-semibold text-amber-800 dark:text-amber-200">
+                      Antes de cadastrar a empresa, vincule o certificado na PlugNotas (botão no card à esquerda).
+                    </p>
+                  ) : (
+                    <p className="mb-2 text-xs text-red-800/90 dark:text-red-200/90">
+                      Este erro é do <strong>cadastro da empresa</strong> na PlugNotas (CNPJ/endereço/NFS-e), não do upload do .pfx.
+                      {plugnotasCertLinked ? ' O certificado já está vinculado na PlugNotas.' : ''}
+                    </p>
+                  )}
                   <p className="flex items-start gap-2 text-sm text-red-800 dark:text-red-200">
                     <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
                     <span className="whitespace-pre-wrap">{companyError}</span>

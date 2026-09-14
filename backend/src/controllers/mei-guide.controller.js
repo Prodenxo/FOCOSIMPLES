@@ -127,6 +127,20 @@ export const removeCertificate = async (req, res, next) => {
   }
 };
 
+export const syncCertificatePlugnotas = async (req, res, next) => {
+  try {
+    const integration = await meiGuideService.syncStoredCertificateToPlugNotas(req.user.id);
+    const status = await meiGuideService.getCertificateStatus(req.user.id);
+    return sendSuccess(
+      res,
+      { ...status, plugnotasIntegration: integration },
+      'Certificado sincronizado com a PlugNotas'
+    );
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export const getCertificateStatus = async (req, res, next) => {
   try {
     const data = await meiGuideService.getCertificateStatus(req.user.id);
