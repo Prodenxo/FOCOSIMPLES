@@ -23,6 +23,7 @@ import {
   getPlugNotasCertId
 } from './mei-certificate-store.js';
 import { syncEmitenteMirrorAfterCertificateUpload } from './mei-emitente-empresa-sync.js';
+import { loadDecryptedCertificate } from './certificate-repository.js';
 import {
   cadastrarCertificadoPlugNotas,
   resolverCertificadoIdPorCnpj,
@@ -461,34 +462,40 @@ const resolveMeiCnpjForUser = async (userId, cnpj) => {
   return '';
 };
 
+const hasCertificateEncryptionConfigured = () =>
+  Boolean(env.MEI_CERT_ENCRYPTION_KEY || env.CERT_ENCRYPTION_KEY);
+
+/** PFX + senha de app (reempacotado) para PlugNotas / cache em memória. */
+const loadStoredPfxForOperations = async (userId) => {
+  if (!userId || !hasCertificateEncryptionConfigured()) return null;
+  try {
+    const loaded = await loadDecryptedCertificate(userId);
+    if (!loaded?.pfx?.length || !loaded.passphrase) return null;
+    return { pfx: loaded.pfx, passphrase: loaded.passphrase, meta: loaded.meta };
+  } catch {
+    return null;
+  }
+};
+
 /** Carrega certificado do banco para o cache quando não está em memória. */
 const ensureUserCertLoaded = async (userId) => {
   if (getUserCert(userId)) return;
-  if (!env.MEI_CERT_ENCRYPTION_KEY) return;
-  let loaded;
-  try {
-    loaded = await loadCertificate(userId);
-  } catch {
-    return;
-  }
-  if (!loaded) return;
-  if (!loaded.pfxBase64 || !loaded.passphraseEnc || !loaded.passphraseIv) {
-    return;
-  }
-  const pfx = Buffer.from(loaded.pfxBase64, 'base64');
-  let passphrase;
-  try {
-    passphrase = decryptPassphrase(loaded.passphraseEnc, loaded.passphraseIv);
-  } catch {
-    return;
-  }
+  const stored = await loadStoredPfxForOperations(userId);
+  if (!stored) return;
   let certInfo;
   try {
-    certInfo = extractPfxKeyAndCert(pfx, passphrase).certInfo;
+    certInfo = extractPfxKeyAndCert(stored.pfx, stored.passphrase).certInfo;
   } catch {
-    return;
+    certInfo = stored.meta?.cnpj
+      ? {
+          doc: stored.meta.cnpj,
+          holderName: stored.meta.holderName,
+          validFrom: stored.meta.validFrom,
+          validTo: stored.meta.validTo
+        }
+      : null;
   }
-  setUserCert(userId, { pfx, passphrase, certInfo });
+  setUserCert(userId, { pfx: stored.pfx, passphrase: stored.passphrase, certInfo });
 };
 
 const ensureClientCertificate = async (userId) => {
@@ -1444,7 +1451,13 @@ export const integratePfxWithPlugNotas = async (userId, { fileBuffer, password, 
 export const syncStoredCertificateToPlugNotas = async (userId) => {
   if (!userId) throw badRequest('Usuário não identificado');
   await ensureUserCertLoaded(userId);
-  const userCert = getUserCert(userId);
+  let userCert = getUserCert(userId);
+  if (!userCert?.pfx?.length) {
+    const stored = await loadStoredPfxForOperations(userId);
+    if (stored) {
+      userCert = { pfx: stored.pfx, passphrase: stored.passphrase };
+    }
+  }
   if (!userCert?.pfx?.length) {
     throw badRequest('Envie o certificado .pfx antes de sincronizar com a PlugNotas.');
   }
@@ -1571,17 +1584,31 @@ export const uploadCertificate = async (userId, payload) => {
     }
   }
 
-  setUserCert(userId, {
-    pfx: file.buffer,
-    passphrase: password,
-    certInfo
-  });
+  const storedForPlugnotas = await loadStoredPfxForOperations(userId);
+  if (storedForPlugnotas?.pfx?.length && storedForPlugnotas.passphrase) {
+    setUserCert(userId, {
+      pfx: storedForPlugnotas.pfx,
+      passphrase: storedForPlugnotas.passphrase,
+      certInfo
+    });
+  } else {
+    setUserCert(userId, { pfx: null, passphrase: null, certInfo });
+  }
 
-  const plugnotasIntegration = await integratePfxWithPlugNotas(userId, {
-    fileBuffer: file.buffer,
-    password,
-    cpfCnpj14: certDocument
-  });
+  const plugPfx = storedForPlugnotas?.pfx;
+  const plugPass = storedForPlugnotas?.passphrase;
+  const plugnotasIntegration =
+    plugPfx?.length && plugPass
+      ? await integratePfxWithPlugNotas(userId, {
+          fileBuffer: plugPfx,
+          password: plugPass,
+          cpfCnpj14: certDocument
+        })
+      : {
+          status: 'failed',
+          reason:
+            'Certificado salvo, mas não foi possível ler o arquivo para a PlugNotas. Verifique MEI_CERT_ENCRYPTION_KEY no servidor e use "Enviar certificado à PlugNotas".'
+        };
 
   const status = await getCertificateStatus(userId);
   return { ...status, publicCertificate: publicCert, plugnotasIntegration };

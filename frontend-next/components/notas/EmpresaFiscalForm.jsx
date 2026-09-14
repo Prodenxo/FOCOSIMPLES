@@ -133,6 +133,7 @@ export function EmpresaFiscalForm({
               <span className="font-medium text-[var(--text-primary)]">Usar NFS-e Nacional (Emissor Nacional)</span>
               <span className="mt-1 block text-xs text-[var(--text-muted)]">
                 Recomendado quando a prefeitura ainda não está homologada na PlugNotas (ex.: Aperibé/RJ). As notas vão pelo ambiente nacional.
+                Isso não cadastra o certificado .pfx — use o botão &quot;Enviar certificado à PlugNotas&quot; no card do certificado.
               </span>
             </span>
           </label>

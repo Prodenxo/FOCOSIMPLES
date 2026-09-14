@@ -2,11 +2,9 @@ import { HttpError, badRequest } from '../../utils/errors.js';
 import { normalizeDocDigits } from '../../utils/cpf-cnpj.js';
 import { normalizeIbgeMunicipioCodigo } from '../../utils/ibge-municipio-codigo.js';
 import {
-  decryptPassphrase,
   getDocumentosAtivosMirror,
   getEmitenteNfseSnapshot,
   getPlugNotasCertId,
-  loadCertificate,
   savePlugNotasCertId,
 } from '../mei-certificate-store.js';
 import { persistDocumentosAtivosMirrorAfterEmpresa } from '../mei-notas-documentos-mirror.js';
@@ -141,34 +139,21 @@ export const buildEmpresaPayloadFromEmitenteSnapshot = (
 };
 
 const tryAutoUploadStoredCertToPlugnotas = async (userId, cnpj14) => {
-  let stored;
+  let loaded;
   try {
-    stored = await loadCertificate(userId);
+    const { loadDecryptedCertificate } = await import('../certificate-repository.js');
+    loaded = await loadDecryptedCertificate(userId);
   } catch {
     return null;
   }
-  if (!stored) return null;
-
-  let password;
-  try {
-    password = decryptPassphrase(stored.passphraseEnc, stored.passphraseIv);
-  } catch {
-    return null;
-  }
-
-  let fileBuffer;
-  try {
-    fileBuffer = Buffer.from(stored.pfxBase64, 'base64');
-  } catch {
-    return null;
-  }
+  if (!loaded?.pfx?.length || !loaded.passphrase) return null;
 
   try {
     const result = await cadastrarCertificadoPlugNotas({
-      fileBuffer,
+      fileBuffer: loaded.pfx,
       fileName: 'certificado.pfx',
       mimeType: 'application/x-pkcs12',
-      password,
+      password: loaded.passphrase,
       cpfCnpj: cnpj14,
     });
     const certId = typeof result?.id === 'string' ? result.id.trim() : '';
