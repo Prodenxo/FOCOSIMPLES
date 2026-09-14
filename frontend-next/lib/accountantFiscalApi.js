@@ -4,9 +4,21 @@ function clientBase(empresaId) {
   return `/accountant/clients/${encodeURIComponent(empresaId)}`;
 }
 
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function pickList(data, ...keys) {
+  for (const key of keys) {
+    const candidate = key ? data?.[key] : data;
+    if (Array.isArray(candidate)) return candidate;
+  }
+  return [];
+}
+
 export async function listAccountantClients() {
   const data = await apiClient.get('/accountant/clients');
-  return data?.clients || data || [];
+  return pickList(data, 'clients');
 }
 
 export async function listAccountantProducts(empresaId, options = {}) {
@@ -17,14 +29,16 @@ export async function listAccountantProducts(empresaId, options = {}) {
   if (options.emitterUserId) params.set('emitterUserId', options.emitterUserId);
   const qs = params.toString();
   const data = await apiClient.get(`${clientBase(empresaId)}/products${qs ? `?${qs}` : ''}`);
-  return data?.products || data?.items || [];
+  return pickList(data, 'products', 'items');
 }
 
 export async function listAccountantEstablishments(empresaId) {
   const data = await apiClient.get(`${clientBase(empresaId)}/establishments`);
-  if (data?.establishments) return data;
+  if (Array.isArray(data?.establishments)) {
+    return { establishments: data.establishments, status: data.status ?? 'OK' };
+  }
   return {
-    establishments: Array.isArray(data) ? data : [],
+    establishments: asArray(data),
     status: data?.status ?? 'OK',
   };
 }
@@ -65,7 +79,7 @@ export async function updateAccountantClientProduct(empresaId, productId, body) 
 
 export async function listAccountantFiscalRules(empresaId) {
   const data = await apiClient.get(`${fiscalConfigBase(empresaId)}/rules`);
-  return data?.rules ?? [];
+  return pickList(data, 'rules');
 }
 
 export async function createAccountantRuleDraft(empresaId, rule) {
@@ -108,7 +122,7 @@ export async function fetchFiscalConfigurationReadiness(empresaId, establishment
 
 export async function listFiscalProductGroups(empresaId) {
   const data = await apiClient.get(`${fiscalConfigBase(empresaId)}/product-groups`);
-  return data?.groups ?? [];
+  return pickList(data, 'groups');
 }
 
 export async function createFiscalProductGroup(empresaId, input) {
@@ -128,7 +142,7 @@ export async function listFiscalProductGroupProducts(empresaId, groupId) {
   const data = await apiClient.get(
     `${fiscalConfigBase(empresaId)}/product-groups/${encodeURIComponent(groupId)}/products`,
   );
-  return data?.products ?? [];
+  return pickList(data, 'products');
 }
 
 export async function assignProductsToFiscalGroup(empresaId, groupId, productIds, replaceExisting = false) {

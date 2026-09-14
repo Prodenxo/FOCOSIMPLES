@@ -89,7 +89,7 @@ export function useAccountantFiscalProducts(options = {}) {
     setClientsLoadState('loading')
     try {
       const rows = await listAccountantClients()
-      setClients(rows)
+      setClients(Array.isArray(rows) ? rows : [])
       setClientsLoadState('ready')
       if (rows.length === 1) {
         const first = rows[0]
@@ -142,12 +142,14 @@ export function useAccountantFiscalProducts(options = {}) {
 
   const reloadProductGroups = useCallback(async (clientId) => {
     const groupRows = await listFiscalProductGroups(clientId)
-    setGroups(groupRows)
+    const safeGroups = Array.isArray(groupRows) ? groupRows : []
+    setGroups(safeGroups)
 
     const memberships = await Promise.all(
-      groupRows.map(async (group) => {
+      safeGroups.map(async (group) => {
         const products = await listFiscalProductGroupProducts(clientId, group.id)
-        return { group, products }
+        const safeProducts = Array.isArray(products) ? products : []
+        return { group, products: safeProducts }
       }),
     )
 
@@ -168,7 +170,7 @@ export function useAccountantFiscalProducts(options = {}) {
       listAccountantFiscalRules(clientId),
       fetchFiscalConfigurationReadiness(clientId),
     ])
-    setRules(ruleRows)
+    setRules(Array.isArray(ruleRows) ? ruleRows : [])
     setReadiness(readinessRow)
   }, [])
 
@@ -195,20 +197,23 @@ export function useAccountantFiscalProducts(options = {}) {
         }),
       ])
 
-      setEstablishments(establishmentResult.establishments)
+      const establishmentList = Array.isArray(establishmentResult.establishments)
+        ? establishmentResult.establishments
+        : []
+      setEstablishments(establishmentList)
       setEstablishmentStatus(establishmentResult.status)
-      setCatalog(catalogRows)
+      setCatalog(Array.isArray(catalogRows) ? catalogRows : [])
       const preferredEstablishment = selectedClient?.establishmentId ?? ''
       setEstablishmentIdState((prev) => {
         if (preferredEstablishment) {
           const preferredDigits = preferredEstablishment.replace(/\D/g, '')
-          const matched = establishmentResult.establishments.find(
+          const matched = establishmentList.find(
             (entry) => entry.establishmentId.replace(/\D/g, '') === preferredDigits,
           )
           if (matched) return matched.establishmentId
           return preferredEstablishment
         }
-        return resolveEstablishmentSelection(prev, establishmentResult.establishments)
+        return resolveEstablishmentSelection(prev, establishmentList)
       })
 
       await reloadProductGroups(selectedClientId)

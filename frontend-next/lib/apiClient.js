@@ -80,7 +80,10 @@ async function requestJson(path, options = {}, timeoutMs = DEFAULT_FETCH_TIMEOUT
     if (!response.ok || payload?.success === false) {
       throw new Error(resolveApiErrorMessage(payload, response.statusText));
     }
-    return payload?.data;
+    if (payload != null && Object.prototype.hasOwnProperty.call(payload, 'data')) {
+      return payload.data;
+    }
+    return payload;
   }
 
   const text = await response.text();
@@ -132,7 +135,10 @@ async function requestJsonPublic(path, options = {}) {
     if (!response.ok || payload?.success === false) {
       throw new Error(resolveApiErrorMessage(payload, response.statusText));
     }
-    return payload?.data;
+    if (payload != null && Object.prototype.hasOwnProperty.call(payload, 'data')) {
+      return payload.data;
+    }
+    return payload;
   }
 
   const text = await response.text();
