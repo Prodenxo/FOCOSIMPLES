@@ -163,9 +163,10 @@ export default function CertificadoPage() {
       );
 
       setEmpresaRegistered(isEmpresaCadastradaNoEmissor(data));
-      setCompany(hasEmpresa || hasPrefill ? (data || { cpfCnpj: documento }) : null);
-      if (hasEmpresa || hasPrefill) {
-        setCompanyForm(enrichedForm);
+      const canShowForm = hasEmpresa || hasPrefill || (hasUserCert && documento);
+      setCompany(canShowForm ? (data || { cpfCnpj: documento }) : null);
+      if (canShowForm) {
+        setCompanyForm(enrichedForm?.cpfCnpj ? enrichedForm : { ...enrichedForm, cpfCnpj: documento });
         setCompanyDirty(false);
       } else {
         setCompanyForm(null);
@@ -177,7 +178,7 @@ export default function CertificadoPage() {
     } finally {
       setCompanyLoading(false);
     }
-  }, [documento, enrichCompanyForm]);
+  }, [documento, enrichCompanyForm, hasUserCert]);
 
   useEffect(() => {
     if (!userId) return;
@@ -334,6 +335,9 @@ export default function CertificadoPage() {
     } catch (err) {
       const raw = err instanceof Error ? err.message : 'Falha ao salvar dados da empresa.';
       setCompanyError(humanizePlugNotasEmpresaError(raw));
+      if (!company) {
+        setCompany({ cpfCnpj: companyForm.cpfCnpj || documento });
+      }
     } finally {
       setCompanySaving(false);
     }
@@ -550,11 +554,9 @@ export default function CertificadoPage() {
             </div>
           </div>
 
-          {companyLoading && !company ? (
+          {companyLoading && !companyForm ? (
             <div className="mt-4"><LoadingPanel label="Carregando dados da empresa…" /></div>
-          ) : companyError ? (
-            <div className="mt-4"><ErrorPanel message={companyError} onRetry={loadCompany} /></div>
-          ) : !company ? (
+          ) : !companyForm && !hasUserCert ? (
             <div className="mt-4 flex items-start gap-3 rounded-[12px] border border-amber-200 bg-amber-50 p-4 text-sm dark:border-amber-900/40 dark:bg-amber-950/30">
               <FileWarning className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
               <div>
@@ -566,8 +568,27 @@ export default function CertificadoPage() {
                 </p>
               </div>
             </div>
-          ) : (
+          ) : companyForm ? (
             <form onSubmit={handleSaveCompany} className="mt-4 space-y-4">
+              {companyError ? (
+                <div className="rounded-[12px] border border-red-200 bg-red-50 p-4 dark:border-red-900/40 dark:bg-red-950/30">
+                  <p className="flex items-start gap-2 text-sm text-red-800 dark:text-red-200">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                    <span className="whitespace-pre-wrap">{companyError}</span>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCompanyError(null);
+                      void loadCompany();
+                    }}
+                    className="mt-3 text-xs font-semibold text-[var(--accent)] hover:underline"
+                  >
+                    Recarregar dados do emissor
+                  </button>
+                </div>
+              ) : null}
+
               {!empresaRegistered ? (
                 <p className="rounded-[10px] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
                   Primeira configuração: preencha os dados e salve para cadastrar a empresa no emissor fiscal.
@@ -620,11 +641,11 @@ export default function CertificadoPage() {
               <div className="flex flex-wrap items-center gap-3 border-t border-[var(--card-border)] pt-4">
                 <button
                   type="submit"
-                  disabled={!companyDirty || companySaving}
+                  disabled={(!companyDirty && !companyError) || companySaving}
                   className="inline-flex h-10 items-center gap-2 rounded-[12px] bg-[var(--accent)] px-4 text-sm font-semibold text-white shadow-[var(--shadow-card)] hover:opacity-90 disabled:opacity-60"
                 >
                   {companySaving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <CheckCircle2 className="h-4 w-4" aria-hidden />}
-                  Salvar alterações
+                  {companyError ? 'Tentar salvar novamente' : 'Salvar alterações'}
                 </button>
                 {companySavedAt ? (
                   <span className="text-xs text-[var(--text-muted)]">
@@ -633,6 +654,8 @@ export default function CertificadoPage() {
                 ) : null}
               </div>
             </form>
+          ) : (
+            <div className="mt-4"><ErrorPanel message="Não foi possível montar o formulário da empresa." onRetry={loadCompany} /></div>
           )}
         </Card>
       </div>
