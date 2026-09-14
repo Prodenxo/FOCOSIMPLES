@@ -70,7 +70,12 @@ export function EmpresaFiscalForm({
             onChange={(v) => onChange('cpfCnpj', v)}
             readOnly={readOnlyCnpj}
           />
-          <Field label="Inscrição municipal" value={form.inscricaoMunicipal} onChange={(v) => onChange('inscricaoMunicipal', v)} hint="Obrigatória para NFS-e." />
+          <Field
+            label="Inscrição municipal"
+            value={form.inscricaoMunicipal}
+            onChange={(v) => onChange('inscricaoMunicipal', v)}
+            hint="Obrigatória para NFS-e. Em alguns municípios coincide com o CNPJ (sem pontuação) — use o mesmo da nota autorizada."
+          />
           <Field label="Inscrição estadual" value={form.inscricaoEstadual} onChange={(v) => onChange('inscricaoEstadual', v)} hint="NF-e. Deixe vazio se isento." />
           <Field label="E-mail fiscal" value={form.email} onChange={(v) => onChange('email', v)} type="email" required />
           <Field label="Telefone" value={form.telefone} onChange={(v) => onChange('telefone', v)} />
