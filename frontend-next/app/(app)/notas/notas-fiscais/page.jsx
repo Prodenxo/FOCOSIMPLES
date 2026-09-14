@@ -38,6 +38,9 @@ import {
 } from '@/lib/fiscalApi';
 import {
   allowedEmitDocumentTypes,
+  catalogDocumentTypeForKind,
+  defaultCatalogUiKind,
+  resolveCatalogScope,
   resolveDocumentosPermitidos,
 } from '@/lib/documentosAtivos';
 import {
@@ -122,6 +125,52 @@ export default function NotasFiscaisPage() {
     [certStatus, company],
   );
 
+  const showClientes = searchParams.get('clientes') === '1';
+  const showCatalogo = searchParams.get('catalogo') === '1';
+  const showEmitir = searchParams.get('emitir') === '1';
+
+  const catalogScope = useMemo(
+    () => resolveCatalogScope(documentosPermitidos),
+    [documentosPermitidos],
+  );
+
+  const catalogUiKind = useMemo(() => {
+    if (!showCatalogo) return null;
+    if (!catalogScope.servicos && !catalogScope.produtos) return null;
+    const tipo = searchParams.get('tipo');
+    if (tipo === 'servicos' && catalogScope.servicos) return 'servicos';
+    if (tipo === 'produtos' && catalogScope.produtos) return 'produtos';
+    return defaultCatalogUiKind(catalogScope);
+  }, [showCatalogo, searchParams, catalogScope]);
+
+  const catalogDocumentType = catalogUiKind
+    ? catalogDocumentTypeForKind(catalogUiKind)
+    : null;
+
+  const catalogCopy = catalogUiKind === 'produtos'
+    ? {
+        title: 'Catálogo de produtos',
+        subtitle: 'Mercadorias para NF-e e NFC-e.',
+        add: 'Adicionar produto',
+        search: 'Buscar por descrição, código ou NCM',
+        loading: 'Carregando produtos…',
+        emptyTitle: 'Nenhum produto cadastrado',
+        emptyDesc: 'Adicione produtos com NCM e CFOP para usar nas emissões.',
+        savedCreate: 'Produto criado.',
+        savedUpdate: 'Produto atualizado.',
+      }
+    : {
+        title: 'Catálogo de serviços',
+        subtitle: 'Serviços para emissão de NFS-e.',
+        add: 'Adicionar serviço',
+        search: 'Buscar por descrição ou código de serviço',
+        loading: 'Carregando serviços…',
+        emptyTitle: 'Nenhum serviço cadastrado',
+        emptyDesc: 'Importe CNAEs ou adicione serviços manualmente.',
+        savedCreate: 'Serviço criado.',
+        savedUpdate: 'Serviço atualizado.',
+      };
+
   const documentTypeOptions = useMemo(() => {
     const labels = { nfse: 'NFS-e', nfe: 'NF-e', nfce: 'NFC-e' };
     const allowed = allowedEmitDocumentTypes(documentosPermitidos);
@@ -140,10 +189,6 @@ export default function NotasFiscaisPage() {
     }
     return base;
   }, [documentosPermitidos]);
-
-  const showClientes = searchParams.get('clientes') === '1';
-  const showCatalogo = searchParams.get('catalogo') === '1';
-  const showEmitir = searchParams.get('emitir') === '1';
 
   const loadShared = useCallback(async () => {
     try {
@@ -221,10 +266,15 @@ export default function NotasFiscaisPage() {
   }, [clienteSearch]);
 
   const loadProdutos = useCallback(async () => {
+    if (!catalogDocumentType) return;
     setProdutosLoading(true);
     setProdutosError(null);
     try {
-      const data = await fetchCatalogoProdutos({ q: produtoSearch, limit: 50 });
+      const data = await fetchCatalogoProdutos({
+        q: produtoSearch,
+        limit: 50,
+        documentType: catalogDocumentType,
+      });
       setProdutos(Array.isArray(data) ? data : (data?.produtos || data?.items || []));
     } catch (err) {
       setProdutosError(err instanceof Error ? err.message : 'Falha ao carregar catálogo.');
@@ -232,7 +282,7 @@ export default function NotasFiscaisPage() {
     } finally {
       setProdutosLoading(false);
     }
-  }, [produtoSearch]);
+  }, [produtoSearch, catalogDocumentType]);
 
   useEffect(() => {
     if (!userId) return;
@@ -537,13 +587,15 @@ export default function NotasFiscaisPage() {
               <Users className="h-3.5 w-3.5" aria-hidden />
               Clientes
             </a>
-            <a
-              href="/notas/notas-fiscais?catalogo=1"
-              className="inline-flex h-10 items-center gap-2 rounded-[12px] border border-[var(--card-border)] bg-[var(--card-bg)] px-3 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--canvas)]"
-            >
-              <BookOpen className="h-3.5 w-3.5" aria-hidden />
-              Catálogo
-            </a>
+            {(catalogScope.servicos || catalogScope.produtos) ? (
+              <a
+                href={`/notas/notas-fiscais?catalogo=1&tipo=${defaultCatalogUiKind(catalogScope)}`}
+                className="inline-flex h-10 items-center gap-2 rounded-[12px] border border-[var(--card-border)] bg-[var(--card-bg)] px-3 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--canvas)]"
+              >
+                <BookOpen className="h-3.5 w-3.5" aria-hidden />
+                {catalogScope.servicos && !catalogScope.produtos ? 'Serviços' : 'Catálogo'}
+              </a>
+            ) : null}
           </div>
         </div>
 
@@ -661,13 +713,37 @@ export default function NotasFiscaisPage() {
       ) : null}
 
       {/* Painel de Catálogo */}
-      {showCatalogo ? (
+      {showCatalogo && catalogUiKind ? (
         <Card className="p-5 sm:p-6">
+          {catalogScope.servicos && catalogScope.produtos ? (
+            <div className="mb-4 flex flex-wrap gap-2">
+              <a
+                href="/notas/notas-fiscais?catalogo=1&tipo=servicos"
+                className={`inline-flex h-9 items-center rounded-[10px] px-3 text-xs font-semibold ${
+                  catalogUiKind === 'servicos'
+                    ? 'bg-[var(--accent)] text-white'
+                    : 'border border-[var(--card-border)] text-[var(--text-primary)] hover:bg-[var(--canvas)]'
+                }`}
+              >
+                Serviços (NFS-e)
+              </a>
+              <a
+                href="/notas/notas-fiscais?catalogo=1&tipo=produtos"
+                className={`inline-flex h-9 items-center rounded-[10px] px-3 text-xs font-semibold ${
+                  catalogUiKind === 'produtos'
+                    ? 'bg-[var(--accent)] text-white'
+                    : 'border border-[var(--card-border)] text-[var(--text-primary)] hover:bg-[var(--canvas)]'
+                }`}
+              >
+                Produtos (NF-e)
+              </a>
+            </div>
+          ) : null}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <div>
-                <h3 className="text-base font-semibold text-[var(--text-primary)]">Catálogo de produtos</h3>
-                <p className="mt-1 text-xs text-[var(--text-muted)]">Itens disponíveis para emissão fiscal.</p>
+                <h3 className="text-base font-semibold text-[var(--text-primary)]">{catalogCopy.title}</h3>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">{catalogCopy.subtitle}</p>
               </div>
               <button
                 type="button"
@@ -678,7 +754,7 @@ export default function NotasFiscaisPage() {
                 className="inline-flex h-9 items-center gap-1.5 rounded-[10px] bg-[var(--accent)] px-3 text-xs font-semibold text-white hover:opacity-90"
               >
                 <Plus className="h-3.5 w-3.5" />
-                Adicionar
+                {catalogCopy.add}
               </button>
             </div>
             <label className="flex h-10 w-full max-w-xs items-center gap-2 rounded-[12px] border border-[var(--card-border)] bg-[var(--canvas)] px-3 text-sm sm:w-72">
@@ -687,16 +763,16 @@ export default function NotasFiscaisPage() {
                 type="search"
                 value={produtoSearch}
                 onChange={(e) => setProdutoSearch(e.target.value)}
-                placeholder="Buscar por descrição ou código"
+                placeholder={catalogCopy.search}
                 className="w-full bg-transparent text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
               />
             </label>
           </div>
 
           <div className="mt-4">
-            {produtosLoading ? <LoadingPanel label="Carregando catálogo…" />
+            {produtosLoading ? <LoadingPanel label={catalogCopy.loading} />
               : produtosError ? <ErrorPanel message={produtosError} onRetry={loadProdutos} />
-              : produtos.length === 0 ? <EmptyPanel title="Nenhum produto cadastrado" description="Importe CNAEs ou adicione produtos manualmente." />
+              : produtos.length === 0 ? <EmptyPanel title={catalogCopy.emptyTitle} description={catalogCopy.emptyDesc} />
               : (
                 <ul className="divide-y divide-[var(--card-border)]">
                   {produtos.slice(0, 20).map((p) => (
@@ -874,12 +950,16 @@ export default function NotasFiscaisPage() {
       {showProdutoModal ? (
         <ProdutoModal
           produto={editingProduto}
+          catalogKind={catalogUiKind === 'produtos' ? 'nfe' : 'nfse'}
           onClose={() => {
             setShowProdutoModal(false);
             setEditingProduto(null);
           }}
           onSuccess={() => {
-            setActionMsg({ type: 'success', text: editingProduto ? 'Produto atualizado.' : 'Produto criado.' });
+            setActionMsg({
+              type: 'success',
+              text: editingProduto ? catalogCopy.savedUpdate : catalogCopy.savedCreate,
+            });
             loadProdutos();
           }}
         />

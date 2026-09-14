@@ -37,3 +37,26 @@ export function allowedEmitDocumentTypes(allowed) {
   if (allowed?.nfce) types.push('NFCE');
   return types;
 }
+
+/** Catálogo: serviços (NFS-e) vs produtos (NF-e / NFC-e). */
+export function resolveCatalogScope(allowed) {
+  return {
+    servicos: allowed?.nfse === true,
+    produtos: allowed?.nfe === true || allowed?.nfce === true,
+  };
+}
+
+/** @typedef {'servicos' | 'produtos'} CatalogUiKind */
+
+/** @param {ReturnType<typeof resolveCatalogScope>} scope */
+export function defaultCatalogUiKind(scope) {
+  if (scope.servicos && !scope.produtos) return 'servicos';
+  if (scope.produtos && !scope.servicos) return 'produtos';
+  if (scope.servicos) return 'servicos';
+  return 'produtos';
+}
+
+/** @param {CatalogUiKind} kind */
+export function catalogDocumentTypeForKind(kind) {
+  return kind === 'produtos' ? 'NFE' : 'NFSE';
+}
