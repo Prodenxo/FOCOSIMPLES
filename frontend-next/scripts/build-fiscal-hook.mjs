@@ -8,6 +8,10 @@ const outPath = path.join(root, 'hooks', 'useAccountantFiscalProducts.js');
 
 let s = fs.readFileSync(tsPath, 'utf8');
 
+if (!/^import \{ useCallback/m.test(s)) {
+  s = `import { useCallback, useEffect, useMemo, useState } from 'react'\n${s}`;
+}
+
 s = s.replace(
   /import type \{ NfseCatalogProduto \} from '@\/services\/meiNotasService'\n/,
   '',
