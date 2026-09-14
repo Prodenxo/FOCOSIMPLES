@@ -1,4 +1,4 @@
-import test, { afterEach } from 'node:test';
+import test, { afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 process.env.SUPABASE_URL = process.env.SUPABASE_URL || 'https://example.supabase.co';
@@ -50,6 +50,41 @@ function createDeleteMock(kind, opts) {
               assert.equal(c1, 'id');
               assert.equal(v1, recordId);
               return {
+                eq(c2, v2) {
+                  assert.equal(c2, 'user_id');
+                  if (lookupRow && lookupRow.user_id !== v2) {
+                    return {
+                      maybeSingle() {
+                        return Promise.resolve({ data: null, error: null });
+                      }
+                    };
+                  }
+                  if (lookupRow && lookupRow.user_id === v2) {
+                    return {
+                      maybeSingle() {
+                        return Promise.resolve({
+                          data: { ...lookupRow, metadata_json: null },
+                          error: null
+                        });
+                      }
+                    };
+                  }
+                  if (v2 === userId) {
+                    return {
+                      maybeSingle() {
+                        return Promise.resolve({
+                          data: { id: recordId, user_id: userId, metadata_json: null },
+                          error: null
+                        });
+                      }
+                    };
+                  }
+                  return {
+                    maybeSingle() {
+                      return Promise.resolve({ data: null, error: null });
+                    }
+                  };
+                },
                 maybeSingle() {
                   return Promise.resolve({ data: lookupRow, error: null });
                 }
@@ -62,9 +97,15 @@ function createDeleteMock(kind, opts) {
   };
 }
 
+beforeEach(async () => {
+  const mod = await import('../src/services/mei-notas.service.js');
+  mod.__setResolveCatalogUserIdsForActorForTests(async (uid) => [uid]);
+});
+
 afterEach(async () => {
   const mod = await import('../src/services/mei-notas.service.js');
   mod.__resetGetDbForTests();
+  mod.__resetResolveCatalogUserIdsForActorForTests();
 });
 
 test('eliminarCatalogoCliente — sucesso (uma linha removida)', async () => {

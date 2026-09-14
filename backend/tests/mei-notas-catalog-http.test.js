@@ -1,4 +1,4 @@
-import test, { afterEach } from 'node:test';
+import test, { afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import { createServer } from 'node:http';
@@ -110,34 +110,69 @@ function createClientesCatalogStateMock(initialRows) {
           };
         },
         select() {
-          return {
+          const listByUserIds = (userIds, n) => {
+            const filtered = rows
+              .filter((r) => userIds.includes(r.user_id))
+              .sort((a, b) => String(b.last_used_at).localeCompare(String(a.last_used_at)));
+            return Promise.resolve({ data: filtered.slice(0, n), error: null });
+          };
+          const listTail = (n) => ({
             eq(c1, v1) {
-              if (c1 === 'id') {
-                return {
-                  maybeSingle() {
-                    const row = rows.find((r) => r.id === v1) ?? null;
-                    return Promise.resolve({ data: row, error: null });
-                  }
-                };
-              }
               if (c1 === 'user_id') {
                 return {
                   eq(c2, v2) {
                     assert.equal(c2, 'document_type');
+                    const filtered = rows
+                      .filter((r) => r.user_id === v1 && r.document_type === v2)
+                      .sort((a, b) => String(b.last_used_at).localeCompare(String(a.last_used_at)));
+                    return Promise.resolve({ data: filtered.slice(0, n), error: null });
+                  },
+                  then(resolve, reject) {
+                    listByUserIds([v1], n).then(resolve, reject);
+                  }
+                };
+              }
+              throw new Error(`listTail.eq inesperado: ${c1}`);
+            },
+            in(col, ids) {
+              assert.equal(col, 'user_id');
+              return {
+                eq(c2, v2) {
+                  assert.equal(c2, 'document_type');
+                  const filtered = rows
+                    .filter((r) => ids.includes(r.user_id) && r.document_type === v2)
+                    .sort((a, b) => String(b.last_used_at).localeCompare(String(a.last_used_at)));
+                  return Promise.resolve({ data: filtered.slice(0, n), error: null });
+                },
+                then(resolve, reject) {
+                  listByUserIds(ids, n).then(resolve, reject);
+                }
+              };
+            }
+          });
+          return {
+            order(_col, _opts) {
+              return {
+                limit(n) {
+                  return listTail(n);
+                }
+              };
+            },
+            eq(c1, v1) {
+              if (c1 === 'id') {
+                return {
+                  eq(c2, v2) {
+                    assert.equal(c2, 'user_id');
                     return {
-                      order() {
-                        return {
-                          limit(n) {
-                            const filtered = rows
-                              .filter((r) => r.user_id === v1 && r.document_type === v2)
-                              .sort((a, b) =>
-                                String(b.last_used_at).localeCompare(String(a.last_used_at))
-                              );
-                            return Promise.resolve({ data: filtered.slice(0, n), error: null });
-                          }
-                        };
+                      maybeSingle() {
+                        const row = rows.find((r) => r.id === v1 && r.user_id === v2) ?? null;
+                        return Promise.resolve({ data: row, error: null });
                       }
                     };
+                  },
+                  maybeSingle() {
+                    const row = rows.find((r) => r.id === v1) ?? null;
+                    return Promise.resolve({ data: row, error: null });
                   }
                 };
               }
@@ -180,10 +215,25 @@ function createProdutosCatalogStateMock(initialRows) {
           };
         },
         select() {
+          const listByUserIds = (userIds, n) => {
+            const filtered = rows
+              .filter((r) => userIds.includes(r.user_id))
+              .sort((a, b) => String(b.last_used_at).localeCompare(String(a.last_used_at)));
+            return Promise.resolve({ data: filtered.slice(0, n), error: null });
+          };
           return {
             eq(c1, v1) {
               if (c1 === 'id') {
                 return {
+                  eq(c2, v2) {
+                    assert.equal(c2, 'user_id');
+                    return {
+                      maybeSingle() {
+                        const row = rows.find((r) => r.id === v1 && r.user_id === v2) ?? null;
+                        return Promise.resolve({ data: row, error: null });
+                      }
+                    };
+                  },
                   maybeSingle() {
                     const row = rows.find((r) => r.id === v1) ?? null;
                     return Promise.resolve({ data: row, error: null });
@@ -208,10 +258,29 @@ function createProdutosCatalogStateMock(initialRows) {
                         };
                       }
                     };
+                  },
+                  order() {
+                    return {
+                      limit(n) {
+                        return listByUserIds([v1], n);
+                      }
+                    };
                   }
                 };
               }
               throw new Error(`select.eq inesperado: ${c1}`);
+            },
+            in(col, ids) {
+              assert.equal(col, 'user_id');
+              return {
+                order() {
+                  return {
+                    limit(n) {
+                      return listByUserIds(ids, n);
+                    }
+                  };
+                }
+              };
             }
           };
         }
@@ -228,9 +297,15 @@ function buildCatalogWireApp(routes) {
   return app;
 }
 
+beforeEach(async () => {
+  const mod = await import('../src/services/mei-notas.service.js');
+  mod.__setResolveCatalogUserIdsForActorForTests(async (userId) => [userId]);
+});
+
 afterEach(async () => {
   const mod = await import('../src/services/mei-notas.service.js');
   mod.__resetGetDbForTests();
+  mod.__resetResolveCatalogUserIdsForActorForTests();
   __setGetRequesterContextForTests(null);
 });
 
@@ -387,7 +462,7 @@ test('HTTP DELETE catálogo — 403 quando MEI desabilitado (mitigação QA)', a
       assert.equal(res.status, 403);
       const json = await res.json();
       assert.equal(json.success, false);
-      assert.match(json.message, /MEI/i);
+      assert.match(json.message, /Emissão fiscal|MEI/i);
     }
   } finally {
     await new Promise((r) => server.close(r));

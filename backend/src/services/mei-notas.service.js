@@ -3870,8 +3870,19 @@ export const eliminarCatalogoCliente = async (userId, id) => {
   try {
     existing = await findCatalogClienteForActor(userId, recordId);
   } catch (err) {
-    if (err?.statusCode === 404) return;
-    throw err;
+    if (err?.status !== 404 && err?.statusCode !== 404) throw err;
+    const catalogUserIds = await resolveCatalogUserIdsForActorRef(userId);
+    const dbClient = getDb();
+    const { data: anyRow, error: errLookup } = await dbClient
+      .from(CLIENTS_TABLE)
+      .select('id, user_id')
+      .eq('id', recordId)
+      .maybeSingle();
+    if (errLookup) throw badRequest(errLookup.message);
+    if (anyRow && !catalogUserIds.includes(anyRow.user_id)) {
+      throw notFound('Cliente do catálogo não encontrado');
+    }
+    return;
   }
   const ownerUserId = existing.user_id;
   const dbClient = getDb();
