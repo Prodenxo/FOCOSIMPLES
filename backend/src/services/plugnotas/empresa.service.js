@@ -1170,7 +1170,21 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
 
   const docPost = resolveDocumentosAtivosForPost(payload);
   stripDocumentosAtivos(payload);
-  applyEmpresaPlugnotasDocumentSelectionForPost(payload, docPost.selection, { nfseMode: attemptNfseMode });
+  const preserveOfficialNfse =
+    attemptNfseMode === 'nacional' && nfseContractInput.hasOfficialContractInput;
+  if (preserveOfficialNfse) {
+    applyNfseNationalContractPolicy(payload);
+    normalizeInscricaoEstadualForEmpresaPayload(payload);
+    const sel = docPost.selection;
+    payload.nfe = sel.nfe
+      ? { ativo: true, tipoContrato: 0, config: { producao: true, serie: 1, numero: 1 } }
+      : { ...PLUGNOTAS_EMPRESA_APENAS_NFSE_NFE };
+    payload.nfce = sel.nfce
+      ? { ativo: true, tipoContrato: 0, config: { producao: true, serie: 1, numero: 1 } }
+      : { ...PLUGNOTAS_EMPRESA_APENAS_NFSE_NFCE };
+  } else {
+    applyEmpresaPlugnotasDocumentSelectionForPost(payload, docPost.selection, { nfseMode: attemptNfseMode });
+  }
 
   normalizePayloadEnderecoCodigoCidade(payload);
 
@@ -1269,6 +1283,21 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
       if (isMunicipioHomologacaoPlugnotasError(createError)) {
         const recovered = await tryPatchAfterPostFailure('homologacao_municipio_post_400');
         if (recovered) return recovered;
+        try {
+          await patchEmpresaPlugNotasDireto(cnpj, { ...payload });
+          const refreshed = await consultarEmpresaPlugNotas(cnpj);
+          const record = unwrapPlugnotasEmpresaRecord(refreshed);
+          if (record && String(record.razaoSocial || record.nome || '').trim()) {
+            return {
+              cnpj,
+              message: 'Empresa sincronizada no emissor fiscal (PATCH direto).',
+              operation: 'updated',
+              raw: sanitizePlugnotasEmpresaJsonForClientResponse(refreshed)
+            };
+          }
+        } catch {
+          /* mantém erro original */
+        }
       }
       throw createError;
     }

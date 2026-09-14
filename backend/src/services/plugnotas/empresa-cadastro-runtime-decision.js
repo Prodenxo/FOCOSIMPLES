@@ -8,6 +8,7 @@ import {
   PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02_CODE,
   PREFEITURA_IBGE_APENAS_INSUFICIENTE_DP02_MESSAGE
 } from './prefeituraIbgeOnlyBlock.js';
+import { isFocoSimplesProduct } from './plugnotas-mei-empresa-policy.js';
 
 export const PLUGNOTAS_EMPRESA_PAYLOAD_CONTRATO_CODE = 'payload_contrato';
 export const PLUGNOTAS_EMPRESA_AMBIENTE_CONFIGURACAO_CODE = 'ambiente_configuracao';
@@ -159,6 +160,19 @@ export const resolveEmpresaCadastroMunicipioRuntimeDecision = (preflight, govern
 
   const authRequired = Boolean(preflight.requiresLogin || preflight.requiresSenha);
   const natOk = preflight.padraoNacionalEnabled === true;
+
+  // Foco Simples + NFS-e Nacional: sempre envia à PlugNotas (produção); não bloqueia no BFF.
+  if (isFocoSimplesProduct() && attemptNfseMode === 'nacional' && !hasPartial) {
+    return {
+      allowUpstream: true,
+      runtimeDecision: buildRuntimeDecisionFromPreflight(
+        'success_nacional',
+        preflight,
+        false,
+        { attemptMode: 'nacional' }
+      )
+    };
+  }
 
   if (hasPartial) {
     return {
