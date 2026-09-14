@@ -44,6 +44,11 @@ import {
   resolveDocumentosPermitidos,
 } from '@/lib/documentosAtivos';
 import {
+  catalogProdutoSubtitle,
+  catalogProdutoTitle,
+  catalogProdutoValorSugerido,
+} from '@/lib/catalogProdutoDisplay';
+import {
   describeDocumentType,
   downloadBlob,
   formatCurrencyBRL,
@@ -775,8 +780,11 @@ export default function NotasFiscaisPage() {
               : produtos.length === 0 ? <EmptyPanel title={catalogCopy.emptyTitle} description={catalogCopy.emptyDesc} />
               : (
                 <ul className="divide-y divide-[var(--card-border)]">
-                  {produtos.slice(0, 20).map((p) => (
-                    <li key={p.id || p.codigo}>
+                  {produtos.slice(0, 20).map((p) => {
+                    const valor = catalogProdutoValorSugerido(p.valor_sugerido)
+                      ?? catalogProdutoValorSugerido(p.valorUnitario);
+                    return (
+                    <li key={p.id || p.codigo || p.cnae}>
                       <button
                         type="button"
                         onClick={() => {
@@ -787,22 +795,22 @@ export default function NotasFiscaisPage() {
                       >
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium text-[var(--text-primary)]">
-                            {p.descricao || p.nome || p.titulo || '—'}
+                            {catalogProdutoTitle(p)}
                           </p>
                           <p className="text-xs text-[var(--text-muted)]">
-                            {p.codigo || p.ncm || p.codigoServico || '—'}
+                            {catalogProdutoSubtitle(p)}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-semibold text-[var(--text-primary)] tabular-nums">
-                            {typeof p.valor_sugerido === 'number' ? formatCurrencyBRL(p.valor_sugerido) :
-                             typeof p.valorUnitario === 'number' ? formatCurrencyBRL(p.valorUnitario) : '—'}
+                            {valor != null ? formatCurrencyBRL(valor) : '—'}
                           </span>
                           <ChevronRight className="h-4 w-4 text-[var(--text-muted)]" />
                         </div>
                       </button>
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               )}
           </div>

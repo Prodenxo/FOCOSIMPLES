@@ -44,8 +44,8 @@ export function ProdutoModal({ produto, catalogKind = 'nfse', onClose, onSuccess
 
   const [form, setForm] = useState({
     codigo: produto?.codigo || '',
-    nome: produto?.nome || '',
-    discriminacao: produto?.discriminacao || '',
+    nome: produto?.nome || produto?.discriminacao || '',
+    discriminacao: produto?.discriminacao || produto?.nome || '',
     descricao: produto?.descricao || '',
     ncm: produto?.ncm || '',
     cnae: produto?.cnae || '',
