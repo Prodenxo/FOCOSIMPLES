@@ -19,7 +19,7 @@ export function useProductFiscalScenarios(issuerUf = 'RJ') {
   });
 
   const activeScenario = useMemo(
-    () => scenarios.find((s) => s.id === activeScenarioId) ?? null,
+    () => (Array.isArray(scenarios) ? scenarios : []).find((s) => s.id === activeScenarioId) ?? null,
     [activeScenarioId, scenarios],
   );
 
@@ -39,13 +39,13 @@ export function useProductFiscalScenarios(issuerUf = 'RJ') {
       uiStatus: 'PENDENTE',
       ruleId: null,
     };
-    setScenarios((prev) => [...prev, next]);
+    setScenarios((prev) => [...(Array.isArray(prev) ? prev : []), next]);
     setActiveScenarioId(id);
     return id;
   }, [issuerUf]);
 
   const updateScenarioForm = useCallback((scenarioId, patch) => {
-    setScenarios((prev) => prev.map((scenario) => (
+    setScenarios((prev) => (Array.isArray(prev) ? prev : []).map((scenario) => (
       scenario.id === scenarioId
         ? {
           ...scenario,
@@ -57,7 +57,7 @@ export function useProductFiscalScenarios(issuerUf = 'RJ') {
   }, []);
 
   const removeScenario = useCallback((scenarioId) => {
-    setScenarios((prev) => prev.filter((s) => s.id !== scenarioId));
+    setScenarios((prev) => (Array.isArray(prev) ? prev : []).filter((s) => s.id !== scenarioId));
     setActiveScenarioId((current) => (current === scenarioId ? null : current));
   }, []);
 
@@ -73,7 +73,7 @@ export function useProductFiscalScenarios(issuerUf = 'RJ') {
   }, [issuerUf]);
 
   const markScenarioSaved = useCallback((scenarioId, payload) => {
-    setScenarios((prev) => prev.map((scenario) => (
+    setScenarios((prev) => (Array.isArray(prev) ? prev : []).map((scenario) => (
       scenario.id === scenarioId
         ? { ...scenario, ruleId: payload.ruleId, uiStatus: payload.uiStatus, status: 'DRAFT' }
         : scenario

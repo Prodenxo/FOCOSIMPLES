@@ -72,27 +72,33 @@ export function useAccountantFiscalProducts(options = {}) {
   const [creatingProduct, setCreatingProduct] = useState(false)
   const [commercialForm, setCommercialForm] = useState(emptyCommercialProductForm())
 
+  const clientRows = useMemo(
+    () => (Array.isArray(clients) ? clients : []),
+    [clients],
+  )
+
   const selectedClientId = useMemo(() => {
     if (!selectedClientKey) return null
-    const matched = clients.find(
+    const matched = clientRows.find(
       (client) => (client.clientKey ?? client.empresaId) === selectedClientKey,
     )
     return matched?.empresaId ?? selectedClientKey.split(':')[0] ?? null
-  }, [clients, selectedClientKey])
+  }, [clientRows, selectedClientKey])
 
   const selectedClient = useMemo(
-    () => clients.find((c) => (c.clientKey ?? c.empresaId) === selectedClientKey) ?? null,
-    [clients, selectedClientKey],
+    () => clientRows.find((c) => (c.clientKey ?? c.empresaId) === selectedClientKey) ?? null,
+    [clientRows, selectedClientKey],
   )
 
   const loadClients = useCallback(async () => {
     setClientsLoadState('loading')
     try {
       const rows = await listAccountantClients()
-      setClients(Array.isArray(rows) ? rows : [])
+      const safeRows = Array.isArray(rows) ? rows : []
+      setClients(safeRows)
       setClientsLoadState('ready')
-      if (rows.length === 1) {
-        const first = rows[0]
+      if (safeRows.length === 1) {
+        const first = safeRows[0]
         setSelectedClientKey(first.clientKey ?? first.empresaId)
         if (first.establishmentId) {
           setEstablishmentIdState(first.establishmentId)
@@ -118,7 +124,7 @@ export function useAccountantFiscalProducts(options = {}) {
   const selectClient = useCallback((clientKey) => {
     setSelectedClientKey(clientKey)
     const matched = clientKey
-      ? clients.find((client) => (client.clientKey ?? client.empresaId) === clientKey)
+      ? clientRows.find((client) => (client.clientKey ?? client.empresaId) === clientKey)
       : null
     const establishmentId = matched?.establishmentId
       ?? (clientKey?.split(':')[1]?.replace(/\D/g, '') ?? '')
@@ -138,12 +144,12 @@ export function useAccountantFiscalProducts(options = {}) {
     setCommercialForm(emptyCommercialProductForm())
     setErrorMessage(null)
     setLoadState(clientKey ? 'loading' : 'idle')
-  }, [clients])
+  }, [clientRows])
 
   const reloadProductGroups = useCallback(async (clientId) => {
     const groupRows = await listFiscalProductGroups(clientId)
     const safeGroups = Array.isArray(groupRows) ? groupRows : []
-    setGroups(safeGroups)
+    setGroups(Array.isArray(safeGroups) ? safeGroups : [])
 
     const memberships = await Promise.all(
       safeGroups.map(async (group) => {
@@ -285,7 +291,9 @@ export function useAccountantFiscalProducts(options = {}) {
   }, [reload])
 
   const rows = useMemo(() => {
-    return catalog.map((product) => {
+    const safeCatalog = Array.isArray(catalog) ? catalog : []
+    const safeRules = Array.isArray(rules) ? rules : []
+    return safeCatalog.map((product) => {
       const meta = readCatalogNcmCest(product.metadata_json)
       const group = productGroupMap[product.id] ?? null
 
@@ -307,7 +315,7 @@ export function useAccountantFiscalProducts(options = {}) {
       }
 
       const matched = findRulesForProductAtEstablishment(
-        rules,
+        safeRules,
         product.id,
         group?.id ?? null,
         establishmentId,
@@ -334,7 +342,8 @@ export function useAccountantFiscalProducts(options = {}) {
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return rows.filter((row) => {
+    const tableRows = Array.isArray(rows) ? rows : []
+    return tableRows.filter((row) => {
       if (statusFilter !== 'ALL' && row.fiscalStatus !== statusFilter) return false
       if (groupFilter !== 'ALL' && row.grupoFiscalId !== groupFilter) return false
       if (!q) return true
@@ -468,7 +477,8 @@ export function useProductFiscalConfiguration(options) {
   }, [])
 
   const hydrateCommercialProduct = useCallback((productId) => {
-    const product = options.catalog.find((p) => p.id === productId) ?? null
+    const catalogRows = Array.isArray(options.catalog) ? options.catalog : []
+    const product = catalogRows.find((p) => p.id === productId) ?? null
     setCatalogItem(product)
     const meta = readCatalogNcmCest(product?.metadata_json)
     const group = options.productGroupMap[productId] ?? null
@@ -487,7 +497,8 @@ export function useProductFiscalConfiguration(options) {
     if (!options.clientEmpresaId || !establishmentId) return
     setLoading(true)
     try {
-      const product = options.catalog.find((p) => p.id === productId) ?? null
+      const catalogRows = Array.isArray(options.catalog) ? options.catalog : []
+      const product = catalogRows.find((p) => p.id === productId) ?? null
       const meta = readCatalogNcmCest(product?.metadata_json)
 
       const [companyProfile, productProfile, ruleRows] = await Promise.all([

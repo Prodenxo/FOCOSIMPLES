@@ -19,6 +19,7 @@ import { AppSelect } from '@/components/ui/AppSelect';
 import { EmptyPanel } from '@/components/ui/EmptyPanel';
 import { ErrorPanel } from '@/components/ui/ErrorPanel';
 import { LoadingPanel } from '@/components/ui/LoadingPanel';
+import { asArray } from '@/lib/accountantFiscalApi';
 
 function Field({ label, children }) {
   return (
@@ -36,7 +37,14 @@ function inputClass() {
 export default function AccountantFiscalProductsPage() {
   const { role } = useAuth();
   const canAccess = hasRole(role, ['admin', 'superadmin']);
-  const list = useAccountantFiscalProducts({ role });
+  const list = useAccountantFiscalProducts();
+
+  const clients = asArray(list.clients);
+  const groups = asArray(list.groups);
+  const establishments = asArray(list.establishments);
+  const catalog = asArray(list.catalog);
+  const rows = asArray(list.rows);
+  const fiscalRules = asArray(list.rules);
 
   const [registrationEstablishmentId, setRegistrationEstablishmentId] = useState('');
   const [registrationProductId, setRegistrationProductId] = useState(null);
@@ -49,7 +57,7 @@ export default function AccountantFiscalProductsPage() {
     || list.selectedClient?.razaoSocial
     || null;
 
-  const issuerUf = list.establishments.find(
+  const issuerUf = establishments.find(
     (e) => e.establishmentId === (registrationEstablishmentId || list.establishmentId),
   )?.issuerUf ?? 'RJ';
 
@@ -62,10 +70,10 @@ export default function AccountantFiscalProductsPage() {
     clientEmpresaId: list.selectedClientId,
     productId: configProductId,
     establishmentId: configEstablishmentId || list.establishmentId,
-    rules: list.rules,
-    groups: list.groups,
-    productGroupMap: list.productGroupMap,
-    catalog: list.catalog,
+    rules: fiscalRules,
+    groups,
+    productGroupMap: list.productGroupMap ?? {},
+    catalog,
     canEdit: canAccess,
     onSaved: async () => {
       setToast({ type: 'success', text: 'Configuração fiscal salva.' });
@@ -81,19 +89,19 @@ export default function AccountantFiscalProductsPage() {
   });
 
   const clientOptions = useMemo(
-    () => list.clients.map((c) => ({
+    () => clients.map((c) => ({
       value: c.clientKey ?? c.empresaId,
       label: c.label || c.nomeFantasia || c.razaoSocial || c.cpfCnpj || c.empresaId,
     })),
-    [list.clients],
+    [clients],
   );
 
   const groupFilterOptions = useMemo(
     () => [
       { value: 'ALL', label: 'Todos os grupos' },
-      ...list.groups.map((g) => ({ value: g.id, label: g.name })),
+      ...groups.map((g) => ({ value: g.id, label: g.name })),
     ],
-    [list.groups],
+    [groups],
   );
 
   const handleStartNewProduct = () => {
@@ -133,12 +141,15 @@ export default function AccountantFiscalProductsPage() {
       setToast({ type: 'error', text: 'Adicione um cenário fiscal.' });
       return;
     }
-    const catalogProduct = list.catalog.find((p) => p.id === registrationProductId) ?? null;
+    const catalogProduct = catalog.find((p) => p.id === registrationProductId) ?? null;
     const existingRule = activeScenario.ruleId
-      ? list.rules.find((r) => r.id === activeScenario.ruleId) ?? null
+      ? fiscalRules.find((r) => r.id === activeScenario.ruleId) ?? null
       : null;
+    const scenarioForm = activeScenario.form && typeof activeScenario.form === 'object'
+      ? activeScenario.form
+      : {};
     const form = {
-      ...activeScenario.form,
+      ...scenarioForm,
       origemMercadoria: scenarios.merchandiseFacts.origemMercadoria,
       itemSource: scenarios.merchandiseFacts.itemSource,
       priorStStatus: scenarios.merchandiseFacts.priorStStatus,
@@ -252,7 +263,7 @@ export default function AccountantFiscalProductsPage() {
                 <AppSelect
                   value={list.commercialForm.fiscalProductGroupId}
                   onChange={(v) => list.setCommercialForm((p) => ({ ...p, fiscalProductGroupId: v }))}
-                  options={[{ value: '', label: 'Sem grupo' }, ...list.groups.map((g) => ({ value: g.id, label: g.name }))]}
+                  options={[{ value: '', label: 'Sem grupo' }, ...groups.map((g) => ({ value: g.id, label: g.name }))]}
                 />
               </Field>
             </div>
@@ -267,10 +278,10 @@ export default function AccountantFiscalProductsPage() {
                   label="Estabelecimento (CNPJ emissor)"
                   value={registrationEstablishmentId}
                   onChange={setRegistrationEstablishmentId}
-                  options={list.establishments.map((e) => ({ value: e.establishmentId, label: e.label }))}
+                  options={establishments.map((e) => ({ value: e.establishmentId, label: e.label }))}
                 />
                 <div className="flex flex-wrap gap-2">
-                  {scenarios.scenarios.map((s) => (
+                  {asArray(scenarios.scenarios).map((s) => (
                     <button
                       key={s.id}
                       type="button"
@@ -317,8 +328,8 @@ export default function AccountantFiscalProductsPage() {
         {list.selectedClientId && list.loadState === 'ready' ? (
           <>
             <div className="grid gap-3 sm:grid-cols-3">
-              {list.establishments.length > 0 ? (
-                <AppSelect label="Estabelecimento (lista)" value={list.establishmentId} onChange={list.setEstablishmentId} options={list.establishments.map((e) => ({ value: e.establishmentId, label: e.label }))} />
+              {establishments.length > 0 ? (
+                <AppSelect label="Estabelecimento (lista)" value={list.establishmentId} onChange={list.setEstablishmentId} options={establishments.map((e) => ({ value: e.establishmentId, label: e.label }))} />
               ) : null}
               <label className="flex h-10 items-center gap-2 rounded-[12px] border border-[var(--card-border)] px-3 sm:col-span-2">
                 <Search className="h-4 w-4 text-[var(--text-muted)]" />
@@ -328,11 +339,11 @@ export default function AccountantFiscalProductsPage() {
               <AppSelect label="Grupo fiscal" value={list.groupFilter} onChange={list.setGroupFilter} options={groupFilterOptions} />
             </div>
 
-            {list.rows.length === 0 ? (
-              <EmptyPanel title="Nenhum produto" description={list.catalog.length === 0 ? 'Use Novo produto para cadastrar com a grade fiscal.' : 'Nenhum item corresponde aos filtros.'} />
+            {rows.length === 0 ? (
+              <EmptyPanel title="Nenhum produto" description={catalog.length === 0 ? 'Use Novo produto para cadastrar com a grade fiscal.' : 'Nenhum item corresponde aos filtros.'} />
             ) : (
               <ul className="divide-y divide-[var(--card-border)] rounded-[12px] border border-[var(--card-border)]">
-                {list.rows.map((row) => (
+                {rows.map((row) => (
                   <li key={row.productId} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
                     <div>
                       <p className="text-sm font-medium">{row.descricao}</p>

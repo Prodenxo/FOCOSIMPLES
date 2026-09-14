@@ -4,11 +4,12 @@ function clientBase(empresaId) {
   return `/accountant/clients/${encodeURIComponent(empresaId)}`;
 }
 
-function asArray(value) {
+export function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
 function pickList(data, ...keys) {
+  if (Array.isArray(data)) return data;
   for (const key of keys) {
     const candidate = key ? data?.[key] : data;
     if (Array.isArray(candidate)) return candidate;

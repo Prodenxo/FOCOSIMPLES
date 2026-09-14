@@ -42,18 +42,22 @@ export function SearchableSelect({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const isInline = variant === 'inline';
-  const showSearch = searchable ?? options.length > 8;
+  const optionList = useMemo(
+    () => (Array.isArray(options) ? options : []),
+    [options],
+  );
+  const showSearch = searchable ?? optionList.length > 8;
 
   const selected = useMemo(
-    () => options.find((o) => o.value === value) || null,
-    [options, value],
+    () => optionList.find((o) => o.value === value) || null,
+    [optionList, value],
   );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return options;
-    return options.filter((o) => o.label.toLowerCase().includes(q));
-  }, [options, query]);
+    if (!q) return optionList;
+    return optionList.filter((o) => o.label.toLowerCase().includes(q));
+  }, [optionList, query]);
 
   useEffect(() => {
     if (!open) return undefined;

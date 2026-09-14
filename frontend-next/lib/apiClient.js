@@ -81,7 +81,9 @@ async function requestJson(path, options = {}, timeoutMs = DEFAULT_FETCH_TIMEOUT
       throw new Error(resolveApiErrorMessage(payload, response.statusText));
     }
     if (payload != null && Object.prototype.hasOwnProperty.call(payload, 'data')) {
-      return payload.data;
+      const unwrapped = payload.data;
+      if (typeof unwrapped === 'boolean') return null;
+      return unwrapped;
     }
     return payload;
   }
@@ -136,7 +138,9 @@ async function requestJsonPublic(path, options = {}) {
       throw new Error(resolveApiErrorMessage(payload, response.statusText));
     }
     if (payload != null && Object.prototype.hasOwnProperty.call(payload, 'data')) {
-      return payload.data;
+      const unwrapped = payload.data;
+      if (typeof unwrapped === 'boolean') return null;
+      return unwrapped;
     }
     return payload;
   }

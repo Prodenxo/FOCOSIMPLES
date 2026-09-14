@@ -19,7 +19,8 @@ export function ruleMatchesProduct(rule, productId, fiscalProductGroupId) {
 }
 
 export function findRulesForProductAtEstablishment(rules, productId, fiscalProductGroupId, establishmentId) {
-  return rules
+  const rows = Array.isArray(rules) ? rules : [];
+  return rows
     .filter((rule) => ruleMatchesEstablishment(rule, establishmentId))
     .filter((rule) => ruleMatchesProduct(rule, productId, fiscalProductGroupId))
     .sort((a, b) => {
