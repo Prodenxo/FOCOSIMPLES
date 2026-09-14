@@ -8,10 +8,11 @@ export function humanizePlugNotasEmpresaError(raw) {
   const lower = text.toLowerCase();
   if (lower.includes('homologad')) {
     return (
-      'O emissor parceiro ainda não liberou emissão de NFS-e em produção para este município (código IBGE), '
-      + 'mesmo que a nota já tenha saído pelo Emissor Nacional do governo. '
-      + 'Confira se CEP, logradouro, bairro e IBGE estão iguais à nota autorizada e salve de novo. '
-      + 'Se continuar, avise o suporte Foco Simples para verificar a homologação do município na PlugNotas.'
+      'A PlugNotas recusou o cadastro porque este município (IBGE) ainda não está homologado no sistema municipal deles. '
+      + 'Para cidades no Padrão Nacional (como Aperibé/RJ), a solução é emitir pela NFS-e Nacional — o Foco Simples já envia '
+      + 'a opção “NFS-e Nacional” ligada ao salvar. Confira CEP, logradouro, bairro e código IBGE (7 dígitos, ex.: 3300159) '
+      + 'iguais à nota autorizada, preencha e-mail fiscal e inscrição municipal, escolha o CRT (Simples Nacional) e salve de novo. '
+      + 'Se o erro continuar, encaminhe este detalhe ao suporte Foco Simples (pode ser ajuste na conta PlugNotas/Tecnospeed).'
       + `\n\nDetalhe técnico: ${text}`
     );
   }

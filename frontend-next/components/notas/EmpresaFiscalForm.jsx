@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { EMPRESA_BUSINESS_TYPE_OPTIONS } from '@/lib/empresaBusinessType';
+import { PLUGNOTAS_REGIME_TRIBUTARIO_OPTIONS } from '@/lib/plugNotasEmpresaForm';
+import { AppSelect } from '@/components/ui/AppSelect';
 import { formatCnpj } from '@/lib/fiscalFormat';
 import { lookupCep } from '@/lib/fiscalApi';
 
@@ -72,6 +74,12 @@ export function EmpresaFiscalForm({
           <Field label="Inscrição estadual" value={form.inscricaoEstadual} onChange={(v) => onChange('inscricaoEstadual', v)} hint="NF-e. Deixe vazio se isento." />
           <Field label="E-mail fiscal" value={form.email} onChange={(v) => onChange('email', v)} type="email" required />
           <Field label="Telefone" value={form.telefone} onChange={(v) => onChange('telefone', v)} />
+          <AppSelect
+            label="Regime tributário (CRT)"
+            value={String(form.regimeTributario ?? '1')}
+            onChange={(v) => onChange('regimeTributario', v)}
+            options={PLUGNOTAS_REGIME_TRIBUTARIO_OPTIONS}
+          />
         </div>
         {cnpjLookupLoading ? (
           <p className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
@@ -108,6 +116,21 @@ export function EmpresaFiscalForm({
 
       {form.nfseAtivo !== false ? (
         <section className="space-y-3 border-t border-[var(--card-border)] pt-4">
+          <h3 className="text-sm font-semibold text-[var(--text-primary)]">NFS-e</h3>
+          <label className="flex cursor-pointer items-start gap-2 rounded-[12px] border border-[var(--card-border)] p-3 text-sm">
+            <input
+              type="checkbox"
+              checked={form.nfseNacional !== false}
+              onChange={(e) => onChange('nfseNacional', e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-[var(--card-border)] text-[var(--accent)]"
+            />
+            <span>
+              <span className="font-medium text-[var(--text-primary)]">Usar NFS-e Nacional (Emissor Nacional)</span>
+              <span className="mt-1 block text-xs text-[var(--text-muted)]">
+                Recomendado quando a prefeitura ainda não está homologada na PlugNotas (ex.: Aperibé/RJ). As notas vão pelo ambiente nacional.
+              </span>
+            </span>
+          </label>
           <h3 className="text-sm font-semibold text-[var(--text-primary)]">Numeração RPS / DPS</h3>
           <p className="text-xs text-[var(--text-muted)]">
             Informe o próximo número a emitir. Se já usava outro sistema, coloque o último RPS emitido + 1.

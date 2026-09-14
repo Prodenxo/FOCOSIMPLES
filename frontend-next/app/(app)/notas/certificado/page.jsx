@@ -26,12 +26,14 @@ import {
   importCnaesProdutos,
 } from '@/lib/fiscalApi';
 import {
+  applyDocumentosAtivosToCompanyForm,
   buildEnrichedCertPageForm,
   buildPlugNotasEmpresaPayload,
   getPlugNotasCompanyValidationMessage,
   isEmpresaCadastradaNoEmissor,
   mergeCnpjLookupIntoCertPageForm,
 } from '@/lib/plugNotasEmpresaForm';
+import { resolveDocumentosPermitidos } from '@/lib/documentosAtivos';
 import { EmpresaFiscalForm } from '@/components/notas/EmpresaFiscalForm';
 import {
   describeCertificateState,
@@ -85,7 +87,11 @@ export default function CertificadoPage() {
   const [cnpjLookupLoading, setCnpjLookupLoading] = useState(false);
   const [cnpjLookupError, setCnpjLookupError] = useState(null);
 
-  const documento = certStatus?.documento || company?.cpfCnpj || company?.cnpj || null;
+  const hasUserCert = Boolean(certStatus?.hasUserCertificate);
+  const hasServerCert = Boolean(certStatus?.hasEnvCertificate);
+  const documento = hasUserCert
+    ? (certStatus?.documento || company?.cpfCnpj || company?.cnpj || null)
+    : (company?.cpfCnpj || company?.cnpj || null);
 
   const loadCert = useCallback(async () => {
     setCertLoading(true);
@@ -115,7 +121,7 @@ export default function CertificadoPage() {
       prefill = null;
     }
 
-    return buildEnrichedCertPageForm({
+    const enriched = await buildEnrichedCertPageForm({
       empresa: empresaData,
       prefill,
       cnpj,
@@ -123,7 +129,9 @@ export default function CertificadoPage() {
       prefillOnlyFillEmpty,
       lookupOnlyFillEmpty,
     });
-  }, [documento]);
+    const docs = resolveDocumentosPermitidos(certStatus, empresaData);
+    return applyDocumentosAtivosToCompanyForm(enriched, docs);
+  }, [certStatus, documento]);
 
   const loadCompany = useCallback(async () => {
     if (!documento) {
@@ -194,9 +202,9 @@ export default function CertificadoPage() {
   const certState = resolveCertificateState({
     loading: certLoading,
     error: certError,
-    hasUserCertificate: Boolean(certStatus?.hasUserCertificate),
-    hasEnvCertificate: Boolean(certStatus?.hasEnvCertificate),
-    validTo: certStatus?.certValidTo || null,
+    hasUserCertificate: hasUserCert,
+    hasEnvCertificate: false,
+    validTo: hasUserCert ? (certStatus?.certValidTo || null) : null,
   });
   const certInfo = describeCertificateState(certState);
 
@@ -260,6 +268,13 @@ export default function CertificadoPage() {
     try {
       await removeCertificate();
       setConfirmRemove(false);
+      setUploadFile(null);
+      setUploadPassword('');
+      setCompany(null);
+      setCompanyForm(null);
+      setCompanyError(null);
+      setCompanyDirty(false);
+      setEmpresaRegistered(false);
       await loadCert();
     } catch (err) {
       setCertError(err instanceof Error ? err.message : 'Falha ao remover certificado.');
@@ -344,7 +359,7 @@ export default function CertificadoPage() {
     }
   };
 
-  const hasCert = Boolean(certStatus?.hasUserCertificate || certStatus?.hasEnvCertificate);
+  const hasCert = hasUserCert;
 
   return (
     <div className="flex flex-col gap-5">
@@ -397,13 +412,18 @@ export default function CertificadoPage() {
                     </li>
                     <li>
                       <span className="text-[var(--text-muted)]">Origem:</span>{' '}
-                      {certStatus?.hasUserCertificate
+                      {hasUserCert
                         ? 'Enviado pelo usuário'
-                        : certStatus?.hasEnvCertificate
-                          ? 'Configurado no servidor'
+                        : hasServerCert
+                          ? 'Certificado do servidor (DAS)'
                           : 'Não configurado'}
                     </li>
                   </ul>
+                  {hasServerCert && !hasUserCert ? (
+                    <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+                      Há certificado e-CNPJ no servidor para consultas (ex.: DAS). Para emitir NFS-e/NF-e, envie seu arquivo .pfx acima.
+                    </p>
+                  ) : null}
                   {Array.isArray(certStatus?.documentosAtivos) ? null : certStatus?.documentosAtivos ? (
                     <p className="mt-2 text-xs text-[var(--text-muted)]">
                       Documentos ativos:{' '}

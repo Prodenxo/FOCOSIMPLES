@@ -1623,9 +1623,9 @@ export const getCertificateStatus = async (userId) => {
   } catch {
     documentosAtivos = null;
   }
-  const docResolved = docFromCache || docFromDb || null;
   // Status da UI deve refletir .pfx persistido (não só cache em memória / linha sem blob).
   const hasCert = await userHasMeiCertificate(userId);
+  const docResolved = hasCert ? (docFromCache || docFromDb || null) : null;
   let nearExpiry = false;
   let expiresInDays = null;
   if (certValidTo) {

@@ -36,6 +36,11 @@ export function formatTelefoneEmpresa(telefone) {
   return '';
 }
 
+/** CRT enviado à PlugNotas como `regimeTributario` (Foco Simples = Simples Nacional). */
+export const PLUGNOTAS_REGIME_TRIBUTARIO_OPTIONS = [
+  { value: '1', label: 'Simples Nacional (CRT 1)' },
+];
+
 export function getDefaultPlugNotasCompanyForm() {
   return {
     razaoSocial: '',
@@ -47,6 +52,7 @@ export function getDefaultPlugNotasCompanyForm() {
     telefone: '',
     regimeTributario: '1',
     simplesNacional: true,
+    nfseNacional: true,
     businessType: DEFAULT_EMPRESA_BUSINESS_TYPE,
     cep: '',
     tipoLogradouro: 'Rua',
@@ -58,7 +64,7 @@ export function getDefaultPlugNotasCompanyForm() {
     municipio: '',
     uf: '',
     nfseAtivo: true,
-    nfeAtivo: true,
+    nfeAtivo: false,
     nfceAtivo: false,
     rpsLote: 1,
     rpsNumero: 1,
@@ -103,7 +109,23 @@ export function empresaFiscalToCompanyForm(empresa) {
     rpsSerie: String(
       empresa?.rps?.numeracao?.[0]?.serie ?? empresa?.nfse?.config?.rps?.serie ?? '1',
     ).trim() || '1',
+    nfseNacional: empresa?.nfse?.config?.nfseNacional !== false,
+    regimeTributario: empresa?.regimeTributario != null
+      ? String(empresa.regimeTributario)
+      : defaults.regimeTributario,
     businessType: normalizeEmpresaBusinessType(empresa?.businessType ?? empresa?.business_type),
+  };
+}
+
+/** @param {Record<string, unknown>|null|undefined} documentosAtivos */
+export function applyDocumentosAtivosToCompanyForm(form, documentosAtivos) {
+  const base = form || getDefaultPlugNotasCompanyForm();
+  if (!documentosAtivos || typeof documentosAtivos !== 'object') return base;
+  return {
+    ...base,
+    nfseAtivo: documentosAtivos.nfse !== false,
+    nfeAtivo: documentosAtivos.nfe === true,
+    nfceAtivo: documentosAtivos.nfce === true,
   };
 }
 
@@ -292,8 +314,8 @@ export function buildPlugNotasEmpresaPayload(form) {
       tipoContrato: 0,
       config: {
         producao: true,
-        nfseNacional: true,
-        consultaNfseNacional: true,
+        nfseNacional: form.nfseNacional !== false,
+        consultaNfseNacional: form.nfseNacional !== false,
         rps: {
           serie: String(form.rpsSerie ?? '1').trim() || '1',
           numero: clampRpsInt(form.rpsNumero, 1),
