@@ -49,6 +49,7 @@ s = s.replace(
 );
 
 s = s.replace(/useState<[^>]+>/g, 'useState');
+s = s.replace(/useState>\(/g, 'useState(');
 s = s.replace(/useCallback\(async \([^)]*\): [^)]+\) =>/g, (m) => m.replace(/: [^)]+\) =>/, ') =>'));
 s = s.replace(/\): Promise<[^>]+>/g, ')');
 s = s.replace(/: Partial<[^>]+>/g, '');
