@@ -368,3 +368,32 @@ export function buildPlugNotasEmpresaPayload(form) {
 
 /** @deprecated use buildPlugNotasEmpresaPayload */
 export const buildCertPageCompanyPayload = buildPlugNotasEmpresaPayload;
+
+/** Espelho local (Supabase) quando a PlugNotas recusa — PATCH emitente-nfse. */
+export function companyFormToLocalEmitentePatch(form) {
+  return {
+    razaoSocial: String(form.razaoSocial ?? '').trim(),
+    nomeFantasia: String(form.nomeFantasia ?? '').trim(),
+    email: String(form.email ?? '').trim(),
+    inscricaoMunicipal: String(form.inscricaoMunicipal ?? '').trim(),
+    regimeTributario: String(form.regimeTributario || '1'),
+    simplesNacional: form.simplesNacional !== false,
+    cep: normalizeDoc(form.cep),
+    tipoLogradouro: String(form.tipoLogradouro || 'Rua').trim() || 'Rua',
+    logradouro: String(form.logradouro ?? '').trim(),
+    numero: String(form.numero ?? '').trim(),
+    complemento: String(form.complemento ?? '').trim(),
+    bairro: String(form.bairro ?? '').trim(),
+    codigoCidade: String(form.codigoCidade ?? '').trim(),
+    cidade: String(form.municipio ?? '').trim(),
+    uf: String(form.uf ?? '').trim().toUpperCase().slice(0, 2),
+    rpsLote: clampRpsInt(form.rpsLote, 1),
+    rpsNumero: clampRpsInt(form.rpsNumero, 1),
+    rpsSerie: String(form.rpsSerie ?? '1').trim() || '1',
+    documentosAtivos: {
+      nfse: Boolean(form.nfseAtivo),
+      nfe: Boolean(form.nfeAtivo),
+      nfce: Boolean(form.nfceAtivo),
+    },
+  };
+}

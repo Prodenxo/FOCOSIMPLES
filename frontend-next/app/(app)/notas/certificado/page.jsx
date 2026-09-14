@@ -22,6 +22,7 @@ import {
   lookupCnpj,
   removeCertificate,
   syncCertificatePlugnotas,
+  patchCertificateEmitenteLocal,
   updateFiscalCompany,
   uploadCertificate,
   importCnaesProdutos,
@@ -30,6 +31,7 @@ import {
   applyDocumentosAtivosToCompanyForm,
   buildEnrichedCertPageForm,
   buildPlugNotasEmpresaPayload,
+  companyFormToLocalEmitentePatch,
   getPlugNotasCompanyValidationMessage,
   isEmpresaCadastradaNoEmissor,
   mergeCnpjLookupIntoCertPageForm,
@@ -46,7 +48,7 @@ import { Card } from '@/components/ui/Card';
 import { ErrorPanel } from '@/components/ui/ErrorPanel';
 import { LoadingPanel } from '@/components/ui/LoadingPanel';
 import { CertificateIllustration } from '@/components/illustrations/CertificateIllustration';
-import { humanizePlugNotasEmpresaError } from '@/lib/plugNotasEmpresaErrorHints';
+import { shortPlugNotasEmpresaError } from '@/lib/plugNotasEmpresaErrorHints';
 
 /**
  * Aba Certificado — gerencia o certificado digital e dados da empresa fiscal.
@@ -67,6 +69,8 @@ export default function CertificadoPage() {
   const [company, setCompany] = useState(null);
   const [companyLoading, setCompanyLoading] = useState(false);
   const [companyError, setCompanyError] = useState(null);
+  const [companyNotice, setCompanyNotice] = useState(null);
+  const [companyLocalSaving, setCompanyLocalSaving] = useState(false);
 
   const [companyForm, setCompanyForm] = useState(null);
   const [companyDirty, setCompanyDirty] = useState(false);
@@ -339,6 +343,10 @@ export default function CertificadoPage() {
     setCompanyDirty(true);
   };
 
+  const persistCompanyLocalMirror = async (form) => {
+    await patchCertificateEmitenteLocal(companyFormToLocalEmitentePatch(form));
+  };
+
   const handleSaveCompany = async (e) => {
     e.preventDefault();
     if (!companyForm) return;
@@ -346,12 +354,14 @@ export default function CertificadoPage() {
     const validationMsg = getPlugNotasCompanyValidationMessage(companyForm);
     if (validationMsg) {
       setCompanyError(validationMsg);
+      setCompanyNotice(null);
       return;
     }
 
     setCompanySaving(true);
     setCompanySavedAt(null);
     setCompanyError(null);
+    setCompanyNotice(null);
     try {
       const payload = buildPlugNotasEmpresaPayload(companyForm);
       const updated = empresaRegistered
@@ -365,12 +375,44 @@ export default function CertificadoPage() {
       setCompanySavedAt(new Date());
     } catch (err) {
       const raw = err instanceof Error ? err.message : 'Falha ao salvar dados da empresa.';
-      setCompanyError(humanizePlugNotasEmpresaError(raw));
+      try {
+        await persistCompanyLocalMirror(companyForm);
+        setCompanyNotice(
+          `${shortPlugNotasEmpresaError(raw)} Seus dados foram salvos no Foco Simples mesmo assim; a emissão na PlugNotas só libera quando eles aceitarem o cadastro.`,
+        );
+        setCompanyDirty(false);
+        setCompanySavedAt(new Date());
+      } catch {
+        setCompanyError(shortPlugNotasEmpresaError(raw));
+      }
       if (!company) {
         setCompany({ cpfCnpj: companyForm.cpfCnpj || documento });
       }
     } finally {
       setCompanySaving(false);
+    }
+  };
+
+  const handleSaveCompanyLocalOnly = async () => {
+    if (!companyForm) return;
+    const validationMsg = getPlugNotasCompanyValidationMessage(companyForm);
+    if (validationMsg) {
+      setCompanyError(validationMsg);
+      setCompanyNotice(null);
+      return;
+    }
+    setCompanyLocalSaving(true);
+    setCompanyError(null);
+    setCompanyNotice(null);
+    try {
+      await persistCompanyLocalMirror(companyForm);
+      setCompanyNotice('Dados salvos no Foco Simples (sem enviar à PlugNotas).');
+      setCompanyDirty(false);
+      setCompanySavedAt(new Date());
+    } catch (err) {
+      setCompanyError(err instanceof Error ? err.message : 'Falha ao salvar localmente.');
+    } finally {
+      setCompanyLocalSaving(false);
     }
   };
 
@@ -627,32 +669,31 @@ export default function CertificadoPage() {
             </div>
           ) : companyForm ? (
             <form onSubmit={handleSaveCompany} className="mt-4 space-y-4">
-              {companyError ? (
-                <div className="rounded-[12px] border border-red-200 bg-red-50 p-4 dark:border-red-900/40 dark:bg-red-950/30">
-                  {hasUserCert && !plugnotasCertLinked ? (
-                    <p className="mb-2 text-xs font-semibold text-amber-800 dark:text-amber-200">
-                      Antes de cadastrar a empresa, vincule o certificado na PlugNotas (botão no card à esquerda).
-                    </p>
-                  ) : (
-                    <p className="mb-2 text-xs text-red-800/90 dark:text-red-200/90">
-                      Este erro é do <strong>cadastro da empresa</strong> na PlugNotas (CNPJ/endereço/NFS-e), não do upload do .pfx.
-                      {plugnotasCertLinked ? ' O certificado já está vinculado na PlugNotas.' : ''}
-                    </p>
-                  )}
-                  <p className="flex items-start gap-2 text-sm text-red-800 dark:text-red-200">
-                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-                    <span className="whitespace-pre-wrap">{companyError}</span>
-                  </p>
+              {companyNotice ? (
+                <div className="flex items-start justify-between gap-3 rounded-[12px] border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+                  <p className="text-xs leading-relaxed">{companyNotice}</p>
                   <button
                     type="button"
-                    onClick={() => {
-                      setCompanyError(null);
-                      void loadCompany();
-                    }}
-                    className="mt-3 text-xs font-semibold text-[var(--accent)] hover:underline"
+                    onClick={() => setCompanyNotice(null)}
+                    className="shrink-0 text-xs font-semibold text-amber-800 underline dark:text-amber-200"
                   >
-                    Recarregar dados do emissor
+                    Fechar
                   </button>
+                </div>
+              ) : null}
+
+              {companyError ? (
+                <div className="rounded-[12px] border border-red-200 bg-red-50 p-3 dark:border-red-900/40 dark:bg-red-950/30">
+                  {hasUserCert && !plugnotasCertLinked ? (
+                    <p className="text-xs text-amber-800 dark:text-amber-200">
+                      Vincule o certificado na PlugNotas (botão à esquerda) antes de cadastrar a empresa lá.
+                    </p>
+                  ) : (
+                    <p className="flex items-start gap-2 text-xs text-red-800 dark:text-red-200">
+                      <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                      <span>{companyError}</span>
+                    </p>
+                  )}
                 </div>
               ) : null}
 
@@ -708,11 +749,20 @@ export default function CertificadoPage() {
               <div className="flex flex-wrap items-center gap-3 border-t border-[var(--card-border)] pt-4">
                 <button
                   type="submit"
-                  disabled={(!companyDirty && !companyError) || companySaving}
+                  disabled={(!companyDirty && !companyError && !companyNotice) || companySaving}
                   className="inline-flex h-10 items-center gap-2 rounded-[12px] bg-[var(--accent)] px-4 text-sm font-semibold text-white shadow-[var(--shadow-card)] hover:opacity-90 disabled:opacity-60"
                 >
                   {companySaving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <CheckCircle2 className="h-4 w-4" aria-hidden />}
-                  {companyError ? 'Tentar salvar novamente' : 'Salvar alterações'}
+                  Salvar e enviar à PlugNotas
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSaveCompanyLocalOnly()}
+                  disabled={!companyDirty || companyLocalSaving || companySaving}
+                  className="inline-flex h-10 items-center gap-2 rounded-[12px] border border-[var(--card-border)] px-4 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--canvas)] disabled:opacity-60"
+                >
+                  {companyLocalSaving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+                  Salvar só no Foco Simples
                 </button>
                 {companySavedAt ? (
                   <span className="text-xs text-[var(--text-muted)]">

@@ -1619,7 +1619,14 @@ export const uploadCertificate = async (userId, payload) => {
  */
 export const patchCertificateEmitenteNfse = async (userId, body) => {
   if (!userId) throw badRequest('Usuário não identificado');
-  await patchEmitenteNfseFields(userId, body || {});
+  const raw = body && typeof body === 'object' && !Array.isArray(body) ? { ...body } : {};
+  const documentosAtivos = raw.documentosAtivos;
+  delete raw.documentosAtivos;
+  await patchEmitenteNfseFields(userId, raw);
+  if (documentosAtivos && typeof documentosAtivos === 'object') {
+    const { persistDocumentosAtivosMirrorAfterEmpresa } = await import('./mei-notas-documentos-mirror.js');
+    await persistDocumentosAtivosMirrorAfterEmpresa(userId, { documentosAtivos }).catch(() => {});
+  }
   return getCertificateStatus(userId);
 };
 

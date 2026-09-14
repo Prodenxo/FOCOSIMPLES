@@ -121,6 +121,11 @@ export async function syncCertificatePlugnotas() {
   return apiClient.post('/mei-guide/certificate/plugnotas-sync', {});
 }
 
+/** Salva dados fiscais/endereço só no Foco Simples (espelho local), sem chamar PlugNotas. */
+export async function patchCertificateEmitenteLocal(body) {
+  return apiClient.patch('/mei-guide/certificate/emitente-nfse', body);
+}
+
 /** Consulta dados da empresa fiscal (CNPJ) no serviço de emissão. */
 export async function fetchFiscalCompany(cnpj) {
   const params = new URLSearchParams();
