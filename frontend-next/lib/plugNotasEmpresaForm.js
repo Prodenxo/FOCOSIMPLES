@@ -246,6 +246,22 @@ export function isEmpresaCadastradaNoEmissor(empresa) {
   return Boolean(String(empresa.razaoSocial || empresa.nome || '').trim());
 }
 
+/** NFS-e Nacional (padrão Foco Simples): IM opcional — E0120 se CNC sem complemento. */
+export function isNfseNacionalEmpresaForm(form) {
+  return form?.nfseNacional !== false;
+}
+
+/** @param {ReturnType<typeof getDefaultPlugNotasCompanyForm>} form */
+export function getInscricaoMunicipalFieldHint(form) {
+  if (form?.nfseAtivo && isNfseNacionalEmpresaForm(form)) {
+    return 'Opcional na NFS-e Nacional. Só preencha se a prefeitura cadastrou complemento no CNC — senão deixe vazio (evita rejeição E0120).';
+  }
+  if (form?.nfseAtivo) {
+    return 'Obrigatória na NFS-e municipal. Em alguns municípios coincide com o CNPJ (sem pontuação).';
+  }
+  return 'Usada na NFS-e municipal, quando aplicável.';
+}
+
 /** @param {ReturnType<typeof getDefaultPlugNotasCompanyForm>} form */
 export function getPlugNotasCompanyValidationMessage(form) {
   if (!hasRequiredText(form.razaoSocial)) {
@@ -260,8 +276,12 @@ export function getPlugNotasCompanyValidationMessage(form) {
   if (String(form.uf ?? '').trim().length !== 2) return 'Informe a UF com 2 letras (ex.: PR).';
   if (!hasRequiredText(form.email)) return 'Informe o e-mail da empresa (obrigatório no cadastro fiscal).';
   if (!isValidEmail(form.email)) return 'Informe um e-mail válido (ex.: contato@empresa.com.br).';
-  if (form.nfseAtivo && !hasRequiredText(form.inscricaoMunicipal)) {
-    return 'Informe a Inscrição Municipal (IM) para emitir NFS-e.';
+  if (
+    form.nfseAtivo
+    && form.nfseNacional === false
+    && !hasRequiredText(form.inscricaoMunicipal)
+  ) {
+    return 'Informe a Inscrição Municipal (IM) para emitir NFS-e municipal.';
   }
   if (!form.nfseAtivo && !form.nfeAtivo && !form.nfceAtivo) {
     return 'Selecione pelo menos um tipo de nota fiscal (NFS-e, NF-e ou NFC-e).';

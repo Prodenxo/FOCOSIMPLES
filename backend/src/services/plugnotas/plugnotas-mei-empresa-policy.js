@@ -122,6 +122,12 @@ export const applyNfseNationalContractPolicy = (payload) => {
   next.config = configWithDefaults;
   payload.nfse = next;
   applyEmpresaPlugnotasNfseConfigRps(payload);
+
+  // E0120 (ADN): sem complemento no CNC do município, IM não pode ir na DPS — não enviar à PlugNotas no trilho nacional.
+  if (!nacionalExplicitlyOff && isFocoSimplesProduct() && hasOwn(payload, 'inscricaoMunicipal')) {
+    delete payload.inscricaoMunicipal;
+  }
+
   return contractInput;
 };
 

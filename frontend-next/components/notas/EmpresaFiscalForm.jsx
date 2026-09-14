@@ -3,7 +3,10 @@
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { EMPRESA_BUSINESS_TYPE_OPTIONS } from '@/lib/empresaBusinessType';
-import { PLUGNOTAS_REGIME_TRIBUTARIO_OPTIONS } from '@/lib/plugNotasEmpresaForm';
+import {
+  getInscricaoMunicipalFieldHint,
+  PLUGNOTAS_REGIME_TRIBUTARIO_OPTIONS,
+} from '@/lib/plugNotasEmpresaForm';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { formatCnpj } from '@/lib/fiscalFormat';
 import { lookupCep } from '@/lib/fiscalApi';
@@ -74,7 +77,7 @@ export function EmpresaFiscalForm({
             label="Inscrição municipal"
             value={form.inscricaoMunicipal}
             onChange={(v) => onChange('inscricaoMunicipal', v)}
-            hint="Obrigatória para NFS-e. Em alguns municípios coincide com o CNPJ (sem pontuação) — use o mesmo da nota autorizada."
+            hint={getInscricaoMunicipalFieldHint(form)}
           />
           <Field label="Inscrição estadual" value={form.inscricaoEstadual} onChange={(v) => onChange('inscricaoEstadual', v)} hint="NF-e. Deixe vazio se isento." />
           <Field label="E-mail fiscal" value={form.email} onChange={(v) => onChange('email', v)} type="email" required />

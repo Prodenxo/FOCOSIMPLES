@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  applyNfseNationalContractPolicy,
   buildMeiRegimePatchPayload,
   normalizeMeiEmpresaPayload,
 } from '../src/services/plugnotas/plugnotas-mei-empresa-policy.js';
+import { env } from '../src/config/env.js';
 
 test('normalizeMeiEmpresaPayload no Foco Simples assume Simples sem MEI', () => {
   const payload = { cpfCnpj: '17422651000172' };
@@ -29,6 +31,21 @@ test('normalizeMeiEmpresaPayload: regime 4 vira Simples sem MEI', () => {
   assert.equal(payload.regimeTributario, 1);
   assert.equal(payload.regimeTributarioEspecial, 0);
   assert.equal(payload.simplesNacional, true);
+});
+
+test('applyNfseNationalContractPolicy no Foco Simples remove IM (E0120 / CNC)', () => {
+  const prev = env.APP_PRODUCT;
+  env.APP_PRODUCT = 'focosimples';
+  try {
+    const payload = {
+      inscricaoMunicipal: '12345',
+      nfse: { ativo: true, config: { nfseNacional: true } },
+    };
+    applyNfseNationalContractPolicy(payload);
+    assert.equal('inscricaoMunicipal' in payload, false);
+  } finally {
+    env.APP_PRODUCT = prev;
+  }
 });
 
 test('buildMeiRegimePatchPayload no Foco Simples não marca MEI', () => {
