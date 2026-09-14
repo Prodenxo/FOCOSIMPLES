@@ -48,6 +48,17 @@ export function deriveIcmsGroupFromCsosn(csosn) {
   return code ? `ICMSSN${code}` : '';
 }
 
+export function displayIcmsGroupForForm(form) {
+  return deriveIcmsGroupFromCsosn(form?.csosn);
+}
+
+export function shouldShowStFields(form) {
+  const csosn = String(form?.csosn ?? '').replace(/\D/g, '');
+  const stDue = ['201', '202', '203', '500'].includes(csosn);
+  const retained = form?.priorStStatus === 'RETAINED';
+  return stDue || retained || form?.currentOperationSt === 'DUE_BY_ISSUER';
+}
+
 export function formToRuleDraft(form, options) {
   const synced = syncFormEstablishmentContext(form, options.establishmentIssuerUf);
   const scenarioApplies = synced.scenarioApplies ?? 'INTERNAL';

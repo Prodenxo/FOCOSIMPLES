@@ -14,6 +14,25 @@ export const ORIGEM_MERCADORIA_OPTIONS = [
   { value: '0', label: '0 — Nacional' },
   { value: '1', label: '1 — Estrangeira (importação direta)' },
   { value: '2', label: '2 — Estrangeira (mercado interno)' },
+  { value: '3', label: '3 — Nacional (> 40% importado)' },
+  { value: '4', label: '4 — Nacional (PPB)' },
+  { value: '5', label: '5 — Nacional (< 40% importado)' },
+  { value: '6', label: '6 — Estrangeira (sem similar)' },
+  { value: '7', label: '7 — Estrangeira mercado interno (sem similar)' },
+  { value: '8', label: '8 — Nacional (> 70% importado)' },
+];
+
+export const RECIPIENT_TAXPAYER_CONDITION_OPTIONS = [
+  { value: 'ANY', label: 'Qualquer destinatário' },
+  { value: 'NON_TAXPAYER', label: 'Não contribuinte ICMS' },
+  { value: 'TAXPAYER', label: 'Contribuinte ICMS' },
+  { value: 'EXEMPT', label: 'Isento' },
+];
+
+export const FINAL_CONSUMER_CONDITION_OPTIONS = [
+  { value: 'ANY', label: 'Qualquer' },
+  { value: 'YES', label: 'Somente consumidor final' },
+  { value: 'NO', label: 'Somente não consumidor final' },
 ];
 
 export const SCENARIO_APPLIES_OPTIONS = [
@@ -43,6 +62,29 @@ export const FISCAL_STATUS_FILTER_OPTIONS = [
   { value: 'PENDENTE', label: 'Pendente' },
   { value: 'BLOQUEADO', label: 'Bloqueado' },
 ];
+
+export function labelRuleStatus(status) {
+  switch (status) {
+    case 'DRAFT':
+      return 'Rascunho';
+    case 'APPROVED':
+      return 'Aprovada';
+    case 'SUSPENDED':
+      return 'Suspensa';
+    case 'REVOKED':
+      return 'Revogada';
+    case 'EXPIRED':
+      return 'Expirada';
+    default:
+      return status ?? '—';
+  }
+}
+
+export function formatCapabilityMessage(capability) {
+  if (!capability || capability.executable !== false) return null;
+  const first = capability.issues?.[0]?.message;
+  return first ?? 'Esta combinação fiscal ainda não é executável pelo motor de NF-e.';
+}
 
 export function labelFiscalStatus(status) {
   const map = {

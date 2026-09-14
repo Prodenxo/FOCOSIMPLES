@@ -14,6 +14,7 @@ import { useProductFiscalScenarios } from '@/hooks/useProductFiscalScenarios';
 import { saveProductScenarioDraft } from '@/lib/fiscalConfiguration/saveProductScenarioDraft';
 import { labelFiscalStatus, FISCAL_STATUS_FILTER_OPTIONS, SCENARIO_APPLIES_OPTIONS, PIS_COFINS_MODE_OPTIONS, CURRENT_OPERATION_ST_OPTIONS, ORIGEM_MERCADORIA_OPTIONS, ITEM_SOURCE_OPTIONS, PRIOR_ST_STATUS_OPTIONS } from '@/lib/fiscalConfiguration/labels';
 import { deriveIcmsGroupFromCsosn } from '@/lib/fiscalConfiguration/ruleFormMapper';
+import { FiscalProductConfigModal } from '@/components/fiscal/FiscalProductConfigModal';
 import { Card } from '@/components/ui/Card';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { EmptyPanel } from '@/components/ui/EmptyPanel';
@@ -186,6 +187,34 @@ export default function AccountantFiscalProductsPage() {
     setConfigEstablishmentId(list.establishmentId || '');
     await config.openProduct(productId, list.establishmentId || undefined);
   }, [config, list.establishmentId]);
+
+  const handleConfigEstablishmentChange = useCallback((nextId) => {
+    setConfigEstablishmentId(nextId);
+    list.setEstablishmentId(nextId);
+    if (configProductId) {
+      void config.loadFiscalForEstablishment(configProductId, nextId).catch((error) => {
+        setToast({
+          type: 'error',
+          text: error instanceof Error ? error.message : 'Falha ao carregar configuração fiscal.',
+        });
+      });
+    }
+  }, [config, configProductId, list]);
+
+  const activeConfigRow = useMemo(
+    () => rows.find((r) => r.productId === configProductId) ?? null,
+    [rows, configProductId],
+  );
+
+  const configCatalogMeta = useMemo(() => {
+    const raw = config.catalogItem?.metadata_json;
+    if (!raw || typeof raw !== 'object') return { ncm: '', cest: '', unidade: 'UN' };
+    return {
+      ncm: String(raw.ncm ?? '').replace(/\D/g, ''),
+      cest: String(raw.cest ?? '').replace(/\D/g, ''),
+      unidade: String(raw.unidade ?? 'UN'),
+    };
+  }, [config.catalogItem]);
 
   if (!canAccess) {
     return (
@@ -360,23 +389,68 @@ export default function AccountantFiscalProductsPage() {
         ) : null}
       </Card>
 
-      {config.open ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center">
-          <Card className="max-h-[90vh] w-full max-w-2xl overflow-y-auto p-5">
-            <h2 className="text-lg font-semibold">Configurar — {clientLabel}</h2>
-            <p className="text-xs text-[var(--text-muted)]">Status: {labelFiscalStatus(config.fiscalStatus)}</p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <Field label="CFOP"><input className={inputClass()} value={config.form.cfop} onChange={(e) => config.patchForm({ cfop: e.target.value })} /></Field>
-              <Field label="CSOSN"><input className={inputClass()} value={config.form.csosn} onChange={(e) => config.patchForm({ csosn: e.target.value, icmsGroup: deriveIcmsGroupFromCsosn(e.target.value) })} /></Field>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button type="button" disabled={config.saving} onClick={() => void config.saveDraft().catch((e) => setToast({ type: 'error', text: e.message }))} className="rounded-[12px] bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white">Salvar rascunho</button>
-              <button type="button" disabled={config.saving} onClick={() => void config.approve().catch((e) => setToast({ type: 'error', text: e.message }))} className="rounded-[12px] border px-4 py-2 text-sm font-semibold">Aprovar regra</button>
-              <button type="button" onClick={() => config.setOpen(false)} className="text-sm text-[var(--text-muted)] underline">Fechar</button>
-            </div>
-          </Card>
-        </div>
-      ) : null}
+      <FiscalProductConfigModal
+        open={config.open}
+        productLabel={activeConfigRow?.descricao ?? config.catalogItem?.discriminacao ?? 'Produto'}
+        clientLabel={clientLabel}
+        establishments={establishments}
+        establishmentId={configEstablishmentId || list.establishmentId || ''}
+        establishmentStatus={list.establishmentStatus}
+        onEstablishmentChange={handleConfigEstablishmentChange}
+        catalogCodigo={activeConfigRow?.codigo ?? config.catalogItem?.codigo ?? ''}
+        catalogNcm={activeConfigRow?.ncm ?? configCatalogMeta.ncm}
+        catalogCest={activeConfigRow?.cest ?? configCatalogMeta.cest}
+        catalogUnidade={activeConfigRow?.unidade ?? configCatalogMeta.unidade}
+        fiscalStatus={config.fiscalStatus}
+        form={config.form}
+        onChange={config.patchForm}
+        commercialForm={config.commercialForm}
+        onCommercialChange={config.patchCommercial}
+        onSaveCommercial={() => {
+          void config.saveCommercial().catch((error) => {
+            setToast({
+              type: 'error',
+              text: error instanceof Error ? error.message : 'Falha ao salvar produto.',
+            });
+          });
+        }}
+        rule={config.rule}
+        preview={config.preview}
+        groups={groups}
+        productId={configProductId}
+        canEdit={canAccess}
+        canApprove={canAccess}
+        saving={config.saving}
+        loading={config.loading}
+        onClose={() => {
+          config.setOpen(false);
+          setConfigEstablishmentId(list.establishmentId || '');
+        }}
+        onSaveDraft={() => {
+          void config.saveDraft().catch((error) => {
+            setToast({
+              type: 'error',
+              text: error instanceof Error ? error.message : 'Falha ao salvar rascunho.',
+            });
+          });
+        }}
+        onApprove={() => {
+          void config.approve().catch((error) => {
+            setToast({
+              type: 'error',
+              text: error instanceof Error ? error.message : 'Falha ao aprovar configuração.',
+            });
+          });
+        }}
+        onNewVersion={() => {
+          void config.newVersion().catch((error) => {
+            setToast({
+              type: 'error',
+              text: error instanceof Error ? error.message : 'Falha ao criar nova versão.',
+            });
+          });
+        }}
+      />
     </div>
   );
 }

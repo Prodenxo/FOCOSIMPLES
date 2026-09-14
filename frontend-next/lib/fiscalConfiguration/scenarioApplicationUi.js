@@ -38,6 +38,32 @@ export function parseScenarioAppliesFromForm(form) {
   return 'INTERNAL';
 }
 
+export function applyScenarioAppliesPatch(patch, current) {
+  const next = { ...current, ...patch };
+  const kind = parseScenarioAppliesFromForm(next);
+  const operationScope = scenarioAppliesToOperationScope(kind);
+
+  const result = {
+    ...patch,
+    scenarioApplies: kind,
+    operationScope,
+  };
+
+  if (patch.scenarioApplies && !String(patch.name ?? '').trim()) {
+    result.name = defaultScenarioName(
+      kind,
+      next.specificDestinationUf || next.destinationUf,
+    );
+  }
+
+  if (kind !== 'INTERSTATE_UF') {
+    result.specificDestinationUf = '';
+    result.destinationUf = '';
+  }
+
+  return result;
+}
+
 export function syncFormEstablishmentContext(form, establishmentIssuerUf) {
   const issuerUf = String(establishmentIssuerUf ?? form.issuerUf ?? '').trim().toUpperCase().slice(0, 2);
   const kind = parseScenarioAppliesFromForm(form);
