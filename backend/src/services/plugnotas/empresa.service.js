@@ -25,6 +25,7 @@ import {
   normalizeInscricaoEstadualForEmpresaPayload,
   normalizeMeiEmpresaPayload,
   PLUGNOTAS_REGIME_ESPECIAL_MEI,
+  isFocoSimplesProduct,
 } from './plugnotas-mei-empresa-policy.js';
 import { unwrapPlugnotasEmpresaRecord } from '../mei-emitente-empresa-sync.js';
 import { assertMeiCertificateEligible } from '../mei-certificate-eligibility.service.js';
@@ -309,6 +310,28 @@ const runEmpresaCadastroMunicipioPreflight = async (
   const preflightInput = resolveEmpresaCadastroMunicipioPreflightInput(payload, { operation });
   if (!preflightInput) return null;
 
+  if (isFocoSimplesProduct() && attemptNfseMode === 'nacional') {
+    return {
+      preflight: {
+        consulted: true,
+        codigoIbge: preflightInput.codigoIbge,
+        environment: preflightInput.environment,
+        padraoNacionalEnabled: true,
+        requiresLogin: false,
+        requiresSenha: false
+      },
+      runtimeDecision: buildEmpresaCadastroRuntimeDecision({
+        scenario: 'success_nacional',
+        consultedMunicipio: false,
+        codigoIbge: preflightInput.codigoIbge,
+        environment: preflightInput.environment,
+        padraoNacionalEnabled: true,
+        attemptMode: 'nacional'
+      }),
+      municipalAuthRequired: false
+    };
+  }
+
   try {
     const preflight = await consultarCidadePlugNotas(preflightInput);
     const { allowUpstream, runtimeDecision } = resolveEmpresaCadastroMunicipioRuntimeDecision(
@@ -541,6 +564,40 @@ const isMunicipioHomologacaoPlugnotasError = (error) => {
 };
 
 /** PATCH /empresa/:cnpj quando a empresa ainda não existe na conta PlugNotas. */
+/** POST mínimo NFS-e Nacional (sem trilho municipal) após rejeição por homologação IBGE. */
+const buildMinimalNationalEmpresaPostPayload = (source) => {
+  if (!source || typeof source !== 'object') return source;
+  const endereco = source.endereco && typeof source.endereco === 'object' ? { ...source.endereco } : undefined;
+  const rpsCfg = source.nfse?.config?.rps;
+  const minimal = {
+    cpfCnpj: source.cpfCnpj,
+    certificado: source.certificado,
+    razaoSocial: source.razaoSocial,
+    nomeFantasia: source.nomeFantasia,
+    regimeTributario: source.regimeTributario,
+    simplesNacional: source.simplesNacional,
+    regimeTributarioEspecial: source.regimeTributarioEspecial ?? 0,
+    ...(endereco ? { endereco } : {}),
+    nfse: {
+      ativo: true,
+      tipoContrato: 0,
+      config: {
+        producao: true,
+        nfseNacional: true,
+        consultaNfseNacional: true,
+        ...(rpsCfg && typeof rpsCfg === 'object' ? { rps: { ...rpsCfg } } : {})
+      }
+    },
+    nfe: { ...PLUGNOTAS_EMPRESA_APENAS_NFSE_NFE },
+    nfce: { ...PLUGNOTAS_EMPRESA_APENAS_NFSE_NFCE }
+  };
+  if (source.email) minimal.email = source.email;
+  if (source.inscricaoMunicipal) minimal.inscricaoMunicipal = source.inscricaoMunicipal;
+  applyNfseNationalContractPolicy(minimal);
+  normalizeMeiEmpresaPayload(minimal);
+  return minimal;
+};
+
 const isEmpresaPatchTargetNotFound = (error) => {
   if (!error) return false;
   if (Number(error?.status) === 404) return true;
@@ -1284,7 +1341,7 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
         const recovered = await tryPatchAfterPostFailure('homologacao_municipio_post_400');
         if (recovered) return recovered;
         try {
-          await patchEmpresaPlugNotasDireto(cnpj, { ...payload });
+          await patchEmpresaPlugNotasDireto(cnpj, buildMinimalNationalEmpresaPostPayload(payload));
           const refreshed = await consultarEmpresaPlugNotas(cnpj);
           const record = unwrapPlugnotasEmpresaRecord(refreshed);
           if (record && String(record.razaoSocial || record.nome || '').trim()) {
@@ -1295,6 +1352,21 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
               raw: sanitizePlugnotasEmpresaJsonForClientResponse(refreshed)
             };
           }
+        } catch {
+          /* tenta POST mínimo */
+        }
+        try {
+          const minimal = buildMinimalNationalEmpresaPostPayload(payload);
+          const response = await requestJson('POST', '/empresa', minimal);
+          const data = toObject(response?.data);
+          return {
+            cnpj: typeof data.cnpj === 'string' ? data.cnpj : cnpj,
+            message: typeof response?.message === 'string'
+              ? response.message
+              : 'Empresa cadastrada no emissor fiscal (NFS-e Nacional).',
+            operation: 'created',
+            raw: sanitizePlugnotasEmpresaJsonForClientResponse(response)
+          };
         } catch {
           /* mantém erro original */
         }

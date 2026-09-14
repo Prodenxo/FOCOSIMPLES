@@ -355,7 +355,8 @@ export default function CertificadoPage() {
     setCompanyError(null);
     try {
       const payload = buildPlugNotasEmpresaPayload(companyForm);
-      const updated = empresaRegistered
+      const sendViaPatch = empresaRegistered || plugnotasCertLinked;
+      const updated = sendViaPatch
         ? await updateFiscalCompany(payload)
         : await cadastrarFiscalCompany(payload);
       setEmpresaRegistered(true);
@@ -369,7 +370,7 @@ export default function CertificadoPage() {
       }
     } catch (err) {
       const raw = err instanceof Error ? err.message : 'Falha ao cadastrar a empresa na PlugNotas.';
-      setCompanyError(shortPlugNotasEmpresaError(raw));
+      setCompanyError(raw.trim() || shortPlugNotasEmpresaError(raw));
       if (!company) {
         setCompany({ cpfCnpj: companyForm.cpfCnpj || documento });
       }

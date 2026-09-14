@@ -409,7 +409,16 @@ export const atualizarPlugNotasEmpresa = async (req, res, next) => {
         { plugnotasCode: 'certificado_nao_configurado', certResolution: diagnostics },
       );
     }
-    const writeResult = await atualizarEmpresaPlugNotas(payload);
+    let writeResult;
+    try {
+      writeResult = await atualizarEmpresaPlugNotas(payload);
+    } catch (updateErr) {
+      if (updateErr?.errors?.plugnotasCode === 'empresa_nao_cadastrada') {
+        writeResult = await cadastrarEmpresaPlugNotas(payload);
+      } else {
+        throw updateErr;
+      }
+    }
     await persistDocumentosAtivosMirrorAfterEmpresa(req.user?.id, payload);
     await persistBusinessTypeMirror(req.user?.id, businessType);
     const data = await plugnotasEmpresaRecordAfterWrite(payload.cpfCnpj || payload.cnpj, writeResult);

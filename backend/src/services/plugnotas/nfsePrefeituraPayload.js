@@ -37,6 +37,13 @@ export function applyNfseConfigPrefeituraDeriveIbge(payload, options = {}) {
   if (!nfse || typeof nfse !== 'object' || Array.isArray(nfse)) return false;
   if (nfse.ativo === false) return false;
 
+  const cfg = nfse.config;
+  if (cfg && typeof cfg === 'object' && !Array.isArray(cfg)) {
+    if (cfg.nfseNacional === true || cfg.consultaNfseNacional === true) {
+      return false;
+    }
+  }
+
   const endereco = payload.endereco;
   if (!endereco || typeof endereco !== 'object' || Array.isArray(endereco)) return false;
 
