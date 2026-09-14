@@ -1,5 +1,6 @@
 import { applyEmpresaPlugnotasNfseConfigRps } from './plugnotas-empresa-rps-inicial.js';
 import { env } from '../../config/env.js';
+import { normalizeDocDigits } from '../../utils/cpf-cnpj.js';
 
 /**
  * Política empresa Plugnotas (NFS-e / NF-e / NFC-e).
@@ -67,6 +68,54 @@ const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && 
 
 const toObject = (value) => (isPlainObject(value) ? value : {});
 
+/** @param {unknown} empresaOrPayload */
+export const isNfseNacionalActiveOnEmpresaShape = (empresaOrPayload) => {
+  const nfse = toObject(empresaOrPayload?.nfse);
+  if (nfse.ativo === false) return false;
+  const config = toObject(nfse.config);
+  return config[PLUGNOTAS_NFSE_CONFIG_NACIONAL_KEY] !== false;
+};
+
+/**
+ * NFS-e Nacional (Foco Simples): IM na DPS só com complemento CNC — senão E0120.
+ * @param {unknown} empresaOrPayload
+ */
+export const shouldSuppressInscricaoMunicipalForNfseNacional = (empresaOrPayload) => (
+  isFocoSimplesProduct() && isNfseNacionalActiveOnEmpresaShape(empresaOrPayload)
+);
+
+/** @param {unknown} im @param {unknown} cnpj */
+export const inscricaoMunicipalMatchesCnpj = (im, cnpj) => {
+  const imDigits = normalizeDocDigits(im);
+  const cnpjDigits = normalizeDocDigits(cnpj);
+  return imDigits.length > 0 && cnpjDigits.length === 14 && imDigits === cnpjDigits;
+};
+
+/**
+ * Limpa IM fantasma (ex.: CNPJ repetido) antes de espelhar / devolver ao cliente.
+ * @param {Record<string, unknown>|null|undefined} empresa
+ */
+export const sanitizeEmpresaInscricaoMunicipalForClient = (empresa) => {
+  if (!empresa || typeof empresa !== 'object' || Array.isArray(empresa)) return empresa;
+  const cnpj = empresa.cpfCnpj ?? empresa.cnpj ?? empresa.cpf_cnpj;
+  const im = empresa.inscricaoMunicipal ?? empresa.inscricao_municipal;
+  const hide = shouldSuppressInscricaoMunicipalForNfseNacional(empresa)
+    || inscricaoMunicipalMatchesCnpj(im, cnpj);
+  if (!hide) return empresa;
+  const next = { ...empresa };
+  delete next.inscricaoMunicipal;
+  delete next.inscricao_municipal;
+  return next;
+};
+
+/** @param {Record<string, unknown>} payload @param {boolean} nacionalActive */
+export const applyInscricaoMunicipalNfseNacionalPolicy = (payload, nacionalActive) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return;
+  if (!isFocoSimplesProduct() || !nacionalActive) return;
+  // PATCH sem o campo não remove IM stale na PlugNotas — enviar vazio força limpeza (E0120).
+  payload.inscricaoMunicipal = '';
+};
+
 export const inspectNfseContractInput = (nfseRaw) => {
   const nfse = toObject(nfseRaw);
   const config = toObject(nfse.config);
@@ -122,11 +171,7 @@ export const applyNfseNationalContractPolicy = (payload) => {
   next.config = configWithDefaults;
   payload.nfse = next;
   applyEmpresaPlugnotasNfseConfigRps(payload);
-
-  // E0120 (ADN): sem complemento no CNC do município, IM não pode ir na DPS — não enviar à PlugNotas no trilho nacional.
-  if (!nacionalExplicitlyOff && isFocoSimplesProduct() && hasOwn(payload, 'inscricaoMunicipal')) {
-    delete payload.inscricaoMunicipal;
-  }
+  applyInscricaoMunicipalNfseNacionalPolicy(payload, !nacionalExplicitlyOff);
 
   return contractInput;
 };

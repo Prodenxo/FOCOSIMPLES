@@ -1,4 +1,8 @@
 import { normalizeDocDigits } from '../utils/cpf-cnpj.js';
+import {
+  inscricaoMunicipalMatchesCnpj,
+  shouldSuppressInscricaoMunicipalForNfseNacional,
+} from './plugnotas/plugnotas-mei-empresa-policy.js';
 import { lookupCnpjBrasilApi, lookupCnpjPlugnotas } from './cnpj-lookup.service.js';
 import {
   clearEmitenteNfseMirrorFields,
@@ -226,6 +230,17 @@ export function empresaJsonToEmitentePartial(empresaJson) {
     || partial.codigoCidade
     || partial.cep;
   if (!hasAddress) return null;
+
+  const cnpj = normalizeDocDigits(empresa?.cpfCnpj ?? empresa?.cpf_cnpj ?? empresa?.cnpj ?? '');
+  if (
+    partial.inscricaoMunicipal
+    && (
+      shouldSuppressInscricaoMunicipalForNfseNacional(empresa)
+      || inscricaoMunicipalMatchesCnpj(partial.inscricaoMunicipal, cnpj)
+    )
+  ) {
+    delete partial.inscricaoMunicipal;
+  }
 
   const filtered = Object.fromEntries(
     Object.entries(partial).filter(([, v]) => v !== undefined && v !== null && String(v).trim() !== ''),

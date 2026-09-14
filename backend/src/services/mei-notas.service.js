@@ -18,9 +18,11 @@ import {
 } from './plugnotas/nfse.service.js';
 import {
   advancePlugnotasNfseRpsAfterEmit,
+  ensureEmpresaPlugnotasImClearedForNfseNacional,
   ensureEmpresaPlugnotasNfseMunicipalMode,
   ensureEmpresaPlugnotasRpsForNfseEmit,
   isNfseE0014FromPlugnotasResponse,
+  isNfseE0120FromPlugnotasResponse,
   isNfseE0039FromPlugnotasResponse,
   isNfseRejectedPlugnotasResponse,
   isNfseRpsDuplicateRejectionLoose,
@@ -1675,6 +1677,20 @@ const emitNfseWithAutoRpsRecovery = async (
       await ensureEmpresaPlugnotasNfseMunicipalMode(cnpjPrestadorNfse, empresaJsonCache);
       prep.nfseNacional = false;
       prep.e0039MunicipalRetried = true;
+      continue;
+    }
+
+    if (
+      isNfseE0120FromPlugnotasResponse(response)
+      && prep.nfseNacional !== false
+      && !prep.e0120ImClearRetried
+    ) {
+      console.warn('[plugnotas-nfse] E0120 — limpando IM na PlugNotas e tentando emitir de novo', {
+        cnpj: cnpjPrestadorNfse,
+        attempt: attempt + 1,
+      });
+      await ensureEmpresaPlugnotasImClearedForNfseNacional(cnpjPrestadorNfse).catch(() => {});
+      prep.e0120ImClearRetried = true;
       continue;
     }
 

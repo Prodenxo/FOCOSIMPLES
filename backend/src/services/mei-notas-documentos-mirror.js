@@ -1,4 +1,8 @@
-import { saveDocumentosAtivosMirror } from './mei-certificate-store.js';
+import {
+  clearEmitenteInscricaoMunicipalMirror,
+  saveDocumentosAtivosMirror,
+} from './mei-certificate-store.js';
+import { shouldSuppressInscricaoMunicipalForNfseNacional } from './plugnotas/plugnotas-mei-empresa-policy.js';
 import { reconcileEmitenteMirrorFromEmpresaJson } from './mei-emitente-empresa-sync.js';
 import { consultarEmpresaPlugNotas } from './plugnotas/empresa.service.js';
 import {
@@ -22,6 +26,11 @@ export async function persistDocumentosAtivosMirrorAfterEmpresa(userId, payload,
   if (!userId || !payload || typeof payload !== 'object') return;
 
   await syncEmitente(userId, payload).catch(() => {});
+
+  const im = String(payload.inscricaoMunicipal ?? '').trim();
+  if (shouldSuppressInscricaoMunicipalForNfseNacional(payload) && !im) {
+    await clearEmitenteInscricaoMunicipalMirror(userId).catch(() => {});
+  }
 
   if (!Object.prototype.hasOwnProperty.call(payload, 'documentosAtivos')) return;
   try {

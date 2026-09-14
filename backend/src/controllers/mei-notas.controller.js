@@ -10,6 +10,7 @@ import {
 } from '../lib/empresa-business-type.js';
 import { persistBusinessTypeMirror, getBusinessTypeMirror } from '../services/empresa-business-type.service.js';
 import { unwrapPlugnotasEmpresaRecord } from '../services/mei-emitente-empresa-sync.js';
+import { sanitizeEmpresaInscricaoMunicipalForClient } from '../services/plugnotas/plugnotas-mei-empresa-policy.js';
 import {
   consultarEmpresaAndReconcileMirror,
   persistDocumentosAtivosMirrorAfterEmpresa
@@ -283,7 +284,12 @@ const plugnotasEmpresaRecordAfterWrite = async (cnpjInput, writeResult) => {
     const json = await consultarEmpresaPlugNotas(cnpj);
     const record = unwrapPlugnotasEmpresaRecord(json);
     if (record && typeof record === 'object') {
-      return { ...writeResult, ...record, cpfCnpj: record.cpfCnpj || record.cnpj || cnpj };
+      const merged = {
+        ...writeResult,
+        ...record,
+        cpfCnpj: record.cpfCnpj || record.cnpj || cnpj,
+      };
+      return sanitizeEmpresaInscricaoMunicipalForClient(merged);
     }
   } catch {
     /* GET pós-cadastro é best-effort */
@@ -357,8 +363,10 @@ export const consultarPlugNotasEmpresa = async (req, res, next) => {
     const businessType = await getBusinessTypeMirror(req.user?.id);
     const empresa = unwrapPlugnotasEmpresaRecord(data);
     const enriched = empresa
-      ? { ...empresa, businessType }
-      : (data && typeof data === 'object' ? { ...data, businessType } : { businessType });
+      ? sanitizeEmpresaInscricaoMunicipalForClient({ ...empresa, businessType })
+      : (data && typeof data === 'object'
+        ? sanitizeEmpresaInscricaoMunicipalForClient({ ...data, businessType })
+        : { businessType });
     return sendSuccess(res, enriched, 'Empresa consultada no serviço de emissão fiscal');
   } catch (error) {
     if (error?.errors?.plugnotasCode === 'empresa_nao_cadastrada') {

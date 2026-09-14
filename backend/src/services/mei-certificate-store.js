@@ -336,6 +336,25 @@ export const clearEmitenteNfseMirrorFields = async (userId) => {
   }
 };
 
+/** Zera IM no espelho local (NFS-e Nacional sem CNC — E0120). */
+export const clearEmitenteInscricaoMunicipalMirror = async (userId) => {
+  if (!userId) return;
+  const supabase = getSupabase();
+  const { data: existing, error: selErr } = await supabase
+    .from(TABLE)
+    .select('id')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (selErr || !existing?.id) return;
+  const { error } = await supabase
+    .from(TABLE)
+    .update({ inscricao_municipal: null, updated_at: new Date().toISOString() })
+    .eq('user_id', userId);
+  if (error) {
+    throw badRequest(error.message || 'Falha ao limpar inscrição municipal');
+  }
+};
+
 export const patchEmitenteNfseFields = async (userId, partial) => {
   if (!userId) throw badRequest('Usuário não identificado');
   const fragment = normalizeEmitenteRowFragment(partial, { omitEmpty: true });

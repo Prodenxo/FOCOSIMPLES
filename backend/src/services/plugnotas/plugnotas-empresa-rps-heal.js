@@ -172,6 +172,31 @@ export function isPlugnotasNfseRpsNumeroJaUtilizadoError(error) {
     || message.includes('duplic');
 }
 
+/** E0120 — IM informada sem complemento CNC no município (NFS-e Nacional). */
+export const isNfseE0120ImPrestadorMessage = (text) => {
+  const lower = String(text || '').toLowerCase();
+  return /e0120/.test(lower)
+    || (
+      lower.includes('im do prestador')
+      && lower.includes('não deve ser informado')
+    )
+    || (
+      lower.includes('im do prestador')
+      && lower.includes('nao deve ser informado')
+    );
+};
+
+/** @param {unknown} response */
+export function isNfseE0120FromPlugnotasResponse(response) {
+  if (isNfseE0120ImPrestadorMessage(extractNfseRejectionMessage(response))) return true;
+  try {
+    const text = JSON.stringify(response).toLowerCase();
+    return /e0120/.test(text);
+  } catch {
+    return false;
+  }
+}
+
 /** E0039 — município emissor não parametrizado no Sistema Nacional NFS-e. */
 export const isNfseE0039MunicipioEmissorMessage = (text) => {
   const lower = String(text || '').toLowerCase();
@@ -1005,5 +1030,30 @@ export async function ensureEmpresaPlugnotasNfseMunicipalMode(cnpjInput, empresa
     },
   });
 
+  return true;
+}
+
+/**
+ * Remove IM stale na PlugNotas (NFS-e Nacional / E0120).
+ * @param {string} cnpjInput
+ * @returns {Promise<boolean>}
+ */
+export async function ensureEmpresaPlugnotasImClearedForNfseNacional(cnpjInput) {
+  const cnpj = normalizeDoc(cnpjInput);
+  if (cnpj.length !== 14) return false;
+
+  await atualizarEmpresaPlugNotas({
+    cpfCnpj: cnpj,
+    inscricaoMunicipal: '',
+    nfse: {
+      ativo: true,
+      tipoContrato: 0,
+      config: {
+        producao: true,
+        nfseNacional: true,
+        consultaNfseNacional: true,
+      },
+    },
+  });
   return true;
 }

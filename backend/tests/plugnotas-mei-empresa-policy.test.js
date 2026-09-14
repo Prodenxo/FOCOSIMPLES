@@ -42,7 +42,7 @@ test('applyNfseNationalContractPolicy no Foco Simples remove IM (E0120 / CNC)', 
       nfse: { ativo: true, config: { nfseNacional: true } },
     };
     applyNfseNationalContractPolicy(payload);
-    assert.equal('inscricaoMunicipal' in payload, false);
+    assert.equal(payload.inscricaoMunicipal, '');
   } finally {
     env.APP_PRODUCT = prev;
   }

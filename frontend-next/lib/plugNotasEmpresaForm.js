@@ -149,7 +149,20 @@ export function mergeCertPrefillIntoCertPageForm(form, prefill, options = {}) {
       onlyFillEmpty && !String(base.nomeFantasia ?? '').trim(),
     ),
     cpfCnpj: takeField(base.cpfCnpj, prefill?.prestadorCpfCnpj, onlyFillEmpty),
-    inscricaoMunicipal: takeField(base.inscricaoMunicipal, prefill?.prestadorInscricaoMunicipal, onlyFillEmpty),
+    inscricaoMunicipal: (() => {
+      const prefillIm = prefill?.prestadorInscricaoMunicipal;
+      const cnpjDigits = normalizeDoc(base.cpfCnpj || prefill?.prestadorCpfCnpj);
+      const prefillImDigits = normalizeDoc(prefillIm);
+      if (
+        isNfseNacionalEmpresaForm(base)
+        && prefillImDigits
+        && cnpjDigits.length === 14
+        && prefillImDigits === cnpjDigits
+      ) {
+        return takeField(base.inscricaoMunicipal, '', onlyFillEmpty);
+      }
+      return takeField(base.inscricaoMunicipal, prefillIm, onlyFillEmpty);
+    })(),
     email: takeField(base.email, prefill?.prestadorEmail, onlyFillEmpty),
     logradouro: takeField(base.logradouro, pec?.logradouro, onlyFillEmpty),
     bairro: takeField(base.bairro, pec?.bairro, onlyFillEmpty),
@@ -211,6 +224,17 @@ export function needsAddressEnrichment(form) {
   return !(hasCep && hasCity && hasUf && hasStreet);
 }
 
+/** Remove IM espúria (CNPJ repetido) quando NFS-e Nacional — evita repovoar o formulário após GET PlugNotas. */
+export function clearImForNfseNacionalForm(form) {
+  if (!form || typeof form !== 'object') return form;
+  if (!form.nfseAtivo || form.nfseNacional === false) return form;
+  const cnpj = normalizeDoc(form.cpfCnpj);
+  const im = normalizeDoc(form.inscricaoMunicipal);
+  if (!im) return { ...form, inscricaoMunicipal: '' };
+  if (cnpj.length === 14 && im === cnpj) return { ...form, inscricaoMunicipal: '' };
+  return form;
+}
+
 export async function buildEnrichedCertPageForm({
   empresa = null,
   prefill = null,
@@ -235,7 +259,7 @@ export async function buildEnrichedCertPageForm({
     }
   }
 
-  return form;
+  return clearImForNfseNacionalForm(form);
 }
 
 /** @param {Record<string, unknown>|null|undefined} empresa */
@@ -369,7 +393,9 @@ export function buildPlugNotasEmpresaPayload(form) {
   };
 
   if (email) payload.email = email;
-  if (im) payload.inscricaoMunicipal = im;
+  if (im && !(form.nfseAtivo && isNfseNacionalEmpresaForm(form))) {
+    payload.inscricaoMunicipal = im;
+  }
   if (ie) {
     if (ie.toUpperCase() === 'ISENTO') payload.inscricaoEstadual = 'ISENTO';
     else {
