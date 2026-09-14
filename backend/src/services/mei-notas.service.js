@@ -2892,14 +2892,21 @@ export const listarCatalogoClientes = async (
 ) => {
   const safeLimit = toCatalogLimit(limit);
   const dbClient = getDb();
+  if (!userId) throw badRequest('userId obrigatório para listar catálogo de clientes');
+  const catalogUserIds = await resolveCatalogUserIdsForActorRef(userId);
   // Busca um pouco a mais quando filtra soft-hide em memória (sem coluna no schema compartilhado).
   const fetchLimit = includeInactive ? safeLimit : Math.min(100, Math.max(safeLimit * 3, safeLimit));
   let query = dbClient
     .from(CLIENTS_TABLE)
     .select(CLIENT_CATALOG_SELECT)
-    .eq('user_id', userId)
     .order('last_used_at', { ascending: false })
     .limit(fetchLimit);
+
+  if (catalogUserIds.length === 1) {
+    query = query.eq('user_id', catalogUserIds[0]);
+  } else {
+    query = query.in('user_id', catalogUserIds);
+  }
 
   if (documentType) {
     query = query.eq('document_type', normalizeDocumentType(documentType));
@@ -3131,14 +3138,21 @@ const ensureCatalogRecordId = (id) => {
   return raw;
 };
 
-const findCatalogCliente = async (userId, id) => {
+/** Cliente visível na listagem do ator (mesma empresa / vínculos do catálogo). */
+const findCatalogClienteForActor = async (userId, id) => {
+  const recordId = ensureCatalogRecordId(id);
+  const catalogUserIds = await resolveCatalogUserIdsForActorRef(userId);
   const dbClient = getDb();
-  const { data, error } = await dbClient
+  let query = dbClient
     .from(CLIENTS_TABLE)
     .select('id, user_id, document_type, documento, nome, email, metadata_json, dedupe_key, last_used_at, created_at, updated_at')
-    .eq('id', id)
-    .eq('user_id', userId)
-    .maybeSingle();
+    .eq('id', recordId);
+  if (catalogUserIds.length === 1) {
+    query = query.eq('user_id', catalogUserIds[0]);
+  } else {
+    query = query.in('user_id', catalogUserIds);
+  }
+  const { data, error } = await query.maybeSingle();
   if (error) throw badRequest(error.message);
   if (!data) throw notFound('Cliente do catálogo não encontrado');
   return withDerivedCatalogActive(data);
@@ -3380,7 +3394,8 @@ export const atualizarCatalogoCliente = async (userId, id, body = {}) => {
     throw badRequest('Não é permitido alterar dedupe_key');
   }
 
-  const existing = await findCatalogCliente(userId, recordId);
+  const existing = await findCatalogClienteForActor(userId, recordId);
+  const catalogUserId = existing.user_id;
 
   const updates = {};
   if (body.nome !== undefined) {
@@ -3431,7 +3446,7 @@ export const atualizarCatalogoCliente = async (userId, id, body = {}) => {
     .from(CLIENTS_TABLE)
     .update(updates)
     .eq('id', recordId)
-    .eq('user_id', userId)
+    .eq('user_id', catalogUserId)
     .select(CLIENT_CATALOG_SELECT)
     .single();
   if (error) throw badRequest(error.message);
@@ -3851,26 +3866,35 @@ export const atualizarCatalogoProduto = async (userId, id, body = {}, options = 
  */
 export const eliminarCatalogoCliente = async (userId, id) => {
   const recordId = ensureCatalogRecordId(id);
+  let existing = null;
+  try {
+    existing = await findCatalogClienteForActor(userId, recordId);
+  } catch (err) {
+    if (err?.statusCode === 404) return;
+    throw err;
+  }
+  const ownerUserId = existing.user_id;
   const dbClient = getDb();
   const { data: removed, error } = await dbClient
     .from(CLIENTS_TABLE)
     .delete()
     .eq('id', recordId)
-    .eq('user_id', userId)
+    .eq('user_id', ownerUserId)
     .select('id');
   if (error) throw badRequest(error.message);
   if (removed && removed.length > 0) return;
 
+  const catalogUserIds = await resolveCatalogUserIdsForActorRef(userId);
   const { data: anyRow, error: errLookup } = await dbClient
     .from(CLIENTS_TABLE)
     .select('id, user_id')
     .eq('id', recordId)
     .maybeSingle();
   if (errLookup) throw badRequest(errLookup.message);
-  if (anyRow && anyRow.user_id !== userId) {
+  if (anyRow && !catalogUserIds.includes(anyRow.user_id)) {
     throw notFound('Cliente do catálogo não encontrado');
   }
-  if (anyRow && anyRow.user_id === userId) {
+  if (anyRow && catalogUserIds.includes(anyRow.user_id)) {
     throw badRequest('Não foi possível excluir o cliente do catálogo. Tente de novo.');
   }
 };

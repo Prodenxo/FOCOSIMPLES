@@ -165,6 +165,13 @@ export function EmitirNotaModal({
   const prestadorUserEditedRef = useRef(false);
   const emitenteUserEditedRef = useRef(false);
 
+  const normalizeCatalogList = (data, key) => {
+    if (Array.isArray(data)) return data;
+    if (data?.[key]) return data[key];
+    if (data?.items) return data.items;
+    return [];
+  };
+
   const loadClientes = useCallback(async () => {
     if (!catalogDocumentType) return;
     setClientesLoading(true);
@@ -174,9 +181,15 @@ export function EmitirNotaModal({
         limit: 20,
         documentType: catalogDocumentType,
       });
-      setClientes(Array.isArray(data) ? data : data?.clientes || data?.items || []);
+      let list = normalizeCatalogList(data, 'clientes');
+      if (list.length === 0) {
+        const fallback = await fetchCatalogoClientes({ q: clienteSearch, limit: 20 });
+        list = normalizeCatalogList(fallback, 'clientes');
+      }
+      setClientes(list);
     } catch (err) {
       console.warn('Falha ao carregar clientes:', err);
+      setClientes([]);
     } finally {
       setClientesLoading(false);
     }
@@ -191,20 +204,26 @@ export function EmitirNotaModal({
         limit: 20,
         documentType: catalogDocumentType,
       });
-      setProdutos(Array.isArray(data) ? data : data?.produtos || data?.items || []);
+      let list = normalizeCatalogList(data, 'produtos');
+      if (list.length === 0) {
+        const fallback = await fetchCatalogoProdutos({ q: produtoSearch, limit: 20 });
+        list = normalizeCatalogList(fallback, 'produtos');
+      }
+      setProdutos(list);
     } catch (err) {
       console.warn('Falha ao carregar produtos:', err);
+      setProdutos([]);
     } finally {
       setProdutosLoading(false);
     }
   }, [produtoSearch, catalogDocumentType]);
 
-  // Carrega clientes quando abre a lista
+  // Recarrega clientes sempre que abre o painel do catálogo
   useEffect(() => {
-    if (showClienteList && clientes.length === 0) {
+    if (showClienteList) {
       loadClientes();
     }
-  }, [showClienteList, clientes.length, loadClientes]);
+  }, [showClienteList, loadClientes]);
 
   // Carrega produtos quando abre a lista ou entra no passo Itens
   useEffect(() => {

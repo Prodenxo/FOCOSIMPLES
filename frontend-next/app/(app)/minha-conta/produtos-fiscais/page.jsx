@@ -14,6 +14,7 @@ import {
   listAccountantProducts,
   saveProductFiscalProfile,
 } from '@/lib/accountantFiscalApi';
+import { fetchCertificateStatus, fetchFiscalCompany } from '@/lib/fiscalApi';
 import { Card } from '@/components/ui/Card';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { EmptyPanel } from '@/components/ui/EmptyPanel';
@@ -21,7 +22,7 @@ import { ErrorPanel } from '@/components/ui/ErrorPanel';
 import { LoadingPanel } from '@/components/ui/LoadingPanel';
 
 export default function ProdutosFiscaisPage() {
-  const { role } = useAuth();
+  const { role, empresaId } = useAuth();
   const canAccess = hasRole(role, ['admin']);
 
   const [clients, setClients] = useState([]);
@@ -40,14 +41,35 @@ export default function ProdutosFiscaisPage() {
 
   useEffect(() => {
     if (!canAccess) return;
-    listAccountantClients()
-      .then((list) => {
-        setClients(Array.isArray(list) ? list : []);
-        if (list?.[0]?.empresaId) setSelectedClient(list[0].empresaId);
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : 'Falha ao carregar clientes.'))
-      .finally(() => setLoading(false));
-  }, [canAccess]);
+    (async () => {
+      try {
+        let list = await listAccountantClients();
+        list = Array.isArray(list) ? list : [];
+        if (list.length === 0 && empresaId) {
+          const cert = await fetchCertificateStatus().catch(() => null);
+          const docDigits = String(cert?.documento || '').replace(/\D/g, '');
+          if (docDigits.length === 14) {
+            const company = await fetchFiscalCompany(docDigits).catch(() => null);
+            list = [{
+              empresaId,
+              establishmentId: docDigits,
+              clientKey: `${empresaId}:${docDigits}`,
+              cpfCnpj: docDigits,
+              razaoSocial: company?.razaoSocial ?? cert?.razao_social ?? null,
+              nomeFantasia: company?.nomeFantasia ?? cert?.nome_fantasia ?? null,
+              label: company?.nomeFantasia || company?.razaoSocial || cert?.razao_social || 'Minha empresa',
+            }];
+          }
+        }
+        setClients(list);
+        if (list[0]?.empresaId) setSelectedClient(list[0].empresaId);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Falha ao carregar clientes.');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [canAccess, empresaId]);
 
   const loadClientData = useCallback(async () => {
     if (!selectedClient) return;
@@ -134,15 +156,22 @@ export default function ProdutosFiscaisPage() {
       ) : null}
 
       <Card className="space-y-4 p-4 sm:p-5">
-        <AppSelect
-          label="Cliente (CNPJ)"
-          value={selectedClient}
-          onChange={setSelectedClient}
-          options={clients.map((c) => ({
-            value: c.empresaId,
-            label: c.label || c.nomeFantasia || c.razaoSocial || c.cpfCnpj,
-          }))}
-        />
+        {clients.length === 0 && !loading ? (
+          <EmptyPanel
+            title="Nenhum cliente disponível"
+            description="Vincule um certificado A1 válido e habilite a emissão (MEI) para configurar produtos fiscais."
+          />
+        ) : (
+          <AppSelect
+            label="Cliente (CNPJ)"
+            value={selectedClient}
+            onChange={setSelectedClient}
+            options={clients.map((c) => ({
+              value: c.empresaId,
+              label: c.label || c.nomeFantasia || c.razaoSocial || c.cpfCnpj,
+            }))}
+          />
+        )}
 
         {establishments.length > 0 ? (
           <AppSelect
