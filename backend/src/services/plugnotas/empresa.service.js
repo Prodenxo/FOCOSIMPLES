@@ -535,6 +535,11 @@ const requestFormData = async (method, path, body) => {
   }
 };
 
+const isMunicipioHomologacaoPlugnotasError = (error) => {
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes('homologad') || message.includes('homologação');
+};
+
 const isConflictLikeError = (error) => {
   const status = Number(error?.status || 0);
   if (status === 409) return true;
@@ -1195,13 +1200,13 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
       )
     };
   } catch (createError) {
-    if (!isConflictLikeError(createError)) {
-      throw createError;
-    }
-
-    stripRpsFromEmpresaPayload(payload);
-    const updateResult = await tryUpdateEmpresa(cnpj, payload);
-    if (updateResult.response) {
+    const tryPatchAfterPostFailure = async (reasonTag) => {
+      if (attemptNfseMode === 'nacional') {
+        applyNfseNationalContractPolicy(payload);
+      }
+      stripRpsFromEmpresaPayload(payload);
+      const updateResult = await tryUpdateEmpresa(cnpj, payload);
+      if (!updateResult.response) return null;
       const data = toObject(updateResult.response?.data);
       const fallbackMessage = `Empresa atualizada no serviço de emissão (${updateResult.attempt.method} ${updateResult.attempt.path}).`;
       return {
@@ -1215,8 +1220,22 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
           'updated',
           attemptNfseMode,
           preflightContext?.runtimeDecision
-        )
+        ),
+        ...(reasonTag ? { patchRecovery: reasonTag } : {})
       };
+    };
+
+    if (!isConflictLikeError(createError)) {
+      if (isMunicipioHomologacaoPlugnotasError(createError)) {
+        const recovered = await tryPatchAfterPostFailure('homologacao_municipio_post_400');
+        if (recovered) return recovered;
+      }
+      throw createError;
+    }
+
+    const conflictRecovered = await tryPatchAfterPostFailure('empresa_ja_cadastrada');
+    if (conflictRecovered) {
+      return conflictRecovered;
     }
 
     return {

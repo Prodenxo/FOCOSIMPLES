@@ -114,6 +114,11 @@ export const applyNfseNationalContractPolicy = (payload) => {
       : (nextConfig[PLUGNOTAS_NFSE_CONFIG_CONSULTA_NACIONAL_KEY] ?? PLUGNOTAS_NFSE_NACIONAL_DEFAULT_ON),
   };
 
+  // Trilho nacional: nunca enviar `prefeitura` (dispara validação de homologação municipal na PlugNotas).
+  if (!nacionalExplicitlyOff) {
+    delete configWithDefaults.prefeitura;
+  }
+
   next.config = configWithDefaults;
   payload.nfse = next;
   applyEmpresaPlugnotasNfseConfigRps(payload);

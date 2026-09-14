@@ -22,7 +22,6 @@ import {
   lookupCnpj,
   removeCertificate,
   syncCertificatePlugnotas,
-  patchCertificateEmitenteLocal,
   updateFiscalCompany,
   uploadCertificate,
   importCnaesProdutos,
@@ -31,7 +30,6 @@ import {
   applyDocumentosAtivosToCompanyForm,
   buildEnrichedCertPageForm,
   buildPlugNotasEmpresaPayload,
-  companyFormToLocalEmitentePatch,
   getPlugNotasCompanyValidationMessage,
   isEmpresaCadastradaNoEmissor,
   mergeCnpjLookupIntoCertPageForm,
@@ -69,8 +67,6 @@ export default function CertificadoPage() {
   const [company, setCompany] = useState(null);
   const [companyLoading, setCompanyLoading] = useState(false);
   const [companyError, setCompanyError] = useState(null);
-  const [companyNotice, setCompanyNotice] = useState(null);
-  const [companyLocalSaving, setCompanyLocalSaving] = useState(false);
 
   const [companyForm, setCompanyForm] = useState(null);
   const [companyDirty, setCompanyDirty] = useState(false);
@@ -343,10 +339,6 @@ export default function CertificadoPage() {
     setCompanyDirty(true);
   };
 
-  const persistCompanyLocalMirror = async (form) => {
-    await patchCertificateEmitenteLocal(companyFormToLocalEmitentePatch(form));
-  };
-
   const handleSaveCompany = async (e) => {
     e.preventDefault();
     if (!companyForm) return;
@@ -354,14 +346,12 @@ export default function CertificadoPage() {
     const validationMsg = getPlugNotasCompanyValidationMessage(companyForm);
     if (validationMsg) {
       setCompanyError(validationMsg);
-      setCompanyNotice(null);
       return;
     }
 
     setCompanySaving(true);
     setCompanySavedAt(null);
     setCompanyError(null);
-    setCompanyNotice(null);
     try {
       const payload = buildPlugNotasEmpresaPayload(companyForm);
       const updated = empresaRegistered
@@ -374,45 +364,13 @@ export default function CertificadoPage() {
       setCompanyDirty(false);
       setCompanySavedAt(new Date());
     } catch (err) {
-      const raw = err instanceof Error ? err.message : 'Falha ao salvar dados da empresa.';
-      try {
-        await persistCompanyLocalMirror(companyForm);
-        setCompanyNotice(
-          `${shortPlugNotasEmpresaError(raw)} Seus dados foram salvos no Foco Simples mesmo assim; a emissão na PlugNotas só libera quando eles aceitarem o cadastro.`,
-        );
-        setCompanyDirty(false);
-        setCompanySavedAt(new Date());
-      } catch {
-        setCompanyError(shortPlugNotasEmpresaError(raw));
-      }
+      const raw = err instanceof Error ? err.message : 'Falha ao cadastrar a empresa na PlugNotas.';
+      setCompanyError(shortPlugNotasEmpresaError(raw));
       if (!company) {
         setCompany({ cpfCnpj: companyForm.cpfCnpj || documento });
       }
     } finally {
       setCompanySaving(false);
-    }
-  };
-
-  const handleSaveCompanyLocalOnly = async () => {
-    if (!companyForm) return;
-    const validationMsg = getPlugNotasCompanyValidationMessage(companyForm);
-    if (validationMsg) {
-      setCompanyError(validationMsg);
-      setCompanyNotice(null);
-      return;
-    }
-    setCompanyLocalSaving(true);
-    setCompanyError(null);
-    setCompanyNotice(null);
-    try {
-      await persistCompanyLocalMirror(companyForm);
-      setCompanyNotice('Dados salvos no Foco Simples (sem enviar à PlugNotas).');
-      setCompanyDirty(false);
-      setCompanySavedAt(new Date());
-    } catch (err) {
-      setCompanyError(err instanceof Error ? err.message : 'Falha ao salvar localmente.');
-    } finally {
-      setCompanyLocalSaving(false);
     }
   };
 
@@ -669,19 +627,6 @@ export default function CertificadoPage() {
             </div>
           ) : companyForm ? (
             <form onSubmit={handleSaveCompany} className="mt-4 space-y-4">
-              {companyNotice ? (
-                <div className="flex items-start justify-between gap-3 rounded-[12px] border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
-                  <p className="text-xs leading-relaxed">{companyNotice}</p>
-                  <button
-                    type="button"
-                    onClick={() => setCompanyNotice(null)}
-                    className="shrink-0 text-xs font-semibold text-amber-800 underline dark:text-amber-200"
-                  >
-                    Fechar
-                  </button>
-                </div>
-              ) : null}
-
               {companyError ? (
                 <div className="rounded-[12px] border border-red-200 bg-red-50 p-3 dark:border-red-900/40 dark:bg-red-950/30">
                   {hasUserCert && !plugnotasCertLinked ? (
@@ -749,20 +694,11 @@ export default function CertificadoPage() {
               <div className="flex flex-wrap items-center gap-3 border-t border-[var(--card-border)] pt-4">
                 <button
                   type="submit"
-                  disabled={(!companyDirty && !companyError && !companyNotice) || companySaving}
+                  disabled={(!companyDirty && !companyError) || companySaving}
                   className="inline-flex h-10 items-center gap-2 rounded-[12px] bg-[var(--accent)] px-4 text-sm font-semibold text-white shadow-[var(--shadow-card)] hover:opacity-90 disabled:opacity-60"
                 >
                   {companySaving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <CheckCircle2 className="h-4 w-4" aria-hidden />}
-                  Salvar e enviar à PlugNotas
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleSaveCompanyLocalOnly()}
-                  disabled={!companyDirty || companyLocalSaving || companySaving}
-                  className="inline-flex h-10 items-center gap-2 rounded-[12px] border border-[var(--card-border)] px-4 text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--canvas)] disabled:opacity-60"
-                >
-                  {companyLocalSaving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-                  Salvar só no Foco Simples
+                  {companyError ? 'Tentar cadastrar na PlugNotas' : 'Salvar na PlugNotas'}
                 </button>
                 {companySavedAt ? (
                   <span className="text-xs text-[var(--text-muted)]">

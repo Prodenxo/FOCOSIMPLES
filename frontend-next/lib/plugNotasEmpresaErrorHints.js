@@ -7,7 +7,7 @@ export function shortPlugNotasEmpresaError(raw) {
 
   const lower = text.toLowerCase();
   if (lower.includes('homologad')) {
-    return 'PlugNotas: município (IBGE) ainda não homologado no cadastro municipal deles — com NFS-e Nacional marcado, o cadastro pode exigir ajuste na conta Tecnospeed.';
+    return 'A PlugNotas recusou o cadastro (município/IBGE). Confira NFS-e Nacional marcado e tente de novo; se persistir, a conta Tecnospeed precisa liberar o CNPJ no emissor.';
   }
   if (lower.includes('codigoibgecidade') && lower.includes('tabela')) {
     return 'PlugNotas: código IBGE da cidade não aceito. Confira os 7 dígitos (ex.: 3300159).';
