@@ -165,7 +165,8 @@ export default function CertificadoPage() {
         || enrichedForm?.cep,
       );
 
-      setEmpresaRegistered(isEmpresaCadastradaNoEmissor(data));
+      const registeredOnPlugnotas = isEmpresaCadastradaNoEmissor(data);
+      setEmpresaRegistered(registeredOnPlugnotas);
       const canShowForm = hasEmpresa || hasPrefill || (hasUserCert && documento);
       setCompany(canShowForm ? (data || { cpfCnpj: documento }) : null);
       if (canShowForm) {
@@ -363,6 +364,9 @@ export default function CertificadoPage() {
       setCompanyForm(refreshedForm);
       setCompanyDirty(false);
       setCompanySavedAt(new Date());
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('focosimples:fiscal-refresh'));
+      }
     } catch (err) {
       const raw = err instanceof Error ? err.message : 'Falha ao cadastrar a empresa na PlugNotas.';
       setCompanyError(shortPlugNotasEmpresaError(raw));

@@ -28,6 +28,7 @@ import {
   atualizarEmpresaPlugNotas,
   cadastrarCertificadoPlugNotas,
   cadastrarEmpresaPlugNotas,
+  consultarEmpresaPlugNotas,
   resolverCertificadoIdPorCnpj
 } from '../services/plugnotas/empresa.service.js';
 import {
@@ -275,6 +276,21 @@ const injectCertificadoIdIntoEmpresaPayload = async (userId, payload) => {
   return { certId: certId || null, diagnostics };
 };
 
+const plugnotasEmpresaRecordAfterWrite = async (cnpjInput, writeResult) => {
+  const cnpj = String(cnpjInput || writeResult?.cnpj || '').replace(/\D/g, '');
+  if (cnpj.length !== 14) return writeResult;
+  try {
+    const json = await consultarEmpresaPlugNotas(cnpj);
+    const record = unwrapPlugnotasEmpresaRecord(json);
+    if (record && typeof record === 'object') {
+      return { ...writeResult, ...record, cpfCnpj: record.cpfCnpj || record.cnpj || cnpj };
+    }
+  } catch {
+    /* GET pós-cadastro é best-effort */
+  }
+  return writeResult;
+};
+
 export const cadastrarPlugNotasEmpresa = async (req, res, next) => {
   try {
     if (!env.PLUGNOTAS_API_BASE_URL || !env.PLUGNOTAS_API_KEY) {
@@ -290,9 +306,10 @@ export const cadastrarPlugNotasEmpresa = async (req, res, next) => {
     if (!certId) {
       req._certResolutionDiagnostics = diagnostics;
     }
-    const data = await cadastrarEmpresaPlugNotas(payload);
+    const writeResult = await cadastrarEmpresaPlugNotas(payload);
     await persistDocumentosAtivosMirrorAfterEmpresa(req.user?.id, payload);
     await persistBusinessTypeMirror(req.user?.id, businessType);
+    const data = await plugnotasEmpresaRecordAfterWrite(payload.cpfCnpj || payload.cnpj, writeResult);
     return sendSuccess(res, data, 'Empresa configurada no serviço de emissão fiscal');
   } catch (error) {
     if (error?.errors?.plugnotasCode === 'certificado_nao_configurado' && req._certResolutionDiagnostics) {
@@ -392,9 +409,10 @@ export const atualizarPlugNotasEmpresa = async (req, res, next) => {
         { plugnotasCode: 'certificado_nao_configurado', certResolution: diagnostics },
       );
     }
-    const data = await atualizarEmpresaPlugNotas(payload);
+    const writeResult = await atualizarEmpresaPlugNotas(payload);
     await persistDocumentosAtivosMirrorAfterEmpresa(req.user?.id, payload);
     await persistBusinessTypeMirror(req.user?.id, businessType);
+    const data = await plugnotasEmpresaRecordAfterWrite(payload.cpfCnpj || payload.cnpj, writeResult);
     return sendSuccess(res, data, 'Empresa atualizada no serviço de emissão fiscal');
   } catch (error) {
     if (error?.errors?.plugnotasCode === 'certificado_nao_configurado' && req._certResolutionDiagnostics) {

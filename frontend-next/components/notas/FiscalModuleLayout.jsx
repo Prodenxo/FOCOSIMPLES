@@ -66,10 +66,18 @@ export function FiscalModuleLayout({ children }) {
       setCompanyError(null);
       try {
         const data = await fetchFiscalCompany(doc);
-        setCompany(data || null);
+        if (data) {
+          setCompany(data);
+        } else {
+          const emitente = status?.nfseEmitente;
+          const razao = emitente?.razaoSocial || emitente?.nomeFantasia || null;
+          setCompany(razao ? { cpfCnpj: doc, cnpj: doc, razaoSocial: razao } : null);
+        }
       } catch (err) {
         setCompanyError(err instanceof Error ? err.message : 'Falha ao consultar empresa.');
-        setCompany(null);
+        const emitente = status?.nfseEmitente;
+        const razao = emitente?.razaoSocial || emitente?.nomeFantasia || null;
+        setCompany(razao ? { cpfCnpj: doc, cnpj: doc, razaoSocial: razao } : null);
       } finally {
         setCompanyLoading(false);
       }

@@ -540,6 +540,14 @@ const isMunicipioHomologacaoPlugnotasError = (error) => {
   return message.includes('homologad') || message.includes('homologação');
 };
 
+/** PATCH /empresa/:cnpj quando a empresa ainda não existe na conta PlugNotas. */
+const isEmpresaPatchTargetNotFound = (error) => {
+  if (!error) return false;
+  if (Number(error?.status) === 404) return true;
+  if (String(error?.errors?.plugnotasCode || '') === PLUGNOTAS_EMPRESA_NAO_CADASTRADA_CODE) return true;
+  return isEmpresaNaoLocalizadaMessage(error?.message);
+};
+
 const isConflictLikeError = (error) => {
   const status = Number(error?.status || 0);
   if (status === 409) return true;
@@ -1184,6 +1192,38 @@ export const cadastrarEmpresaPlugNotas = async (input) => {
   });
 
   applyEmpresaPlugnotasRpsInicialForPost(payload);
+
+  if (attemptNfseMode === 'nacional') {
+    applyNfseNationalContractPolicy(payload);
+  }
+
+  // Upsert: quem já cadastrou empresa/certificado na PlugNotas (Expo, painel, etc.) atualiza via PATCH.
+  const patchFirst = await tryUpdateEmpresa(cnpj, { ...payload });
+  if (patchFirst.response) {
+    const data = toObject(patchFirst.response?.data);
+    return {
+      cnpj: typeof data.cnpj === 'string' ? data.cnpj : cnpj,
+      message: typeof patchFirst.response?.message === 'string'
+        ? patchFirst.response.message
+        : 'Empresa sincronizada no serviço de emissão fiscal.',
+      operation: 'updated',
+      raw: sanitizePlugnotasEmpresaJsonForClientResponse(patchFirst.response),
+      runtimeDecision: buildEmpresaCadastroSuccessRuntimeDecision(
+        'updated',
+        attemptNfseMode,
+        preflightContext?.runtimeDecision
+      )
+    };
+  }
+
+  const patchErr = patchFirst.lastError;
+  if (
+    patchErr
+    && !isEmpresaPatchTargetNotFound(patchErr)
+    && !isMunicipioHomologacaoPlugnotasError(patchErr)
+  ) {
+    throw patchErr;
+  }
 
   try {
     const response = await requestJson('POST', '/empresa', payload);
