@@ -9,8 +9,14 @@ export async function listAccountantClients() {
   return data?.clients || data || [];
 }
 
-export async function listAccountantProducts(empresaId) {
-  const data = await apiClient.get(`${clientBase(empresaId)}/products`);
+export async function listAccountantProducts(empresaId, options = {}) {
+  const params = new URLSearchParams();
+  if (options.q) params.set('q', options.q);
+  if (options.limit) params.set('limit', String(options.limit));
+  if (options.documentType) params.set('documentType', options.documentType);
+  if (options.emitterUserId) params.set('emitterUserId', options.emitterUserId);
+  const qs = params.toString();
+  const data = await apiClient.get(`${clientBase(empresaId)}/products${qs ? `?${qs}` : ''}`);
   return data?.products || data?.items || [];
 }
 

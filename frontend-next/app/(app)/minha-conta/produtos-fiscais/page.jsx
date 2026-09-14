@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Loader2, Save } from 'lucide-react';
 import { useAuth } from '@/context/AuthProvider';
@@ -21,12 +21,23 @@ import { EmptyPanel } from '@/components/ui/EmptyPanel';
 import { ErrorPanel } from '@/components/ui/ErrorPanel';
 import { LoadingPanel } from '@/components/ui/LoadingPanel';
 
+function clientSelectValue(client) {
+  return client?.clientKey ?? client?.empresaId ?? '';
+}
+
 export default function ProdutosFiscaisPage() {
-  const { role, empresaId } = useAuth();
+  const { role, empresaId, userId } = useAuth();
   const canAccess = hasRole(role, ['admin']);
 
   const [clients, setClients] = useState([]);
-  const [selectedClient, setSelectedClient] = useState('');
+  const [selectedClientKey, setSelectedClientKey] = useState('');
+
+  const selectedClient = useMemo(
+    () => clients.find((c) => clientSelectValue(c) === selectedClientKey) ?? null,
+    [clients, selectedClientKey],
+  );
+  const selectedEmpresaId = selectedClient?.empresaId
+    ?? (selectedClientKey.includes(':') ? selectedClientKey.split(':')[0] : selectedClientKey);
   const [establishments, setEstablishments] = useState([]);
   const [establishmentId, setEstablishmentId] = useState('');
   const [products, setProducts] = useState([]);
@@ -54,6 +65,7 @@ export default function ProdutosFiscaisPage() {
               empresaId,
               establishmentId: docDigits,
               clientKey: `${empresaId}:${docDigits}`,
+              emitterUserId: userId || null,
               cpfCnpj: docDigits,
               razaoSocial: company?.razaoSocial ?? cert?.razao_social ?? null,
               nomeFantasia: company?.nomeFantasia ?? cert?.nome_fantasia ?? null,
@@ -62,31 +74,45 @@ export default function ProdutosFiscaisPage() {
           }
         }
         setClients(list);
-        if (list[0]?.empresaId) setSelectedClient(list[0].empresaId);
+        if (list[0]) setSelectedClientKey(clientSelectValue(list[0]));
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Falha ao carregar clientes.');
       } finally {
         setLoading(false);
       }
     })();
-  }, [canAccess, empresaId]);
+  }, [canAccess, empresaId, userId]);
 
   const loadClientData = useCallback(async () => {
-    if (!selectedClient) return;
+    if (!selectedEmpresaId) return;
+    if (!selectedClient?.emitterUserId) {
+      setError('Não foi possível identificar o emissor MEI deste CNPJ. Escolha outro cliente ou confira o vínculo em Gerenciar usuários.');
+      setProducts([]);
+      setEstablishments([]);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const est = await listAccountantEstablishments(selectedClient);
+      const preferredEst = selectedClient.establishmentId?.replace(/\D/g, '') || '';
+      const est = await listAccountantEstablishments(selectedEmpresaId);
       const estList = est?.establishments || est || [];
       setEstablishments(estList);
-      const estId = estList[0]?.establishmentId || '';
+      const matchedEst = preferredEst
+        ? estList.find((e) => String(e.establishmentId || '').replace(/\D/g, '') === preferredEst)
+        : null;
+      const estId = matchedEst?.establishmentId || estList[0]?.establishmentId || preferredEst || '';
       setEstablishmentId(estId);
-      const prods = await listAccountantProducts(selectedClient);
+      const prods = await listAccountantProducts(selectedEmpresaId, {
+        limit: 200,
+        documentType: 'NFE',
+        emitterUserId: selectedClient.emitterUserId,
+      });
       setProducts(Array.isArray(prods) ? prods : []);
       if (estId) {
         const [comp, ready] = await Promise.all([
-          fetchCompanyFiscalProfile(selectedClient, estId),
-          fetchFiscalReadiness(selectedClient, estId),
+          fetchCompanyFiscalProfile(selectedEmpresaId, estId),
+          fetchFiscalReadiness(selectedEmpresaId, estId),
         ]);
         setCompanyProfile(comp);
         setReadiness(ready);
@@ -96,28 +122,28 @@ export default function ProdutosFiscaisPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedClient]);
+  }, [selectedClient, selectedEmpresaId]);
 
   useEffect(() => {
     loadClientData();
   }, [loadClientData]);
 
   useEffect(() => {
-    if (!selectedClient || !selectedProduct || !establishmentId) {
+    if (!selectedEmpresaId || !selectedProduct || !establishmentId) {
       setProductProfile(null);
       return;
     }
-    fetchProductFiscalProfile(selectedClient, selectedProduct, establishmentId)
+    fetchProductFiscalProfile(selectedEmpresaId, selectedProduct, establishmentId)
       .then(setProductProfile)
       .catch(() => setProductProfile(null));
-  }, [selectedClient, selectedProduct, establishmentId]);
+  }, [selectedEmpresaId, selectedProduct, establishmentId]);
 
   const handleSaveProduct = async () => {
-    if (!selectedClient || !selectedProduct || !productProfile) return;
+    if (!selectedEmpresaId || !selectedProduct || !productProfile) return;
     setSaving(true);
     setMsg(null);
     try {
-      await saveProductFiscalProfile(selectedClient, selectedProduct, establishmentId, productProfile);
+      await saveProductFiscalProfile(selectedEmpresaId, selectedProduct, establishmentId, productProfile);
       setMsg({ type: 'success', text: 'Perfil fiscal do produto salvo.' });
     } catch (err) {
       setMsg({ type: 'error', text: err instanceof Error ? err.message : 'Falha ao salvar.' });
@@ -164,10 +190,10 @@ export default function ProdutosFiscaisPage() {
         ) : (
           <AppSelect
             label="Cliente (CNPJ)"
-            value={selectedClient}
-            onChange={setSelectedClient}
+            value={selectedClientKey}
+            onChange={setSelectedClientKey}
             options={clients.map((c) => ({
-              value: c.empresaId,
+              value: clientSelectValue(c),
               label: c.label || c.nomeFantasia || c.razaoSocial || c.cpfCnpj,
             }))}
           />
