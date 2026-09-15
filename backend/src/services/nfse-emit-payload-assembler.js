@@ -15,6 +15,7 @@ import {
   readCodigoIbgeFromEmpresa,
   requiresIssnetRtcEmitSchema,
   stripIncompleteServicoIbscbsFromEmitPayload,
+  stripPlugnotasInvalidServicoReformaFields,
 } from './nfse-reforma-defaults.js';
 
 /**
@@ -68,6 +69,7 @@ export const assembleNfsePlugnotasEmitPayload = (basePayload, prep = {}) => {
   }
 
   emitPayload = applyIbscbsImovelTomadorEnderecoToEmitPayload(emitPayload);
+  emitPayload = stripPlugnotasInvalidServicoReformaFields(emitPayload);
 
   return emitPayload;
 };

@@ -54,7 +54,6 @@ const PLUGNOTAS_IBSCBS_ALLOWED_KEYS = new Set([
   'operacaoPessoal',
   'codigoOperacao',
   'tipoOperacao',
-  'indicadorOperacao',
   'tipoEnteGovernamental',
   'descTipoEnteGovernamental',
   'pagamentoParceladoAntecipado',
@@ -301,26 +300,8 @@ const resolveOperacaoPessoalValue = (value) => {
 export const NFSE_REG_AP_IBSCBS_SN_SIMPLES = 1;
 
 /**
- * PlugNotas exige `ibscbs.indicadorOperacao` numérico; `codigoOperacao` permanece string (cIndOp 6 dígitos).
- *
- * @param {unknown} value
- * @param {unknown} [fallbackCIndOp]
- * @returns {number|null}
- */
-export const resolveIndicadorOperacaoForPlugnotas = (value, fallbackCIndOp) => {
-  const toNum = (raw) => {
-    if (raw === undefined || raw === null || raw === '') return null;
-    if (typeof raw === 'number' && Number.isFinite(raw)) return Math.trunc(raw);
-    const digits = String(raw).replace(/\D/g, '');
-    if (!digits) return null;
-    const parsed = Number.parseInt(digits, 10);
-    return Number.isFinite(parsed) ? parsed : null;
-  };
-  return toNum(value) ?? toNum(fallbackCIndOp);
-};
-
-/**
  * Monta `ibscbs` no formato aceito pela PlugNotas (evita tags inválidas no XML ISSNET).
+ * `indicadorOperacao` não é enviado — o cIndOp vai em `codigoOperacao` (validação PlugNotas rejeita o campo).
  *
  * @param {Record<string, unknown>} built
  * @returns {Record<string, unknown>}
@@ -332,15 +313,37 @@ export const sanitizeIbscbsForPlugnotasEmit = (built = {}) => {
       out[key] = built[key];
     }
   }
-  if (Object.prototype.hasOwnProperty.call(out, 'indicadorOperacao')) {
-    const coerced = resolveIndicadorOperacaoForPlugnotas(
-      out.indicadorOperacao,
-      out.codigoOperacao,
-    );
-    if (coerced == null) delete out.indicadorOperacao;
-    else out.indicadorOperacao = coerced;
-  }
+  delete out.indicadorOperacao;
   return out;
+};
+
+/**
+ * Remove campos RTC duplicados/inválidos em `servico[]` antes do POST PlugNotas.
+ *
+ * @param {Record<string, unknown>|null|undefined} payload
+ * @returns {Record<string, unknown>|null|undefined}
+ */
+export const stripPlugnotasInvalidServicoReformaFields = (payload) => {
+  if (!payload || typeof payload !== 'object') return payload;
+  const servicos = Array.isArray(payload.servico)
+    ? payload.servico
+    : payload.servico && typeof payload.servico === 'object'
+      ? [payload.servico]
+      : [];
+  if (!servicos.length) return payload;
+
+  const servicoNext = servicos.map((item) => {
+    if (!item || typeof item !== 'object') return item;
+    const next = { ...item };
+    delete next.codigoOperacao;
+    delete next.indicadorOperacao;
+    if (next.ibscbs && typeof next.ibscbs === 'object' && !Array.isArray(next.ibscbs)) {
+      next.ibscbs = sanitizeIbscbsForPlugnotasEmit(next.ibscbs);
+    }
+    return next;
+  });
+
+  return { ...payload, servico: servicoNext };
 };
 
 /**
@@ -540,17 +543,12 @@ export const buildMinimalServicoIbscbs = (ibscbsInput = {}, options = {}) => {
 
   const destinatario = resolveDestinatarioForPlugnotasEmit(destinatarioSource, source);
 
-  const codigoOperacao = source.codigoOperacao ?? cIndOp;
-  const indicadorOperacao = resolveIndicadorOperacaoForPlugnotas(
-    source.indicadorOperacao,
-    codigoOperacao ?? cIndOp,
-  );
+  const codigoOperacao = normalizeCIndOp(source.codigoOperacao ?? cIndOp);
 
   const built = {
     finalidadeNFSe: source.finalidadeNFSe ?? source.finalidadeNfse ?? finNFSe,
     operacaoPessoal,
     ...(codigoOperacao ? { codigoOperacao } : {}),
-    ...(indicadorOperacao != null ? { indicadorOperacao } : {}),
     destinatario,
     valores: {
       ...existingValores,

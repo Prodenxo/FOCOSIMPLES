@@ -16,9 +16,9 @@ import {
   resolveCodigoTributacaoIssnetFromAliquota,
   resolveCIndOpForServico,
   resolveFinNfseValue,
-  resolveIndicadorOperacaoForPlugnotas,
   sanitizeIbscbsForPlugnotasEmit,
   stripIncompleteServicoIbscbsFromEmitPayload,
+  stripPlugnotasInvalidServicoReformaFields,
   validateNfseCatalogProdutoMetadata,
 } from '../src/services/nfse-reforma-defaults.js';
 import { assembleNfsePlugnotasEmitPayload } from '../src/services/nfse-emit-payload-assembler.js';
@@ -51,7 +51,7 @@ test('readCodigoIbgeFromEmpresa: prefeitura.config', () => {
   );
 });
 
-test('sanitizeIbscbsForPlugnotasEmit: converte indicadorOperacao string para número', () => {
+test('sanitizeIbscbsForPlugnotasEmit: remove indicadorOperacao inválido', () => {
   const out = sanitizeIbscbsForPlugnotasEmit({
     finalidadeNFSe: 0,
     operacaoPessoal: 0,
@@ -59,13 +59,29 @@ test('sanitizeIbscbsForPlugnotasEmit: converte indicadorOperacao string para nú
     indicadorOperacao: '020201',
     valores: { tributacao: { cst: '000', cct: '000001' } },
   });
-  assert.equal(out.indicadorOperacao, 20201);
+  assert.equal(out.indicadorOperacao, undefined);
   assert.equal(out.codigoOperacao, '020201');
 });
 
-test('resolveIndicadorOperacaoForPlugnotas: aceita número ou cIndOp', () => {
-  assert.equal(resolveIndicadorOperacaoForPlugnotas('160201'), 160201);
-  assert.equal(resolveIndicadorOperacaoForPlugnotas(100301), 100301);
+test('stripPlugnotasInvalidServicoReformaFields: limpa servico raiz e ibscbs', () => {
+  const out = stripPlugnotasInvalidServicoReformaFields({
+    servico: [{
+      codigo: '071601',
+      cIndOp: '020201',
+      codigoOperacao: '020201',
+      ibscbs: {
+        codigoOperacao: '020201',
+        indicadorOperacao: 20201,
+        finalidadeNFSe: 0,
+        operacaoPessoal: 0,
+        valores: { tributacao: { cst: '000', cct: '000001' } },
+      },
+    }],
+  });
+  assert.equal(out.servico[0].codigoOperacao, undefined);
+  assert.equal(out.servico[0].cIndOp, '020201');
+  assert.equal(out.servico[0].ibscbs.indicadorOperacao, undefined);
+  assert.equal(out.servico[0].ibscbs.codigoOperacao, '020201');
 });
 
 test('buildMinimalServicoIbscbs: formato PlugNotas com valores.tributacao e indDest', () => {
@@ -78,7 +94,7 @@ test('buildMinimalServicoIbscbs: formato PlugNotas com valores.tributacao e indD
 
   assert.equal(ibscbs.finalidadeNFSe, 0);
   assert.equal(ibscbs.codigoOperacao, '050101');
-  assert.equal(ibscbs.indicadorOperacao, 50101);
+  assert.equal(ibscbs.indicadorOperacao, undefined);
   assert.equal(ibscbs.valores.tributacao.cst, '000');
   assert.equal(ibscbs.valores.tributacao.cct, '000001');
   assert.equal(ibscbs.destinatario.indicador, 0);
@@ -104,7 +120,7 @@ test('enrichNfseReformaCabecalhoInEmitPayload: obra 07.xx usa cIndOp 020201', ()
     servico: [{ codigo: '070602', cnae: '4330403', iss: { aliquota: 0 } }],
   }, { simplesNacional: true, nfseNacional: false, codigoIbge: '3543402' });
   assert.equal(out.servico[0].ibscbs.codigoOperacao, '020201');
-  assert.equal(out.servico[0].ibscbs.indicadorOperacao, 20201);
+  assert.equal(out.servico[0].ibscbs.indicadorOperacao, undefined);
 });
 
 test('enrichNfseReformaCabecalhoInEmitPayload: obra 07.xx sem municipioIncidenciaIbsCbs duplicado', () => {
@@ -212,6 +228,23 @@ test('assembleNfsePlugnotasEmitPayload: cIndOp no serviço vira ibscbs completo 
   }, { simplesNacional: true, nfseNacional: false });
   assert.equal(hasCompleteServicoIbscbs(out.servico[0].ibscbs), true);
   assert.equal(out.servico[0].ibscbs.codigoOperacao, '160201');
+  assert.equal(out.servico[0].ibscbs.indicadorOperacao, undefined);
+});
+
+test('assembleNfsePlugnotasEmitPayload: não envia indicadorOperacao (PlugNotas)', () => {
+  const out = assembleNfsePlugnotasEmitPayload({
+    prestador: { endereco: { codigoCidade: '3543402' } },
+    tomador: { endereco: { codigoCidade: '3543402', cep: '14092210', logradouro: 'Rua', numero: '1', bairro: 'Centro' } },
+    servico: [{
+      codigo: '071601',
+      cIndOp: '020201',
+      codigoOperacao: '020201',
+      iss: { aliquota: 2 },
+    }],
+  }, { simplesNacional: true, nfseNacional: false, codigoIbge: '3543402' });
+  assert.equal(out.servico[0].codigoOperacao, undefined);
+  assert.equal(out.servico[0].ibscbs?.indicadorOperacao, undefined);
+  assert.equal(out.servico[0].ibscbs?.codigoOperacao, '020201');
 });
 
 test('enrichNfseReformaCabecalhoInEmitPayload: cIndOp locação repete endereço do tomador em ibscbs.imovel (E0932)', () => {

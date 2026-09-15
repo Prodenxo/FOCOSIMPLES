@@ -504,7 +504,7 @@ const buildServicoFromInput = (input) => {
     cnae,
     codigoNbs,
     codigoTributacao,
-    ...(explicitCIndOp ? { cIndOp: explicitCIndOp, codigoOperacao: explicitCIndOp } : {}),
+    ...(explicitCIndOp ? { cIndOp: explicitCIndOp } : {}),
     iss: resolveNfseIssForServico(issSource, { nfseNacional, simplesNacional }),
     valor: prune({
       ...valor,
