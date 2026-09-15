@@ -574,6 +574,55 @@ export const stripCidadePrestacaoForIssnetRtcObra = (payload) => {
   const { cidadePrestacao: _removed, ...rest } = payload;
   return rest;
 };
+
+const ISSNET_OBRA_ENDERECO_ALLOWED_KEYS = new Set([
+  'cep',
+  'logradouro',
+  'numero',
+  'bairro',
+  'codigoCidade',
+  'complemento',
+]);
+
+/**
+ * DPS 1.01 / ISSNET: `obra.endereco` só aceita endNac — sem país/UF/descrição (E160).
+ *
+ * @param {Record<string, unknown>|null|undefined} payload
+ * @returns {Record<string, unknown>|null|undefined}
+ */
+export const sanitizeNfseObraEnderecoForIssnetRtc = (payload) => {
+  if (!payload || typeof payload !== 'object') return payload;
+  const servicos = Array.isArray(payload.servico)
+    ? payload.servico
+    : payload.servico && typeof payload.servico === 'object'
+      ? [payload.servico]
+      : [];
+  if (!servicos.length) return payload;
+
+  let changed = false;
+  const servicoNext = servicos.map((item) => {
+    if (!item || typeof item !== 'object') return item;
+    const obra = item.obra;
+    if (!obra || typeof obra !== 'object' || Array.isArray(obra)) return item;
+    const end = obra.endereco;
+    if (!end || typeof end !== 'object' || Array.isArray(end)) return item;
+    const trimmed = {};
+    for (const [key, val] of Object.entries(end)) {
+      if (!ISSNET_OBRA_ENDERECO_ALLOWED_KEYS.has(key)) continue;
+      if (val === undefined || val === null || val === '') continue;
+      trimmed[key] = String(val).trim();
+    }
+    if (JSON.stringify(trimmed) === JSON.stringify(end)) return item;
+    changed = true;
+    return { ...item, obra: { ...obra, endereco: trimmed } };
+  });
+
+  if (!changed) return payload;
+  return {
+    ...payload,
+    servico: Array.isArray(payload.servico) ? servicoNext : servicoNext[0],
+  };
+};
 /**
  * Para serviços de obra (LC 116 07.xx), o ISS incide no município da execução.
  * Preenche `cidadePrestacao` na raiz quando ausente — exceto ISSNET RTC (E160).
@@ -586,7 +635,7 @@ export const enrichNfseCidadePrestacaoFromObra = (payload, options = {}) => {
   if (!payload || typeof payload !== 'object') return payload;
 
   if (options.issnetOnline30 && payloadHasNfseObraServico(payload)) {
-    return stripCidadePrestacaoForIssnetRtcObra(payload);
+    return enrichNfseIssnetRtcCidadePrestacaoFromObra(payload, options);
   }
 
   const existing = payload.cidadePrestacao;

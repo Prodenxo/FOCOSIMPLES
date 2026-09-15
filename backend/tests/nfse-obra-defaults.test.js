@@ -13,6 +13,7 @@ import {
   requiresNfseObraForServicoCodigo,
   resolveNfseObraCodigoForEmit,
   sanitizeCidadePrestacaoForIssnetRtc,
+  sanitizeNfseObraEnderecoForIssnetRtc,
   validateNfseObraEndereco,
 } from '../src/services/nfse-obra-defaults.js';
 
@@ -318,13 +319,15 @@ test('sanitizeCidadePrestacaoForIssnetRtc — remove campos ABRASF', () => {
   assert.equal(out.cidadePrestacao?.logradouro, 'Rua A');
 });
 
-test('enrichNfseCidadePrestacaoFromObra — ISSNET RTC obra omite cidadePrestacao (só obra.endereco)', () => {
+test('enrichNfseCidadePrestacaoFromObra — ISSNET RTC obra envia cidadePrestacao DPS-safe', () => {
   const out = enrichNfseCidadePrestacaoFromObra({
     servico: [{ codigo: '070602', obra: { endereco: { cep: '14000000', logradouro: 'Rua A', numero: '1', bairro: 'Centro', codigoCidade: '3543402' } } }],
-    cidadePrestacao: { codigo: '3543402', logradouro: 'X' },
+    cidadePrestacao: { codigo: '3543402', logradouro: 'X', tipoLogradouro: 'Rua' },
     tomador: {
       endereco: {
         codigoCidade: '3543402',
+        descricaoCidade: 'Ribeirão Preto',
+        estado: 'SP',
         cep: '14000000',
         logradouro: 'Rua A',
         numero: '1',
@@ -335,6 +338,31 @@ test('enrichNfseCidadePrestacaoFromObra — ISSNET RTC obra omite cidadePrestaca
     issnetOnline30: true,
     servicosInput: [{ codigo: '070602', obra: { usarEnderecoTomador: true } }],
   });
-  assert.equal(out.cidadePrestacao, undefined);
+  assert.equal(out.cidadePrestacao?.codigo, '3543402');
+  assert.equal(out.cidadePrestacao?.logradouro, 'Rua A');
+  assert.equal(out.cidadePrestacao?.tipoLogradouro, undefined);
   assert.equal(out.servico[0].obra.endereco.cep, '14000000');
+});
+
+test('sanitizeNfseObraEnderecoForIssnetRtc — remove codigoPais e estado', () => {
+  const out = sanitizeNfseObraEnderecoForIssnetRtc({
+    servico: [{
+      codigo: '071601',
+      obra: {
+        endereco: {
+          cep: '14092210',
+          logradouro: 'Rua B',
+          numero: '780',
+          bairro: 'Centro',
+          codigoCidade: '3543402',
+          codigoPais: '1058',
+          descricaoPais: 'Brasil',
+          estado: 'SP',
+        },
+      },
+    }],
+  });
+  assert.equal(out.servico[0].obra.endereco.codigoPais, undefined);
+  assert.equal(out.servico[0].obra.endereco.estado, undefined);
+  assert.equal(out.servico[0].obra.endereco.cep, '14092210');
 });

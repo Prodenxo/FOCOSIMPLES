@@ -462,7 +462,11 @@ export const isNfseIssnetRtcSchemaDisabled = () =>
  */
 export const resolveNfseIssnetVersaoEsquema = () => {
   const override = String(process.env.NFSE_ISSNET_RTC_VERSAO_ESQUEMA || '').trim();
-  return override || NFSE_VERSAO_ESQUEMA_RTC007;
+  // ISSNETONLINE30 + ibscbs: `RTC` legado quebra XSD municipal (E160) — manter RTC007.
+  if (!override || override.toUpperCase() === NFSE_VERSAO_ESQUEMA_RTC) {
+    return NFSE_VERSAO_ESQUEMA_RTC007;
+  }
+  return override;
 };
 
 /** @deprecated Use {@link requiresIssnetRtcEmitSchema} — RTC municipal ≠ NFS-e Nacional. */

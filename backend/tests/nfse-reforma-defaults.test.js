@@ -174,14 +174,14 @@ test('enrichNfseReformaCabecalhoInEmitPayload: flag NFSE_ISSNET_RTC_SCHEMA_DISAB
   }
 });
 
-test('enrichNfseReformaCabecalhoInEmitPayload: NFSE_ISSNET_RTC_VERSAO_ESQUEMA sobrescreve versaoEsquema', () => {
+test('enrichNfseReformaCabecalhoInEmitPayload: NFSE_ISSNET_RTC_VERSAO_ESQUEMA=RTC ignora e usa RTC007', () => {
   const anterior = process.env.NFSE_ISSNET_RTC_VERSAO_ESQUEMA;
   process.env.NFSE_ISSNET_RTC_VERSAO_ESQUEMA = NFSE_VERSAO_ESQUEMA_RTC;
   try {
     const out = enrichNfseReformaCabecalhoInEmitPayload({
       servico: [{ codigo: '140101', cnae: '4520001', iss: { aliquota: 2 } }],
     }, { simplesNacional: true, nfseNacional: false, codigoIbge: '3543402' });
-    assert.equal(out.versaoEsquema, NFSE_VERSAO_ESQUEMA_RTC);
+    assert.equal(out.versaoEsquema, NFSE_VERSAO_ESQUEMA_RTC007);
     assert.equal(out.versao, NFSE_VERSAO_LAYOUT_NACIONAL);
     assert.equal(out.servico[0].ibscbs.valores.tributacao.cst, '000');
   } finally {
@@ -238,6 +238,34 @@ test('assembleNfsePlugnotasEmitPayload: inclui frases do Simples em informacoesC
     servico: [{ codigo: '140101', iss: { aliquota: 2 } }],
   }, { simplesNacional: true, nfseNacional: false, codigoIbge: '3543402' });
   assert.equal(out.informacoesComplementares, SIMPLES_NACIONAL_NFE_INF_CPL_LINES.join('|'));
+});
+
+test('assembleNfsePlugnotasEmitPayload: obra 071601 ISSNET usa RTC007 e cidadePrestacao DPS', () => {
+  const out = assembleNfsePlugnotasEmitPayload({
+    prestador: { endereco: { codigoCidade: '3543402', cep: '14092200', logradouro: 'JOSE DE MAGALHAES', numero: '860', bairro: 'JARDIM ANHANGUERA', estado: 'SP' } },
+    tomador: {
+      endereco: {
+        codigoCidade: '3543402',
+        descricaoCidade: 'RIBEIRAO PRETO',
+        estado: 'SP',
+        cep: '14092210',
+        logradouro: 'R DOUTOR ANTONIO CARLOS TINOCO',
+        numero: '780',
+        bairro: 'JARDIM ANHANGUERA',
+        codigoPais: '1058',
+        descricaoPais: 'Brasil',
+      },
+    },
+    servico: [{
+      codigo: '071601',
+      cIndOp: '020201',
+      iss: { aliquota: 2 },
+    }],
+  }, { simplesNacional: true, nfseNacional: false, codigoIbge: '3543402' });
+  assert.equal(out.versaoEsquema, NFSE_VERSAO_ESQUEMA_RTC007);
+  assert.equal(out.cidadePrestacao?.tipoLogradouro, undefined);
+  assert.equal(out.cidadePrestacao?.logradouro, 'R DOUTOR ANTONIO CARLOS TINOCO');
+  assert.equal(out.servico[0].obra?.endereco?.codigoPais, undefined);
 });
 
 test('assembleNfsePlugnotasEmitPayload: não envia indicadorOperacao (PlugNotas)', () => {

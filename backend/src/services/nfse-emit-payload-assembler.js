@@ -8,7 +8,8 @@ import { enrichNfseIssInEmitPayload } from './nfse-iss-defaults.js';
 import {
   enrichNfseCidadePrestacaoFromObra,
   enrichNfseObraOnEmitPayload,
-  stripCidadePrestacaoForIssnetRtcObra,
+  sanitizeCidadePrestacaoForIssnetRtc,
+  sanitizeNfseObraEnderecoForIssnetRtc,
 } from './nfse-obra-defaults.js';
 import {
   applyIbscbsImovelTomadorEnderecoToEmitPayload,
@@ -64,7 +65,8 @@ export const assembleNfsePlugnotasEmitPayload = (basePayload, prep = {}) => {
   });
 
   if (issnetOnline30) {
-    emitPayload = stripCidadePrestacaoForIssnetRtcObra(emitPayload);
+    emitPayload = sanitizeCidadePrestacaoForIssnetRtc(emitPayload);
+    emitPayload = sanitizeNfseObraEnderecoForIssnetRtc(emitPayload);
   } else {
     emitPayload = stripIncompleteServicoIbscbsFromEmitPayload(emitPayload);
   }
