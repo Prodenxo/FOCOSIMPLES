@@ -40,12 +40,17 @@ export const normalizeNfseServicoCodigoKey = (codigo) => {
 };
 
 /**
+ * Alinhado a resolveCIndOpForServico em nfse-reforma-defaults (07.xx / 1414xx → obra no local).
  * @param {unknown} codigo
  * @returns {boolean}
  */
-export const requiresNfseObraForServicoCodigo = (codigo) => (
-  NFSE_OBRA_REQUIRED_LC116_KEYS.has(normalizeNfseServicoCodigoKey(codigo))
-);
+export const requiresNfseObraForServicoCodigo = (codigo) => {
+  const key = normalizeNfseServicoCodigoKey(codigo);
+  if (!key) return false;
+  if (NFSE_OBRA_REQUIRED_LC116_KEYS.has(key)) return true;
+  if (key.startsWith('07') || key.startsWith('1414')) return true;
+  return false;
+};
 
 /**
  * @param {unknown} value

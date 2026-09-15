@@ -22,6 +22,11 @@ test('requiresNfseObraForServicoCodigo — 070602 gesso exige obra', () => {
   assert.equal(requiresNfseObraForServicoCodigo('140101'), false);
 });
 
+test('requiresNfseObraForServicoCodigo — 071601 redes (07.16) exige obra como demais 07.xx', () => {
+  assert.equal(requiresNfseObraForServicoCodigo('071601'), true);
+  assert.equal(requiresNfseObraForServicoCodigo('07.16.01'), true);
+});
+
 test('buildNfseObraPayload — PlugNotas só aceita art/codigo/cei (sem endereco)', () => {
   const obra = buildNfseObraPayload(
     {
