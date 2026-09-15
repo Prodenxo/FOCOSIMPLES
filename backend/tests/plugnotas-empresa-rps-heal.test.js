@@ -212,6 +212,8 @@ test('applyPlugnotasNfseEmitRpsFromEmpresaConfig usa histórico local se GET emp
     });
     assert.deepEqual(payload.rps, {
       lote: 1,
+      serie: '1',
+      numero: 13,
       numeracao: [{ serie: '1', numero: 13 }]
     });
   } finally {
@@ -251,6 +253,8 @@ test('applyPlugnotasNfseEmitRpsFromEmpresaConfig avança número com localMaxRps
     });
     assert.deepEqual(payload.rps, {
       lote: 1,
+      serie: '1',
+      numero: 89,
       numeracao: [{ serie: '1', numero: 89 }]
     });
   } finally {
@@ -326,6 +330,8 @@ test('applyPlugnotasNfseEmitRpsFromEmpresaConfig injeta rps explícito quando au
     await applyPlugnotasNfseEmitRpsFromEmpresaConfig(payload, '12.345.678/0001-99');
     assert.deepEqual(payload.rps, {
       lote: 1,
+      serie: '1',
+      numero: 5,
       numeracao: [{ serie: '1', numero: 5 }]
     });
   } finally {
@@ -359,6 +365,8 @@ test('applyPlugnotasNfseEmitRpsFromEmpresaConfig substitui rps obsoleto pelo pr�
     });
     assert.deepEqual(payload.rps, {
       lote: 1,
+      serie: '1',
+      numero: 8,
       numeracao: [{ serie: '1', numero: 8 }]
     });
   } finally {
@@ -788,6 +796,8 @@ test('emitNfseWithPlugnotasRpsHeal reenvia com próximo DPS após E0014', async 
     assert.equal(emitCalls.length, 2);
     assert.deepEqual(emitCalls[1].rps, {
       lote: 1,
+      serie: '1',
+      numero: 56,
       numeracao: [{ serie: '1', numero: 56 }]
     });
     assert.equal(emitPayload.idIntegracao, 'teste-2');

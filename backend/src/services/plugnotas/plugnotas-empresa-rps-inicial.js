@@ -139,3 +139,19 @@ export const cloneEmpresaPlugnotasRpsInicialPost = () => ({
   lote: EMPRESA_PLUGNOTAS_RPS_INICIAL_POST.lote,
   numeracao: [{ numero: 1, serie: '1' }]
 });
+
+/**
+ * RPS no POST /nfse. Com numeração automática desligada na PlugNotas, `numero`/`serie` no topo são obrigatórios.
+ * @param {{ lote?: number, serie?: string, numero: number }} input
+ */
+export const buildNfseEmitRpsPayload = ({ lote, serie, numero }) => {
+  const ser = String(serie ?? '1').trim() || '1';
+  const num = parsePositiveInt(numero, 1);
+  const lot = parsePositiveInt(lote, 1);
+  return {
+    lote: lot,
+    serie: ser,
+    numero: num,
+    numeracao: [{ serie: ser, numero: num }],
+  };
+};

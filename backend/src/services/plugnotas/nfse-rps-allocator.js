@@ -5,6 +5,7 @@ import {
   readRpsFromNfseEmitPayload,
   syncPlugnotasNfseRpsBeforeEmit,
 } from './plugnotas-empresa-rps-heal.js';
+import { buildNfseEmitRpsPayload } from './plugnotas-empresa-rps-inicial.js';
 
 const normalizeDoc = (value) => String(value || '').replace(/\D/g, '');
 
@@ -233,7 +234,7 @@ export async function applyAllocatedNfseRpsToEmitPayload(
     throw new Error('Numeração RPS reservada inválida');
   }
 
-  emitPayload.rps = { lote, numeracao: [{ serie, numero }] };
+  emitPayload.rps = buildNfseEmitRpsPayload({ lote, serie, numero });
   const empresaForSync = allocation?.empresaJson ?? empresaJson;
   await syncPlugnotasNfseRpsBeforeEmit(cnpj, { serie, lote, numero }, empresaForSync, { strict: true });
   return readRpsFromNfseEmitPayload(emitPayload);

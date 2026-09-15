@@ -6,6 +6,7 @@ import {
 } from './empresa.service.js';
 import { consultarNfsePorPeriodo } from './nfse.service.js';
 import {
+  buildNfseEmitRpsPayload,
   cloneEmpresaPlugnotasRpsInicialPost,
   EMPRESA_PLUGNOTAS_NFSE_CONFIG_RPS_CANONICAL,
   hasClientRpsShape,
@@ -676,10 +677,7 @@ export async function resolveAndApplySafeNfseRpsBeforeEmit(payload, cnpjInput, o
     periodoMaxNumero: periodoMax,
   });
 
-  payload.rps = {
-    lote,
-    numeracao: [{ serie, numero: safeNext }],
-  };
+  payload.rps = buildNfseEmitRpsPayload({ lote, serie, numero: safeNext });
 
   await syncPlugnotasNfseRpsBeforeEmit(cnpj, { serie, lote, numero: safeNext }, empresaJson);
 
@@ -869,7 +867,7 @@ export async function emitNfseWithPlugnotasRpsHeal(
     attemptedNumeros.add(nextNumero);
 
     payload = { ...payload };
-    payload.rps = { lote, numeracao: [{ serie, numero: nextNumero }] };
+    payload.rps = buildNfseEmitRpsPayload({ lote, serie, numero: nextNumero });
     if (typeof buildFreshIdIntegracao === 'function') {
       payload.idIntegracao = buildFreshIdIntegracao();
     }
