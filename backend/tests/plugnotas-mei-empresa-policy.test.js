@@ -33,16 +33,37 @@ test('normalizeMeiEmpresaPayload: regime 4 vira Simples sem MEI', () => {
   assert.equal(payload.simplesNacional, true);
 });
 
-test('applyNfseNationalContractPolicy no Foco Simples remove IM (E0120 / CNC)', () => {
+test('applyNfseNationalContractPolicy preserva IM informada (municípios que exigem / E0116)', () => {
   const prev = env.APP_PRODUCT;
   env.APP_PRODUCT = 'focosimples';
   try {
     const payload = {
+      cpfCnpj: '17422651000172',
       inscricaoMunicipal: '12345',
       nfse: { ativo: true, config: { nfseNacional: true } },
     };
     applyNfseNationalContractPolicy(payload);
-    assert.equal(payload.inscricaoMunicipal, '');
+    assert.equal(payload.inscricaoMunicipal, '12345');
+  } finally {
+    env.APP_PRODUCT = prev;
+  }
+});
+
+test('applyNfseNationalContractPolicy limpa IM ausente ou igual ao CNPJ (E0120 / CNC)', () => {
+  const prev = env.APP_PRODUCT;
+  env.APP_PRODUCT = 'focosimples';
+  try {
+    const semIm = { nfse: { ativo: true, config: { nfseNacional: true } } };
+    applyNfseNationalContractPolicy(semIm);
+    assert.equal(semIm.inscricaoMunicipal, '');
+
+    const imFantasma = {
+      cpfCnpj: '17422651000172',
+      inscricaoMunicipal: '17422651000172',
+      nfse: { ativo: true, config: { nfseNacional: true } },
+    };
+    applyNfseNationalContractPolicy(imFantasma);
+    assert.equal(imFantasma.inscricaoMunicipal, '');
   } finally {
     env.APP_PRODUCT = prev;
   }

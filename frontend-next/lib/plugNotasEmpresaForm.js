@@ -278,7 +278,7 @@ export function isNfseNacionalEmpresaForm(form) {
 /** @param {ReturnType<typeof getDefaultPlugNotasCompanyForm>} form */
 export function getInscricaoMunicipalFieldHint(form) {
   if (form?.nfseAtivo && isNfseNacionalEmpresaForm(form)) {
-    return 'Opcional na NFS-e Nacional. Só preencha se a prefeitura cadastrou complemento no CNC — senão deixe vazio (evita rejeição E0120).';
+    return 'Opcional na NFS-e Nacional, mas alguns municípios exigem (rejeição E0116). Se a prefeitura pedir IM, preencha aqui — nunca repita o CNPJ.';
   }
   if (form?.nfseAtivo) {
     return 'Obrigatória na NFS-e municipal. Em alguns municípios coincide com o CNPJ (sem pontuação).';
@@ -393,9 +393,7 @@ export function buildPlugNotasEmpresaPayload(form) {
   };
 
   if (email) payload.email = email;
-  if (im && !(form.nfseAtivo && isNfseNacionalEmpresaForm(form))) {
-    payload.inscricaoMunicipal = im;
-  }
+  if (im) payload.inscricaoMunicipal = im;
   if (ie) {
     if (ie.toUpperCase() === 'ISENTO') payload.inscricaoEstadual = 'ISENTO';
     else {

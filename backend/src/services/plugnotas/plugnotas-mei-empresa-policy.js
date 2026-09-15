@@ -77,11 +77,14 @@ export const isNfseNacionalActiveOnEmpresaShape = (empresaOrPayload) => {
 };
 
 /**
- * NFS-e Nacional (Foco Simples): IM na DPS só com complemento CNC — senão E0120.
+ * NFS-e Nacional (Foco Simples): sem IM informada, não inventar IM na DPS — senão E0120.
+ * Com IM informada pelo cliente, respeitar: há municípios que a exigem (E0116).
  * @param {unknown} empresaOrPayload
  */
 export const shouldSuppressInscricaoMunicipalForNfseNacional = (empresaOrPayload) => (
-  isFocoSimplesProduct() && isNfseNacionalActiveOnEmpresaShape(empresaOrPayload)
+  isFocoSimplesProduct()
+  && isNfseNacionalActiveOnEmpresaShape(empresaOrPayload)
+  && !hasUsableInscricaoMunicipal(empresaOrPayload)
 );
 
 /** @param {unknown} im @param {unknown} cnpj */
@@ -89,6 +92,20 @@ export const inscricaoMunicipalMatchesCnpj = (im, cnpj) => {
   const imDigits = normalizeDocDigits(im);
   const cnpjDigits = normalizeDocDigits(cnpj);
   return imDigits.length > 0 && cnpjDigits.length === 14 && imDigits === cnpjDigits;
+};
+
+/**
+ * IM aproveitável: informada e diferente do CNPJ (IM fantasma de lookup).
+ * @param {unknown} empresaOrPayload
+ */
+export const hasUsableInscricaoMunicipal = (empresaOrPayload) => {
+  if (!isPlainObject(empresaOrPayload)) return false;
+  const im = String(
+    empresaOrPayload.inscricaoMunicipal ?? empresaOrPayload.inscricao_municipal ?? '',
+  ).trim();
+  if (!im) return false;
+  const cnpj = empresaOrPayload.cpfCnpj ?? empresaOrPayload.cnpj ?? empresaOrPayload.cpf_cnpj;
+  return !inscricaoMunicipalMatchesCnpj(im, cnpj);
 };
 
 /**
@@ -112,6 +129,8 @@ export const sanitizeEmpresaInscricaoMunicipalForClient = (empresa) => {
 export const applyInscricaoMunicipalNfseNacionalPolicy = (payload, nacionalActive) => {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return;
   if (!isFocoSimplesProduct() || !nacionalActive) return;
+  // IM informada no cadastro vale para a DPS — municípios com complemento CNC exigem (E0116).
+  if (hasUsableInscricaoMunicipal(payload)) return;
   // PATCH sem o campo não remove IM stale na PlugNotas — enviar vazio força limpeza (E0120).
   payload.inscricaoMunicipal = '';
 };
