@@ -21,6 +21,7 @@ import {
   stripPlugnotasInvalidServicoReformaFields,
   validateNfseCatalogProdutoMetadata,
 } from '../src/services/nfse-reforma-defaults.js';
+import { SIMPLES_NACIONAL_NFE_INF_CPL_LINES } from '../src/lib/simples-nacional-nfe-infcpl.js';
 import { assembleNfsePlugnotasEmitPayload } from '../src/services/nfse-emit-payload-assembler.js';
 
 test('resolveFinNfseValue: default 0 (regular)', () => {
@@ -229,6 +230,14 @@ test('assembleNfsePlugnotasEmitPayload: cIndOp no serviço vira ibscbs completo 
   assert.equal(hasCompleteServicoIbscbs(out.servico[0].ibscbs), true);
   assert.equal(out.servico[0].ibscbs.codigoOperacao, '160201');
   assert.equal(out.servico[0].ibscbs.indicadorOperacao, undefined);
+});
+
+test('assembleNfsePlugnotasEmitPayload: inclui frases do Simples em informacoesComplementares', () => {
+  const out = assembleNfsePlugnotasEmitPayload({
+    prestador: { endereco: { codigoCidade: '3543402' } },
+    servico: [{ codigo: '140101', iss: { aliquota: 2 } }],
+  }, { simplesNacional: true, nfseNacional: false, codigoIbge: '3543402' });
+  assert.equal(out.informacoesComplementares, SIMPLES_NACIONAL_NFE_INF_CPL_LINES.join('|'));
 });
 
 test('assembleNfsePlugnotasEmitPayload: não envia indicadorOperacao (PlugNotas)', () => {

@@ -3,6 +3,7 @@
  * Usado pelo fluxo de emissão e pelo script CLI de debug de obra.
  */
 
+import { applySimplesNacionalInformacoesComplementares } from '../lib/simples-nacional-nfe-infcpl.js';
 import { enrichNfseIssInEmitPayload } from './nfse-iss-defaults.js';
 import {
   enrichNfseCidadePrestacaoFromObra,
@@ -70,6 +71,10 @@ export const assembleNfsePlugnotasEmitPayload = (basePayload, prep = {}) => {
 
   emitPayload = applyIbscbsImovelTomadorEnderecoToEmitPayload(emitPayload);
   emitPayload = stripPlugnotasInvalidServicoReformaFields(emitPayload);
+
+  if (prep.simplesNacional !== false) {
+    emitPayload = applySimplesNacionalInformacoesComplementares(emitPayload);
+  }
 
   return emitPayload;
 };

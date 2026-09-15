@@ -1,5 +1,5 @@
 /**
- * Textos legais do Simples Nacional em informações adicionais da NF-e (infCpl).
+ * Textos legais do Simples Nacional em informações complementares (NF-e infCpl / NFS-e).
  * LC 123/2006 — ME/EPP optante.
  * PlugNotas: quebra de linha em informacoesComplementares é `|`, não \n.
  */
