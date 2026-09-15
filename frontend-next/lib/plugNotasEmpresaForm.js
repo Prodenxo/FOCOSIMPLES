@@ -393,7 +393,8 @@ export function buildPlugNotasEmpresaPayload(form) {
   };
 
   if (email) payload.email = email;
-  if (im) payload.inscricaoMunicipal = im;
+  // Cadastro completo: enviar sempre o campo — vazio limpa IM stale na PlugNotas (E0120).
+  payload.inscricaoMunicipal = im;
   if (ie) {
     if (ie.toUpperCase() === 'ISENTO') payload.inscricaoEstadual = 'ISENTO';
     else {

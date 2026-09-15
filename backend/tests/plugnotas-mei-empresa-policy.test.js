@@ -49,13 +49,32 @@ test('applyNfseNationalContractPolicy preserva IM informada (municípios que exi
   }
 });
 
-test('applyNfseNationalContractPolicy limpa IM ausente ou igual ao CNPJ (E0120 / CNC)', () => {
+test('applyNfseNationalContractPolicy não injeta IM em PATCH parcial (heal de RPS)', () => {
   const prev = env.APP_PRODUCT;
   env.APP_PRODUCT = 'focosimples';
   try {
-    const semIm = { nfse: { ativo: true, config: { nfseNacional: true } } };
-    applyNfseNationalContractPolicy(semIm);
-    assert.equal(semIm.inscricaoMunicipal, '');
+    const patchParcial = {
+      cpfCnpj: '17422651000172',
+      nfse: { ativo: true, config: { nfseNacional: true } },
+    };
+    applyNfseNationalContractPolicy(patchParcial);
+    assert.equal('inscricaoMunicipal' in patchParcial, false);
+  } finally {
+    env.APP_PRODUCT = prev;
+  }
+});
+
+test('applyNfseNationalContractPolicy limpa IM vazia ou igual ao CNPJ (E0120 / CNC)', () => {
+  const prev = env.APP_PRODUCT;
+  env.APP_PRODUCT = 'focosimples';
+  try {
+    const imVazia = {
+      cpfCnpj: '17422651000172',
+      inscricaoMunicipal: '   ',
+      nfse: { ativo: true, config: { nfseNacional: true } },
+    };
+    applyNfseNationalContractPolicy(imVazia);
+    assert.equal(imVazia.inscricaoMunicipal, '');
 
     const imFantasma = {
       cpfCnpj: '17422651000172',

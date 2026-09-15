@@ -129,9 +129,11 @@ export const sanitizeEmpresaInscricaoMunicipalForClient = (empresa) => {
 export const applyInscricaoMunicipalNfseNacionalPolicy = (payload, nacionalActive) => {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return;
   if (!isFocoSimplesProduct() || !nacionalActive) return;
+  // PATCH parcial (ex.: heal de RPS) não menciona IM — injetar vazio apagaria a IM já cadastrada.
+  if (!hasOwn(payload, 'inscricaoMunicipal')) return;
   // IM informada no cadastro vale para a DPS — municípios com complemento CNC exigem (E0116).
   if (hasUsableInscricaoMunicipal(payload)) return;
-  // PATCH sem o campo não remove IM stale na PlugNotas — enviar vazio força limpeza (E0120).
+  // IM vazia ou repetindo o CNPJ: enviar vazio força limpeza na PlugNotas (E0120).
   payload.inscricaoMunicipal = '';
 };
 
