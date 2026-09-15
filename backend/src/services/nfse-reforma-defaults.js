@@ -5,7 +5,7 @@
  */
 
 import { normalizeCodigoNbs, normalizeCodigoTributacaoMunicipal } from './nfse-codigo-nbs.js';
-import { requiresNfseObraForServicoCodigo } from './nfse-obra-defaults.js';
+import { buildNfseObraEndereco, requiresNfseObraForServicoCodigo } from './nfse-obra-defaults.js';
 
 /** NFS-e regular — emissão padrão de serviço. */
 export const NFSE_FIN_NFSE_REGULAR = 0;
@@ -21,6 +21,12 @@ export const NFSE_CINDOP_SERVICO_GERAL = '100301';
 
 /** Execução de obra/construção no endereço do tomador (LC 116 07.xx). */
 export const NFSE_CINDOP_OBRA_NO_LOCAL = '020201';
+
+/**
+ * Prefixos cIndOp (IndOp ANEXO) ligados a imóvel — rejeição E0932 se faltar ibscbs.imovel.
+ * Obra (02) usa `servico.obra`; estabelecimento (05) e geral (10) não usam imóvel.
+ */
+export const NFSE_CINDOP_REQUIRES_IMOVEL_PREFIXES = Object.freeze(['01', '03', '04', '06', '16']);
 
 /** CST IBS/CBS — tributação padrão (PlugNotas / ISSNET RTC v1.01). */
 export const NFSE_SITUACAO_TRIBUTARIA_IBSCBS_DEFAULT = '000';
@@ -152,6 +158,45 @@ export const resolveSituacaoTributariaIbsCbsForServico = (servico = {}) => {
  * @param {Record<string, unknown>|null|undefined} servico
  * @returns {string}
  */
+/**
+ * @param {unknown} cIndOpInput
+ * @returns {boolean}
+ */
+export const cIndOpRequiresImovelInformacoes = (cIndOpInput) => {
+  const code = normalizeCIndOp(cIndOpInput);
+  if (!code) return false;
+  if (code.startsWith('02') || code.startsWith('05') || code.startsWith('10')) return false;
+  return NFSE_CINDOP_REQUIRES_IMOVEL_PREFIXES.some((prefix) => code.startsWith(prefix));
+};
+
+/**
+ * Endereço do imóvel na DPS (contador: repetir endereço do tomador quando aplicável).
+ * @param {Record<string, unknown>|null|undefined} enderecoInput
+ * @returns {{ endereco: Record<string, string> }|null}
+ */
+export const buildIbscbsImovelFromTomadorEndereco = (enderecoInput = {}) => {
+  const endereco = buildNfseObraEndereco(enderecoInput);
+  if (!endereco?.cep || !endereco?.logradouro || !endereco?.numero) return null;
+  return { endereco };
+};
+
+/**
+ * @param {Record<string, unknown>} ibscbs
+ * @param {Record<string, unknown>|null|undefined} tomadorEndereco
+ * @returns {Record<string, unknown>}
+ */
+export const enrichServicoIbscbsImovelFromTomador = (ibscbs, tomadorEndereco) => {
+  if (!ibscbs || typeof ibscbs !== 'object' || Array.isArray(ibscbs)) return ibscbs;
+  const cIndOp = ibscbs.codigoOperacao ?? ibscbs.cIndOp;
+  if (!cIndOpRequiresImovelInformacoes(cIndOp)) return ibscbs;
+  if (ibscbs.imovel && typeof ibscbs.imovel === 'object' && !Array.isArray(ibscbs.imovel)) {
+    return ibscbs;
+  }
+  const imovel = buildIbscbsImovelFromTomadorEndereco(tomadorEndereco);
+  if (!imovel) return ibscbs;
+  return { ...ibscbs, imovel };
+};
+
 export const resolveCIndOpForServico = (servico = {}) => {
   const ibscbs = servico.ibscbs && typeof servico.ibscbs === 'object' && !Array.isArray(servico.ibscbs)
     ? servico.ibscbs
@@ -531,6 +576,12 @@ export const enrichNfseReformaCabecalhoInEmitPayload = (payload, options = {}) =
       ? [payload.servico]
       : [];
 
+  const tomadorEndereco = payload?.tomador?.endereco
+    && typeof payload.tomador.endereco === 'object'
+    && !Array.isArray(payload.tomador.endereco)
+    ? payload.tomador.endereco
+    : {};
+
   const servicoEnriched = servicos.map((item) => {
     if (!item || typeof item !== 'object') return item;
     const itemIbscbs = item.ibscbs && typeof item.ibscbs === 'object' && !Array.isArray(item.ibscbs)
@@ -568,10 +619,11 @@ export const enrichNfseReformaCabecalhoInEmitPayload = (payload, options = {}) =
     const ibscbsWithMunicipio = municipioIncidenciaIbsCbs && !ibscbs.municipioIncidenciaIbsCbs
       ? { ...ibscbs, municipioIncidenciaIbsCbs }
       : ibscbs;
+    const ibscbsWithImovel = enrichServicoIbscbsImovelFromTomador(ibscbsWithMunicipio, tomadorEndereco);
     return {
       ...servicoBase,
       ...(codigoTributacao ? { codigoTributacao } : {}),
-      ibscbs: ibscbsWithMunicipio,
+      ibscbs: ibscbsWithImovel,
     };
   });
 
@@ -611,4 +663,40 @@ export const enrichNfseReformaCabecalhoInEmitPayload = (payload, options = {}) =
     ...(emitente ? { emitente } : {}),
     ...(servicoEnriched.length ? { servico: servicoEnriched } : {}),
   };
+};
+
+/**
+ * E0932 — repete endereço do tomador em ibscbs.imovel quando cIndOp exige (qualquer município).
+ * @param {Record<string, unknown>|null|undefined} payload
+ * @returns {Record<string, unknown>|null|undefined}
+ */
+export const applyIbscbsImovelTomadorEnderecoToEmitPayload = (payload) => {
+  if (!payload || typeof payload !== 'object') return payload;
+
+  const tomadorEndereco = payload?.tomador?.endereco
+    && typeof payload.tomador.endereco === 'object'
+    && !Array.isArray(payload.tomador.endereco)
+    ? payload.tomador.endereco
+    : {};
+
+  const servicos = Array.isArray(payload.servico)
+    ? payload.servico
+    : payload.servico && typeof payload.servico === 'object'
+      ? [payload.servico]
+      : [];
+  if (!servicos.length) return payload;
+
+  let changed = false;
+  const servicoNext = servicos.map((item) => {
+    if (!item || typeof item !== 'object') return item;
+    const ibscbs = item.ibscbs;
+    if (!ibscbs || typeof ibscbs !== 'object' || Array.isArray(ibscbs)) return item;
+    const nextIbscbs = enrichServicoIbscbsImovelFromTomador(ibscbs, tomadorEndereco);
+    if (nextIbscbs === ibscbs) return item;
+    changed = true;
+    return { ...item, ibscbs: nextIbscbs };
+  });
+
+  if (!changed) return payload;
+  return { ...payload, servico: servicoNext };
 };

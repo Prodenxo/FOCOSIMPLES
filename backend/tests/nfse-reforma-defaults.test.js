@@ -192,3 +192,33 @@ test('assembleNfsePlugnotasEmitPayload: cIndOp no serviço vira ibscbs completo 
   assert.equal(hasCompleteServicoIbscbs(out.servico[0].ibscbs), true);
   assert.equal(out.servico[0].ibscbs.codigoOperacao, '160201');
 });
+
+test('enrichNfseReformaCabecalhoInEmitPayload: cIndOp locação repete endereço do tomador em ibscbs.imovel (E0932)', () => {
+  const out = enrichNfseReformaCabecalhoInEmitPayload({
+    prestador: { endereco: { codigoCidade: '3543402' } },
+    tomador: {
+      cpfCnpj: '55974414000103',
+      endereco: {
+        cep: '14000000',
+        logradouro: 'Rua Teste',
+        numero: '100',
+        bairro: 'Centro',
+        codigoCidade: '3543402',
+        descricaoCidade: 'Ribeirão Preto',
+        estado: 'SP',
+      },
+    },
+    servico: [{ codigo: '140101', cIndOp: '160201', iss: { aliquota: 2 } }],
+  }, { codigoIbge: '3543402', simplesNacional: true });
+  assert.equal(out.servico[0].ibscbs.imovel?.endereco?.logradouro, 'Rua Teste');
+  assert.equal(out.servico[0].ibscbs.imovel?.endereco?.numero, '100');
+});
+
+test('enrichNfseReformaCabecalhoInEmitPayload: cIndOp geral 100301 não inclui imovel', () => {
+  const out = enrichNfseReformaCabecalhoInEmitPayload({
+    prestador: { endereco: { codigoCidade: '3543402' } },
+    tomador: { endereco: { cep: '14000000', logradouro: 'Rua X', numero: '1', bairro: 'Centro' } },
+    servico: [{ codigo: '140101', cIndOp: '100301', iss: { aliquota: 2 } }],
+  }, { codigoIbge: '3543402', simplesNacional: true });
+  assert.equal(out.servico[0].ibscbs.imovel, undefined);
+});

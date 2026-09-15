@@ -10,6 +10,7 @@ import {
   stripCidadePrestacaoForIssnetRtcObra,
 } from './nfse-obra-defaults.js';
 import {
+  applyIbscbsImovelTomadorEnderecoToEmitPayload,
   enrichNfseReformaCabecalhoInEmitPayload,
   readCodigoIbgeFromEmpresa,
   requiresIssnetRtcEmitSchema,
@@ -65,6 +66,8 @@ export const assembleNfsePlugnotasEmitPayload = (basePayload, prep = {}) => {
   } else {
     emitPayload = stripIncompleteServicoIbscbsFromEmitPayload(emitPayload);
   }
+
+  emitPayload = applyIbscbsImovelTomadorEnderecoToEmitPayload(emitPayload);
 
   return emitPayload;
 };
