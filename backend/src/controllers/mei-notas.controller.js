@@ -48,6 +48,12 @@ import { badRequest, unauthorized } from '../utils/errors.js';
 import { parseCatalogLimit } from '../utils/mei-catalog-query.js';
 import { sendSuccess } from '../utils/response.js';
 
+/** Empresa ativa da sessão — isola catálogo por tenant no app. */
+const catalogHttpOpts = (req) => {
+  const empresaId = String(req.requesterContext?.empresaId || '').trim();
+  return empresaId ? { empresaId } : {};
+};
+
 const firstValue = (value) => (Array.isArray(value) ? value[0] : value);
 const toToken = (value) => String(firstValue(value) || '').trim();
 const stripBearer = (value) => String(value || '').replace(/^Bearer\s+/i, '').trim();
@@ -451,6 +457,7 @@ export const listarCatalogoClientes = async (req, res, next) => {
       limit,
       documentType,
       includeInactive,
+      ...catalogHttpOpts(req),
     });
     return sendSuccess(res, data, 'Catálogo de clientes listado');
   } catch (error) {
@@ -463,7 +470,12 @@ export const listarCatalogoProdutos = async (req, res, next) => {
     const q = String(req.query?.q || '').trim();
     const limit = parseCatalogLimit(req.query?.limit);
     const documentType = String(req.query?.documentType || '').trim() || undefined;
-    const data = await meiNotasService.listarCatalogoProdutos(req.user.id, { q, limit, documentType });
+    const data = await meiNotasService.listarCatalogoProdutos(req.user.id, {
+      q,
+      limit,
+      documentType,
+      ...catalogHttpOpts(req),
+    });
     return sendSuccess(res, data, 'Catálogo de produtos listado');
   } catch (error) {
     return next(error);
@@ -532,7 +544,7 @@ const sendCreated = (res, data, message) => res.status(201).json({
 
 export const criarCatalogoCliente = async (req, res, next) => {
   try {
-    const data = await meiNotasService.criarCatalogoCliente(req.user.id, req.body);
+    const data = await meiNotasService.criarCatalogoCliente(req.user.id, req.body, catalogHttpOpts(req));
     return sendCreated(res, data, 'Cliente do catálogo registado');
   } catch (error) {
     return next(error);
@@ -560,7 +572,12 @@ export const softHideCatalogoClientePorDocumento = async (req, res, next) => {
 
 export const atualizarCatalogoCliente = async (req, res, next) => {
   try {
-    const data = await meiNotasService.atualizarCatalogoCliente(req.user.id, req.params.id, req.body);
+    const data = await meiNotasService.atualizarCatalogoCliente(
+      req.user.id,
+      req.params.id,
+      req.body,
+      catalogHttpOpts(req),
+    );
     return sendSuccess(res, data, 'Cliente do catálogo atualizado');
   } catch (error) {
     return next(error);
@@ -569,7 +586,7 @@ export const atualizarCatalogoCliente = async (req, res, next) => {
 
 export const criarCatalogoProduto = async (req, res, next) => {
   try {
-    const data = await meiNotasService.criarCatalogoProduto(req.user.id, req.body);
+    const data = await meiNotasService.criarCatalogoProduto(req.user.id, req.body, catalogHttpOpts(req));
     return sendCreated(res, data, 'Item do catálogo registado');
   } catch (error) {
     return next(error);
@@ -578,7 +595,7 @@ export const criarCatalogoProduto = async (req, res, next) => {
 
 export const criarCatalogoProdutosFromCnaes = async (req, res, next) => {
   try {
-    const data = await meiNotasService.criarCatalogoProdutosFromCnaes(req.user.id, req.body);
+    const data = await meiNotasService.criarCatalogoProdutosFromCnaes(req.user.id, req.body, catalogHttpOpts(req));
     return sendCreated(res, data, 'CNAEs importados para o catálogo de serviços');
   } catch (error) {
     return next(error);
@@ -587,7 +604,11 @@ export const criarCatalogoProdutosFromCnaes = async (req, res, next) => {
 
 export const criarCatalogoProdutosFromSpreadsheet = async (req, res, next) => {
   try {
-    const data = await meiNotasService.criarCatalogoProdutosFromSpreadsheet(req.user.id, req.body);
+    const data = await meiNotasService.criarCatalogoProdutosFromSpreadsheet(
+      req.user.id,
+      req.body,
+      catalogHttpOpts(req),
+    );
     return sendCreated(res, data, 'Produtos importados da planilha');
   } catch (error) {
     return next(error);
@@ -596,7 +617,12 @@ export const criarCatalogoProdutosFromSpreadsheet = async (req, res, next) => {
 
 export const atualizarCatalogoProduto = async (req, res, next) => {
   try {
-    const data = await meiNotasService.atualizarCatalogoProduto(req.user.id, req.params.id, req.body);
+    const data = await meiNotasService.atualizarCatalogoProduto(
+      req.user.id,
+      req.params.id,
+      req.body,
+      catalogHttpOpts(req),
+    );
     return sendSuccess(res, data, 'Item do catálogo atualizado');
   } catch (error) {
     return next(error);
@@ -605,7 +631,7 @@ export const atualizarCatalogoProduto = async (req, res, next) => {
 
 export const eliminarCatalogoCliente = async (req, res, next) => {
   try {
-    await meiNotasService.eliminarCatalogoCliente(req.user.id, req.params.id);
+    await meiNotasService.eliminarCatalogoCliente(req.user.id, req.params.id, catalogHttpOpts(req));
     return res.status(204).send();
   } catch (error) {
     return next(error);
@@ -614,7 +640,7 @@ export const eliminarCatalogoCliente = async (req, res, next) => {
 
 export const eliminarCatalogoProduto = async (req, res, next) => {
   try {
-    await meiNotasService.eliminarCatalogoProduto(req.user.id, req.params.id);
+    await meiNotasService.eliminarCatalogoProduto(req.user.id, req.params.id, catalogHttpOpts(req));
     return res.status(204).send();
   } catch (error) {
     return next(error);

@@ -84,7 +84,7 @@ import { NotaFiscalFailureBanner } from '@/components/notas/NotaFiscalFailureBan
  * - Arquivar ≠ cancelar fiscalmente (mensagem explícita).
  */
 export default function NotasFiscaisPage() {
-  const { userId } = useAuth();
+  const { userId, empresaId } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -268,7 +268,7 @@ export default function NotasFiscaisPage() {
     } finally {
       setClientesLoading(false);
     }
-  }, [clienteSearch]);
+  }, [clienteSearch, empresaId]);
 
   const loadProdutos = useCallback(async () => {
     if (!catalogDocumentType) return;
@@ -287,12 +287,12 @@ export default function NotasFiscaisPage() {
     } finally {
       setProdutosLoading(false);
     }
-  }, [produtoSearch, catalogDocumentType]);
+  }, [produtoSearch, catalogDocumentType, empresaId]);
 
   useEffect(() => {
     if (!userId) return;
     loadShared();
-  }, [userId, loadShared]);
+  }, [userId, empresaId, loadShared]);
 
   useEffect(() => {
     if (!userId) return;

@@ -1,9 +1,11 @@
 import { createSupabaseClient } from '../config/supabase.js';
 import { badRequest, forbidden, notFound } from '../utils/errors.js';
 import {
+  assertUserCanAccessEmpresa,
   resolveEmpresaCatalogOwnerUserId,
   resolveEmpresaCatalogUserIds,
   resolveCatalogUserIdsForActor,
+  resolveCatalogUserIdsForHttpActor,
 } from './accountant/accountant-access.service.js';
 import {
   cancelarNfse,
@@ -1230,6 +1232,19 @@ export const __setResolveCatalogUserIdsForActorForTests = (fn) => {
 
 export const __resetResolveCatalogUserIdsForActorForTests = () => {
   resolveCatalogUserIdsForActorRef = resolveCatalogUserIdsForActor;
+};
+
+/** Escopo de listagem/edição do catálogo no app (empresa da sessão ou inferência). */
+const resolveCatalogUserIdsForList = async (userId, empresaId = null) => {
+  const scopedEmpresaId = String(empresaId || '').trim();
+  if (scopedEmpresaId) {
+    await assertUserCanAccessEmpresa(userId, scopedEmpresaId);
+    return resolveEmpresaCatalogUserIds(scopedEmpresaId);
+  }
+  if (resolveCatalogUserIdsForActorRef !== resolveCatalogUserIdsForActor) {
+    return resolveCatalogUserIdsForActorRef(userId);
+  }
+  return resolveCatalogUserIdsForHttpActor(userId);
 };
 
 export const __resetGetDbForTests = () => {
@@ -2904,12 +2919,12 @@ export const listarRelatorioNfe = async (_userId, filters = {}) => {
 
 export const listarCatalogoClientes = async (
   userId,
-  { q = '', limit = 20, documentType, includeInactive = false } = {}
+  { q = '', limit = 20, documentType, includeInactive = false, empresaId = null } = {}
 ) => {
   const safeLimit = toCatalogLimit(limit);
   const dbClient = getDb();
   if (!userId) throw badRequest('userId obrigatório para listar catálogo de clientes');
-  const catalogUserIds = await resolveCatalogUserIdsForActorRef(userId);
+  const catalogUserIds = await resolveCatalogUserIdsForList(userId, empresaId);
   // Busca um pouco a mais quando filtra soft-hide em memória (sem coluna no schema compartilhado).
   const fetchLimit = includeInactive ? safeLimit : Math.min(100, Math.max(safeLimit * 3, safeLimit));
   let query = dbClient
@@ -2989,7 +3004,8 @@ export const listarCatalogoProdutos = async (
     }
   } else {
     if (!userId) throw badRequest('userId ou empresaId obrigatório para listar catálogo');
-    const catalogUserIds = await resolveCatalogUserIdsForActor(userId);
+    const catalogUserIds = await resolveCatalogUserIdsForList(userId, null);
+    if (catalogUserIds.length === 0) return [];
     if (catalogUserIds.length === 1) {
       query = query.eq('user_id', catalogUserIds[0]);
     } else {
@@ -3155,9 +3171,9 @@ const ensureCatalogRecordId = (id) => {
 };
 
 /** Cliente visível na listagem do ator (mesma empresa / vínculos do catálogo). */
-const findCatalogClienteForActor = async (userId, id) => {
+const findCatalogClienteForActor = async (userId, id, { empresaId = null } = {}) => {
   const recordId = ensureCatalogRecordId(id);
-  const catalogUserIds = await resolveCatalogUserIdsForActorRef(userId);
+  const catalogUserIds = await resolveCatalogUserIdsForList(userId, empresaId);
   const dbClient = getDb();
   let query = dbClient
     .from(CLIENTS_TABLE)
@@ -3178,9 +3194,9 @@ const CATALOG_PRODUTO_SELECT =
   'id, user_id, document_type, codigo, cnae, discriminacao, aliquota, valor_sugerido, metadata_json, dedupe_key, last_used_at, created_at, updated_at';
 
 /** Produto visível na listagem do ator (mesma empresa / vínculos do catálogo). */
-const findCatalogProdutoForActor = async (userId, id) => {
+const findCatalogProdutoForActor = async (userId, id, { empresaId = null } = {}) => {
   const recordId = ensureCatalogRecordId(id);
-  const catalogUserIds = await resolveCatalogUserIdsForActorRef(userId);
+  const catalogUserIds = await resolveCatalogUserIdsForList(userId, empresaId);
   const dbClient = getDb();
   let query = dbClient
     .from(PRODUCTS_TABLE)
@@ -3225,7 +3241,10 @@ const assertEmailFormat = (email) => {
  * @param {string} userId
  * @param {{ documentType?: string, documento: string, nome: string, email?: string|null, metadata_json?: object|null }} body
  */
-export const criarCatalogoCliente = async (userId, body = {}) => {
+export const criarCatalogoCliente = async (userId, body = {}, options = {}) => {
+  const catalogUserId = options.empresaId
+    ? await resolveEmpresaCatalogOwnerUserId(options.empresaId)
+    : userId;
   const documentType = normalizeDocumentType(
     body.documentType || body.document_type || DOCUMENT_TYPE_NFSE
   );
@@ -3261,7 +3280,7 @@ export const criarCatalogoCliente = async (userId, body = {}) => {
   const now = new Date().toISOString();
   const row = {
     ...entry,
-    user_id: userId,
+    user_id: catalogUserId,
     document_type: documentType,
     last_used_at: now,
     updated_at: now
@@ -3271,7 +3290,7 @@ export const criarCatalogoCliente = async (userId, body = {}) => {
   const { data: existingRow } = await dbClient
     .from(CLIENTS_TABLE)
     .select('metadata_json')
-    .eq('user_id', userId)
+    .eq('user_id', catalogUserId)
     .eq('document_type', documentType)
     .eq('dedupe_key', entry.dedupe_key)
     .maybeSingle();
@@ -3399,7 +3418,7 @@ export const syncCatalogoClienteDocumentTypes = async (userId, body = {}) => {
 /**
  * PATCH catálogo cliente — nome, email, metadata_json; body.active mapeia para metadata_json.catalogActive.
  */
-export const atualizarCatalogoCliente = async (userId, id, body = {}) => {
+export const atualizarCatalogoCliente = async (userId, id, body = {}, options = {}) => {
   const recordId = ensureCatalogRecordId(id);
   if (body.documento !== undefined || body.document_type !== undefined || body.documentType !== undefined) {
     throw badRequest(
@@ -3410,7 +3429,9 @@ export const atualizarCatalogoCliente = async (userId, id, body = {}) => {
     throw badRequest('Não é permitido alterar dedupe_key');
   }
 
-  const existing = await findCatalogClienteForActor(userId, recordId);
+  const existing = await findCatalogClienteForActor(userId, recordId, {
+    empresaId: options.empresaId ?? null,
+  });
   const catalogUserId = existing.user_id;
 
   const updates = {};
@@ -3513,12 +3534,14 @@ export const findCatalogoProdutoByCnae = async (
   userId,
   cnae,
   documentType = DOCUMENT_TYPE_NFSE,
+  options = {},
 ) => {
   const cnaeNorm = normalizeCatalogProdutoCnae(cnae);
   if (cnaeNorm.length !== 7) return null;
   const rows = await listarCatalogoProdutos(userId, {
     limit: 100,
     documentType: normalizeDocumentType(documentType),
+    empresaId: options.empresaId ?? null,
   });
   return rows.find((row) => normalizeCatalogProdutoCnae(row?.cnae) === cnaeNorm) || null;
 };
@@ -3529,7 +3552,7 @@ export const findCatalogoProdutoByCnae = async (
  * - NF-e / NFC-e: grava tributos padrão SN; NCM fica para completar.
  * Não cria duplicata do mesmo CNAE no mesmo document_type.
  */
-export const criarCatalogoProdutosFromCnaes = async (userId, body = {}) => {
+export const criarCatalogoProdutosFromCnaes = async (userId, body = {}, options = {}) => {
   const documentType = normalizeDocumentType(
     body.documentType || body.document_type || DOCUMENT_TYPE_NFSE,
   );
@@ -3559,7 +3582,9 @@ export const criarCatalogoProdutosFromCnaes = async (userId, body = {}) => {
     const codigoServico = String(
       item?.codigoServico ?? item?.servicoCodigo ?? item?.codigo_servico ?? '',
     ).trim();
-    const existing = await findCatalogoProdutoByCnae(userId, cnae, documentType);
+    const existing = await findCatalogoProdutoByCnae(userId, cnae, documentType, {
+      empresaId: options.empresaId ?? null,
+    });
     if (existing) {
       skipped.push({
         codigo: cnae,
@@ -3584,7 +3609,7 @@ export const criarCatalogoProdutosFromCnaes = async (userId, body = {}) => {
       discriminacao: descricao.slice(0, 500),
       aliquota: 0,
       metadata_json,
-    });
+    }, { empresaId: options.empresaId ?? null });
     created.push(row);
   }
 
@@ -3598,7 +3623,7 @@ const onlyDigitsCatalog = (value, max) => String(value ?? '').replace(/\D/g, '')
  * Cada linha válida deve trazer descrição + NCM (8 dígitos).
  * CFOP/CSOSN são calculados na emissão com base no NCM e UF.
  */
-export const criarCatalogoProdutosFromSpreadsheet = async (userId, body = {}) => {
+export const criarCatalogoProdutosFromSpreadsheet = async (userId, body = {}, options = {}) => {
   const documentType = normalizeDocumentType(
     body.documentType || body.document_type || DOCUMENT_TYPE_NFE,
   );
@@ -3660,7 +3685,7 @@ export const criarCatalogoProdutosFromSpreadsheet = async (userId, body = {}) =>
           unidade,
           importedFromSpreadsheet: true,
         },
-      });
+      }, { empresaId: options.empresaId ?? null });
       created.push(createdRow);
     } catch (err) {
       errors.push({
@@ -3807,7 +3832,7 @@ export const atualizarCatalogoProduto = async (userId, id, body = {}, options = 
   const empresaId = options.empresaId ?? null;
   const existing = empresaId
     ? await findCatalogProdutoPorEmpresa(empresaId, recordId)
-    : await findCatalogProdutoForActor(userId, recordId);
+    : await findCatalogProdutoForActor(userId, recordId, { empresaId: options.empresaId ?? null });
   const catalogUserId = existing.user_id;
 
   const updates = {};
@@ -3880,14 +3905,16 @@ export const atualizarCatalogoProduto = async (userId, id, body = {}, options = 
  * 404 apenas se existir linha com o id mas pertencente a outro utilizador.
  * Segundo DELETE (idempotente): 204.
  */
-export const eliminarCatalogoCliente = async (userId, id) => {
+export const eliminarCatalogoCliente = async (userId, id, options = {}) => {
   const recordId = ensureCatalogRecordId(id);
   let existing = null;
   try {
-    existing = await findCatalogClienteForActor(userId, recordId);
+    existing = await findCatalogClienteForActor(userId, recordId, {
+      empresaId: options.empresaId ?? null,
+    });
   } catch (err) {
     if (err?.status !== 404 && err?.statusCode !== 404) throw err;
-    const catalogUserIds = await resolveCatalogUserIdsForActorRef(userId);
+    const catalogUserIds = await resolveCatalogUserIdsForList(userId, options.empresaId ?? null);
     const dbClient = getDb();
     const { data: anyRow, error: errLookup } = await dbClient
       .from(CLIENTS_TABLE)
@@ -3911,7 +3938,7 @@ export const eliminarCatalogoCliente = async (userId, id) => {
   if (error) throw badRequest(error.message);
   if (removed && removed.length > 0) return;
 
-  const catalogUserIds = await resolveCatalogUserIdsForActorRef(userId);
+  const catalogUserIds = await resolveCatalogUserIdsForList(userId, options.empresaId ?? null);
   const { data: anyRow, error: errLookup } = await dbClient
     .from(CLIENTS_TABLE)
     .select('id, user_id')
@@ -3929,12 +3956,14 @@ export const eliminarCatalogoCliente = async (userId, id) => {
 /**
  * DELETE catálogo produto — mesma semântica que {@link eliminarCatalogoCliente}.
  */
-export const eliminarCatalogoProduto = async (userId, id) => {
+export const eliminarCatalogoProduto = async (userId, id, options = {}) => {
   const recordId = ensureCatalogRecordId(id);
-  const catalogUserIds = await resolveCatalogUserIdsForActorRef(userId);
+  const catalogUserIds = await resolveCatalogUserIdsForList(userId, options.empresaId ?? null);
   let existing = null;
   try {
-    existing = await findCatalogProdutoForActor(userId, recordId);
+    existing = await findCatalogProdutoForActor(userId, recordId, {
+      empresaId: options.empresaId ?? null,
+    });
   } catch (err) {
     if (err?.statusCode === 404) return;
     throw err;

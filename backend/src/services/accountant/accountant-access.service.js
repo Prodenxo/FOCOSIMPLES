@@ -331,6 +331,39 @@ export const resolveCatalogUserIdsForActor = async (userId) => {
   return [...userIds];
 };
 
+/**
+ * Escopo de catálogo para rotas HTTP do app (uma empresa por vez).
+ * Evita listar produtos/serviços de todos os clientes quando o login tem vários vínculos.
+ * @param {string} userId
+ * @returns {Promise<string[]>}
+ */
+const CATALOG_USER_ID_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export const resolveCatalogUserIdsForHttpActor = async (userId) => {
+  const normalized = String(userId || '').trim();
+  if (!normalized) return [];
+  if (!CATALOG_USER_ID_UUID_RE.test(normalized)) {
+    return [normalized];
+  }
+
+  const result = await query(
+    `SELECT DISTINCT rx.empresas_id AS empresa_id
+     FROM public.role_x_user_x_empresa rx
+     WHERE rx.user_id = $1
+       AND (rx.status IS NULL OR rx.status = true)`,
+    [normalized],
+  );
+  const empresaIds = result.rows.map((row) => row?.empresa_id).filter(Boolean);
+  if (empresaIds.length === 1) {
+    return resolveEmpresaCatalogUserIds(empresaIds[0]);
+  }
+  if (empresaIds.length === 0) {
+    return [normalized];
+  }
+  return [normalized];
+};
+
 export const resolveEmpresaCatalogOwnerUserId = async (empresaId) => {
   const normalized = String(empresaId || '').trim();
   if (!normalized) throw badRequest('empresaId obrigatório');

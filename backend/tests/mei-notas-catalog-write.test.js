@@ -74,17 +74,17 @@ const createCatalogSupabaseMock = () => {
             };
           },
           select() {
-            return {
+            const maybeSingle = async () => ({ data: { ...clienteStub }, error: null });
+            const chain = {
               eq() {
-                return {
-                  eq() {
-                    return {
-                      maybeSingle: async () => ({ data: { ...clienteStub }, error: null })
-                    };
-                  }
-                };
-              }
+                return chain;
+              },
+              in() {
+                return chain;
+              },
+              maybeSingle,
             };
+            return chain;
           },
           update(updates) {
             return {
@@ -335,35 +335,32 @@ test('criarCatalogoProduto — rejeita duplicata mesmo código + CNAE', async ()
   const mock = createCatalogSupabaseMock();
   const mod = await import('../src/services/mei-notas.service.js');
   mod.__setGetDbForTests(() => mock.client);
+  mod.__setResolveCatalogUserIdsForActorForTests(async () => [mock.userId]);
 
   const origFrom = mock.client.from.bind(mock.client);
   mock.client.from = (table) => {
     if (table === PRODUCTS_TABLE) {
-      const api = origFrom(table);
-      const origSelect = api.select.bind(api);
-      api.select = (...args) => {
-        const chain = origSelect(...args);
-        const origEq = chain.eq.bind(chain);
-        let eqCount = 0;
-        chain.eq = (...eqArgs) => {
-          eqCount += 1;
-          if (eqCount >= 2 && eqArgs[0] === 'user_id') {
-            chain.then = (resolve) => resolve({
-              data: [{
-                id: 'dup-1',
-                codigo: '140101',
-                cnae: '4520001',
-                discriminacao: 'Manutenção veículos',
-                document_type: 'NFSE',
-              }],
-              error: null,
-            });
-          }
-          return origEq(...eqArgs);
-        };
-        return chain;
+      const listChain = {
+        order: () => listChain,
+        limit: () => listChain,
+        eq: () => listChain,
+        in: () => listChain,
+        or: () => listChain,
+        then: (resolve) => resolve({
+          data: [{
+            id: 'dup-1',
+            codigo: '140101',
+            cnae: '4520001',
+            discriminacao: 'Manutenção veículos',
+            document_type: 'NFSE',
+          }],
+          error: null,
+        }),
       };
-      return api;
+      return {
+        ...origFrom(table),
+        select: () => listChain,
+      };
     }
     return origFrom(table);
   };
