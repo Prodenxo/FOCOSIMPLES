@@ -1,6 +1,6 @@
 /**
  * NFS-e Nacional / ISSNET: grupo `obra` obrigatório (rejeição E0370) para itens LC 116 de construção civil.
- * ISSNET RTC007 / DPS 1.01: `servico[].obra.endereco` + `cidadePrestacao` sem campos ABRASF (tipoLogradouro/tipoBairro).
+ * ISSNET RTC007 / DPS 1.01: local da obra só em `cidadePrestacao` (sem `tipoLogradouro`); não duplicar em `obra.endereco` (E160).
  * Não enviar `obra.codigo` placeholder — cObra removido do XSD (E160).
  * Demais municípios: PlugNotas JSON aceita art, codigo e cei em `servico[].obra`.
  * @see TecnoSpeed plugnotas-php Nfse/Servico/Obra.php
@@ -183,7 +183,6 @@ export const buildCidadePrestacaoForIssnetRtcFromObraEndereco = (endereco) => {
   return {
     codigo,
     ...(built.descricaoCidade ? { descricao: built.descricaoCidade } : {}),
-    ...(built.estado ? { estado: built.estado } : {}),
     ...(built.cep ? { cep: built.cep } : {}),
     ...(built.logradouro ? { logradouro: built.logradouro } : {}),
     ...(built.numero ? { numero: built.numero } : {}),
@@ -479,6 +478,7 @@ export const sanitizeCidadePrestacaoForIssnetRtc = (payload) => {
   const {
     tipoLogradouro: _tl,
     tipoBairro: _tb,
+    estado: _uf,
     ...rest
   } = existing;
   return { ...payload, cidadePrestacao: rest };
@@ -527,12 +527,6 @@ export const enrichNfseIssnetRtcCidadePrestacaoFromObra = (payload, options = {}
   if (!payload || typeof payload !== 'object') return payload;
   if (!payloadHasNfseObraServico(payload)) return payload;
 
-  // Com `servico[].obra.endereco` completo, omitir `cidadePrestacao`: a PlugNotas repete o bloco
-  // com tipoLogradouro ABRASF no XML municipal → E160 (schema DPS 1.01 / ISSNETONLINE30).
-  if (payloadHasNfseObraEnderecoOnServico(payload)) {
-    return stripCidadePrestacaoForIssnetRtcObra(payload);
-  }
-
   const cidade = resolveCidadePrestacaoForIssnetRtcObraPayload(payload, options);
   if (!cidade) return sanitizeCidadePrestacaoForIssnetRtc(payload);
 
@@ -567,18 +561,46 @@ export const payloadHasNfseObraEnderecoOnServico = (payload) => {
 };
 
 /**
- * ISSNET RTC007 obra com `obra.endereco`: omitir `cidadePrestacao` (PlugNotas injeta tipoLogradouro → E160).
+ * ISSNET RTC007: com `cidadePrestacao` preenchido, remove `servico[].obra.endereco` (duplicata → E160).
+ * Mantém art/cei/codigo na obra quando informados.
  *
  * @param {Record<string, unknown>|null|undefined} payload
  * @returns {Record<string, unknown>|null|undefined}
  */
-export const stripCidadePrestacaoForIssnetRtcObra = (payload) => {
+export const stripNfseObraEnderecoForIssnetRtcWhenCidadePrestacaoSet = (payload) => {
   if (!payload || typeof payload !== 'object') return payload;
-  if (!payloadHasNfseObraServico(payload)) return payload;
-  if (!payloadHasNfseObraEnderecoOnServico(payload)) return payload;
-  if (!payload.cidadePrestacao) return payload;
-  const { cidadePrestacao: _removed, ...rest } = payload;
-  return rest;
+  const cidade = payload.cidadePrestacao;
+  if (!cidade || typeof cidade !== 'object' || Array.isArray(cidade)) return payload;
+  const codigo = String(cidade.codigo || cidade.codigoCidade || '').replace(/\D/g, '').slice(0, 7);
+  if (codigo.length !== 7) return payload;
+
+  const servicos = Array.isArray(payload.servico)
+    ? payload.servico
+    : payload.servico && typeof payload.servico === 'object'
+      ? [payload.servico]
+      : [];
+  if (!servicos.length) return payload;
+
+  let changed = false;
+  const servicoNext = servicos.map((item) => {
+    if (!item || typeof item !== 'object') return item;
+    if (!requiresNfseObraForServicoCodigo(item.codigo)) return item;
+    const obra = item.obra;
+    if (!obra || typeof obra !== 'object' || Array.isArray(obra) || !obra.endereco) return item;
+    changed = true;
+    const { endereco: _end, ...obraRest } = obra;
+    if (!Object.keys(obraRest).length) {
+      const { obra: _obra, ...servicoRest } = item;
+      return servicoRest;
+    }
+    return { ...item, obra: obraRest };
+  });
+
+  if (!changed) return payload;
+  return {
+    ...payload,
+    servico: Array.isArray(payload.servico) ? servicoNext : servicoNext[0],
+  };
 };
 
 const ISSNET_OBRA_ENDERECO_ALLOWED_KEYS = new Set([

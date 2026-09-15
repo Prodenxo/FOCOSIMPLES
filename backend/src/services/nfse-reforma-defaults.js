@@ -306,6 +306,18 @@ export const NFSE_REG_AP_IBSCBS_SN_SIMPLES = 1;
  * @param {Record<string, unknown>} built
  * @returns {Record<string, unknown>}
  */
+const pruneEmptyIbscbsValoresOperacao = (valores) => {
+  if (!valores || typeof valores !== 'object' || Array.isArray(valores)) return valores;
+  const operacao = valores.operacao;
+  if (!operacao || typeof operacao !== 'object' || Array.isArray(operacao)) return valores;
+  const docs = operacao.documentosReferenciados;
+  const emptyDocs = Array.isArray(docs) && docs.length === 0;
+  const emptyOperacao = emptyDocs && Object.keys(operacao).length <= 1;
+  if (!emptyOperacao) return valores;
+  const { operacao: _op, ...rest } = valores;
+  return Object.keys(rest).length ? rest : { tributacao: valores.tributacao };
+};
+
 export const sanitizeIbscbsForPlugnotasEmit = (built = {}) => {
   const out = {};
   for (const key of PLUGNOTAS_IBSCBS_ALLOWED_KEYS) {
@@ -314,6 +326,15 @@ export const sanitizeIbscbsForPlugnotasEmit = (built = {}) => {
     }
   }
   delete out.indicadorOperacao;
+  if (out.pagamentoParceladoAntecipado === false) {
+    delete out.pagamentoParceladoAntecipado;
+  }
+  if (Array.isArray(out.referenciasNFSe) && out.referenciasNFSe.length === 0) {
+    delete out.referenciasNFSe;
+  }
+  if (out.valores && typeof out.valores === 'object') {
+    out.valores = pruneEmptyIbscbsValoresOperacao(out.valores);
+  }
   return out;
 };
 
@@ -680,9 +701,12 @@ export const enrichNfseReformaCabecalhoInEmitPayload = (payload, options = {}) =
     const iss = servicoRest.iss && typeof servicoRest.iss === 'object' ? servicoRest.iss : {};
     const { codigoTributacao: codigoTributacaoInput, ...servicoBase } = servicoRest;
     const explicitCodigoTributacao = normalizeCodigoTributacaoMunicipal(codigoTributacaoInput);
-    const inferFromAliquota = requiresNfseObraForServicoCodigo(servicoBase.codigo)
-      ? null
-      : resolveCodigoTributacaoIssnetFromAliquota(iss.aliquota);
+    // ISSNET Ribeirão: cTribMun (001/004/…) costuma ser obrigatório no XSD mesmo para 07.xx (E160 se omitido).
+    const inferFromAliquota = requiresIssnetRtcEmitSchema(codigoIbge)
+      ? resolveCodigoTributacaoIssnetFromAliquota(iss.aliquota)
+      : (requiresNfseObraForServicoCodigo(servicoBase.codigo)
+        ? null
+        : resolveCodigoTributacaoIssnetFromAliquota(iss.aliquota));
     const codigoTributacao = explicitCodigoTributacao ?? inferFromAliquota;
     const codigoCidadeIncidencia = String(
       servicoBase.codigoCidadeIncidencia

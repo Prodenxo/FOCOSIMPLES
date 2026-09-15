@@ -14,6 +14,7 @@ import {
   resolveNfseObraCodigoForEmit,
   sanitizeCidadePrestacaoForIssnetRtc,
   sanitizeNfseObraEnderecoForIssnetRtc,
+  stripNfseObraEnderecoForIssnetRtcWhenCidadePrestacaoSet,
   validateNfseObraEndereco,
 } from '../src/services/nfse-obra-defaults.js';
 
@@ -319,7 +320,7 @@ test('sanitizeCidadePrestacaoForIssnetRtc — remove campos ABRASF', () => {
   assert.equal(out.cidadePrestacao?.logradouro, 'Rua A');
 });
 
-test('enrichNfseCidadePrestacaoFromObra — ISSNET RTC obra com endereco omite cidadePrestacao', () => {
+test('enrichNfseCidadePrestacaoFromObra — ISSNET RTC obra com endereco preenche cidadePrestacao DPS', () => {
   const out = enrichNfseCidadePrestacaoFromObra({
     servico: [{ codigo: '070602', obra: { endereco: { cep: '14000000', logradouro: 'Rua A', numero: '1', bairro: 'Centro', codigoCidade: '3543402' } } }],
     cidadePrestacao: { codigo: '3543402', logradouro: 'X', tipoLogradouro: 'Rua' },
@@ -338,8 +339,25 @@ test('enrichNfseCidadePrestacaoFromObra — ISSNET RTC obra com endereco omite c
     issnetOnline30: true,
     servicosInput: [{ codigo: '070602', obra: { usarEnderecoTomador: true } }],
   });
-  assert.equal(out.cidadePrestacao, undefined);
+  assert.equal(out.cidadePrestacao?.codigo, '3543402');
+  assert.equal(out.cidadePrestacao?.logradouro, 'Rua A');
+  assert.equal(out.cidadePrestacao?.tipoLogradouro, undefined);
   assert.equal(out.servico[0].obra.endereco.cep, '14000000');
+});
+
+test('stripNfseObraEnderecoForIssnetRtcWhenCidadePrestacaoSet — remove endereco duplicado', () => {
+  const out = stripNfseObraEnderecoForIssnetRtcWhenCidadePrestacaoSet({
+    cidadePrestacao: { codigo: '3543402', logradouro: 'Rua A', cep: '14000000' },
+    servico: [{
+      codigo: '071601',
+      obra: {
+        endereco: { cep: '14000000', logradouro: 'Rua A', numero: '1', bairro: 'Centro', codigoCidade: '3543402' },
+        art: '123',
+      },
+    }],
+  });
+  assert.equal(out.servico[0].obra?.endereco, undefined);
+  assert.equal(out.servico[0].obra?.art, '123');
 });
 
 test('sanitizeNfseObraEnderecoForIssnetRtc — remove codigoPais e estado', () => {

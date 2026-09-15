@@ -4,13 +4,15 @@
  */
 
 import { applySimplesNacionalInformacoesComplementares } from '../lib/simples-nacional-nfe-infcpl.js';
+import { assertNfseEmitPreflightOrThrow, validateNfseEmitPreflight } from './nfse-emit-preflight.js';
 import { enrichNfseIssInEmitPayload } from './nfse-iss-defaults.js';
+import { normalizeServicoTributosFederaisRetidosForEmit } from './nfse-servico-emit-normalize.js';
 import {
   enrichNfseCidadePrestacaoFromObra,
   enrichNfseObraOnEmitPayload,
   sanitizeCidadePrestacaoForIssnetRtc,
   sanitizeNfseObraEnderecoForIssnetRtc,
-  stripCidadePrestacaoForIssnetRtcObra,
+  stripNfseObraEnderecoForIssnetRtcWhenCidadePrestacaoSet,
 } from './nfse-obra-defaults.js';
 import {
   applyIbscbsImovelTomadorEnderecoToEmitPayload,
@@ -68,16 +70,22 @@ export const assembleNfsePlugnotasEmitPayload = (basePayload, prep = {}) => {
   if (issnetOnline30) {
     emitPayload = sanitizeCidadePrestacaoForIssnetRtc(emitPayload);
     emitPayload = sanitizeNfseObraEnderecoForIssnetRtc(emitPayload);
-    emitPayload = stripCidadePrestacaoForIssnetRtcObra(emitPayload);
+    emitPayload = stripNfseObraEnderecoForIssnetRtcWhenCidadePrestacaoSet(emitPayload);
   } else {
     emitPayload = stripIncompleteServicoIbscbsFromEmitPayload(emitPayload);
   }
 
   emitPayload = applyIbscbsImovelTomadorEnderecoToEmitPayload(emitPayload);
   emitPayload = stripPlugnotasInvalidServicoReformaFields(emitPayload);
+  emitPayload = normalizeServicoTributosFederaisRetidosForEmit(emitPayload);
 
   if (prep.simplesNacional !== false) {
     emitPayload = applySimplesNacionalInformacoesComplementares(emitPayload);
+  }
+
+  if (prep.skipPreflight !== true) {
+    const preflight = validateNfseEmitPreflight(emitPayload, { codigoIbge });
+    assertNfseEmitPreflightOrThrow(preflight);
   }
 
   return emitPayload;
