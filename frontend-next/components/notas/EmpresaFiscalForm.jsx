@@ -11,6 +11,14 @@ import { AppSelect } from '@/components/ui/AppSelect';
 import { formatCnpj } from '@/lib/fiscalFormat';
 import { lookupCep } from '@/lib/fiscalApi';
 
+/** Campo numérico de RPS: vazio continua vazio enquanto o usuário digita (não volta para 1). */
+const parseRpsFieldValue = (value) => {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  if (!digits) return '';
+  const parsed = Number.parseInt(digits, 10);
+  return Number.isFinite(parsed) && parsed >= 1 ? parsed : '';
+};
+
 /**
  * Formulário completo da empresa emissora (PlugNotas).
  * @param {{
@@ -160,20 +168,14 @@ export function EmpresaFiscalForm({
               label="Próximo nº RPS/DPS"
               hint="Próximo recibo provisório a emitir (não é o nº da NFS-e)."
               value={String(form.rpsNumero ?? '')}
-              onChange={(v) => {
-                const n = Number.parseInt(String(v).replace(/\D/g, ''), 10);
-                onChange('rpsNumero', Number.isFinite(n) && n >= 1 ? n : 1);
-              }}
+              onChange={(v) => onChange('rpsNumero', parseRpsFieldValue(v))}
               inputMode="numeric"
             />
             <Field
               label="Lote de RPS"
               hint="Lote cadastrado na prefeitura para envio dos RPS (não é o nº da nota)."
               value={String(form.rpsLote ?? '')}
-              onChange={(v) => {
-                const n = Number.parseInt(String(v).replace(/\D/g, ''), 10);
-                onChange('rpsLote', Number.isFinite(n) && n >= 1 ? n : 1);
-              }}
+              onChange={(v) => onChange('rpsLote', parseRpsFieldValue(v))}
               inputMode="numeric"
             />
           </div>
