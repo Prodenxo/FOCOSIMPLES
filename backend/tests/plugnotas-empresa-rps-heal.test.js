@@ -22,6 +22,7 @@ import {
   resolveNextNfseRpsFromSources,
   resolveNextNfseRpsNumero,
   resolveNfseRpsLocalMaxFromHistory,
+  resolveInscricaoMunicipalForIssnetMunicipalPatch,
   syncPlugnotasNfseRpsBeforeEmit
 } from '../src/services/plugnotas/plugnotas-empresa-rps-heal.js';
 
@@ -805,4 +806,26 @@ test('emitNfseWithPlugnotasRpsHeal reenvia com próximo DPS após E0014', async 
   } finally {
     global.fetch = originalFetch;
   }
+});
+
+test('resolveInscricaoMunicipalForIssnetMunicipalPatch — ignora IM igual ao CNPJ', async () => {
+  const cnpj = '68303090000123';
+  const im = await resolveInscricaoMunicipalForIssnetMunicipalPatch(cnpj, {
+    inscricaoMunicipal: cnpj,
+  });
+  assert.equal(im, '');
+});
+
+test('resolveInscricaoMunicipalForIssnetMunicipalPatch — prioriza opção explícita', async () => {
+  const im = await resolveInscricaoMunicipalForIssnetMunicipalPatch('68303090000123', {}, {
+    inscricaoMunicipal: '123456',
+  });
+  assert.equal(im, '123456');
+});
+
+test('resolveInscricaoMunicipalForIssnetMunicipalPatch — lê IM do espelho PlugNotas', async () => {
+  const im = await resolveInscricaoMunicipalForIssnetMunicipalPatch('68303090000123', {
+    inscricaoMunicipal: '987654',
+  });
+  assert.equal(im, '987654');
 });

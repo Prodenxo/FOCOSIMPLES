@@ -1690,7 +1690,7 @@ const emitNfseWithAutoRpsRecovery = async (
         cnpj: cnpjPrestadorNfse,
         attempt: attempt + 1,
       });
-      await ensureEmpresaPlugnotasNfseMunicipalMode(cnpjPrestadorNfse, empresaJsonCache);
+      await ensureEmpresaPlugnotasNfseMunicipalMode(cnpjPrestadorNfse, empresaJsonCache, { userId });
       prep.nfseNacional = false;
       prep.e0039MunicipalRetried = true;
       continue;
@@ -2499,6 +2499,7 @@ export const emitirNota = async (userId, input) => {
             const patched = await ensureEmpresaPlugnotasNfseMunicipalMode(
               cnpjPrestadorNfse,
               empresaJsonCache,
+              { userId },
             );
             nfseNacionalEmit = false;
             console.warn('[plugnotas-nfse] município ISSNET — emissão alternada para modo municipal antes do POST', {
@@ -2507,6 +2508,9 @@ export const emitirNota = async (userId, input) => {
               patched,
             });
           } catch (error) {
+            const imRequired = String(error?.errors?.code || '') === 'NFSE_IM_OBRIGATORIA_MUNICIPAL'
+              || /inscri[cç][aã]o municipal/i.test(String(error?.message || ''));
+            if (imRequired) throw error;
             console.warn('[plugnotas-nfse] falha ao alternar para modo municipal ISSNET — segue no nacional com fallback E0039', {
               cnpj: cnpjPrestadorNfse,
               codigoIbge: codigoIbgePrestador,

@@ -1,9 +1,11 @@
+import { badRequest } from '../../utils/errors.js';
 import { unwrapPlugnotasEmpresaRecord } from '../mei-emitente-empresa-sync.js';
 import {
   atualizarEmpresaPlugNotas,
   consultarEmpresaPlugNotas,
   resolverCertificadoIdPorCnpj,
 } from './empresa.service.js';
+import { inscricaoMunicipalMatchesCnpj } from './plugnotas-mei-empresa-policy.js';
 import { consultarNfsePorPeriodo } from './nfse.service.js';
 import {
   buildNfseEmitRpsPayload,
@@ -984,14 +986,60 @@ export async function ensureEmpresaPlugnotasRpsForNfseEmit(cnpjInput, empresaJso
   });
 }
 
+const NFSE_IM_MUNICIPAL_REQUIRED_MSG =
+  'Inscrição Municipal é obrigatória para NFS-e municipal (ISSNET em Ribeirão Preto). '
+  + 'Preencha em Certificado → Empresa e use "Atualizar cadastro" antes de emitir.';
+
+/**
+ * IM válida para PATCH municipal (espelho PlugNotas → cadastro Foco).
+ * @param {string} cnpj14
+ * @param {Record<string, unknown>|null|undefined} empresaPlugnotas
+ * @param {{ inscricaoMunicipal?: string, userId?: string }} [options]
+ * @returns {Promise<string>}
+ */
+export async function resolveInscricaoMunicipalForIssnetMunicipalPatch(
+  cnpj14,
+  empresaPlugnotas,
+  options = {},
+) {
+  const cnpj = normalizeDoc(cnpj14);
+  const pickIm = (raw) => {
+    const im = String(raw ?? '').trim();
+    if (!im || inscricaoMunicipalMatchesCnpj(im, cnpj)) return '';
+    return im;
+  };
+
+  const fromOptions = pickIm(options.inscricaoMunicipal);
+  if (fromOptions) return fromOptions;
+
+  const fromEmpresa = pickIm(
+    empresaPlugnotas?.inscricaoMunicipal ?? empresaPlugnotas?.inscricao_municipal,
+  );
+  if (fromEmpresa) return fromEmpresa;
+
+  if (options.userId) {
+    const { getEmitenteNfseSnapshot } = await import('../mei-certificate-store.js');
+    const snap = await getEmitenteNfseSnapshot(options.userId);
+    const fromSnap = pickIm(snap?.inscricaoMunicipal);
+    if (fromSnap) return fromSnap;
+  }
+
+  return '';
+}
+
 /**
  * Alterna empresa para emissão municipal ISSNET (`nfseNacional=false`) após E0039.
  * Idempotente quando já está em modo municipal.
  * @param {string} cnpjInput
  * @param {unknown} [empresaJsonCached]
+ * @param {{ inscricaoMunicipal?: string, userId?: string }} [options]
  * @returns {Promise<boolean>} true se PATCH foi enviado
  */
-export async function ensureEmpresaPlugnotasNfseMunicipalMode(cnpjInput, empresaJsonCached = null) {
+export async function ensureEmpresaPlugnotasNfseMunicipalMode(
+  cnpjInput,
+  empresaJsonCached = null,
+  options = {},
+) {
   const cnpj = normalizeDoc(cnpjInput);
   if (cnpj.length !== 14) return false;
 
@@ -1012,8 +1060,18 @@ export async function ensureEmpresaPlugnotasNfseMunicipalMode(cnpjInput, empresa
 
   if (existingConfig.nfseNacional === false) return false;
 
+  const inscricaoMunicipal = await resolveInscricaoMunicipalForIssnetMunicipalPatch(
+    cnpj,
+    empresa,
+    options,
+  );
+  if (!inscricaoMunicipal) {
+    throw badRequest(NFSE_IM_MUNICIPAL_REQUIRED_MSG, { code: 'NFSE_IM_OBRIGATORIA_MUNICIPAL' });
+  }
+
   await atualizarEmpresaPlugNotas({
     cpfCnpj: cnpj,
+    inscricaoMunicipal,
     nfse: {
       ativo: nfseAtivo,
       tipoContrato: 0,
