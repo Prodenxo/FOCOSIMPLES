@@ -9,6 +9,9 @@ import {
   sanitizeEmpresaPlugnotasRpsPayload,
   stripRpsFromEmpresaPayload
 } from '../src/services/plugnotas/plugnotas-empresa-rps-inicial.js';
+import {
+  applyEmpresaPlugnotasDocumentSelectionForPatch
+} from '../src/services/plugnotas/plugnotas-empresa-documentos-ativos.js';
 
 test('applyEmpresaPlugnotasRpsInicialForPost é idempotente e canónico', () => {
   const payload = { x: 1, nfse: { ativo: true, tipoContrato: 0, config: { producao: true } } };
@@ -92,4 +95,34 @@ test('stripRpsFromEmpresaPayload sem rps é no-op', () => {
   const payload = { a: 1 };
   stripRpsFromEmpresaPayload(payload);
   assert.deepEqual(payload, { a: 1 });
+});
+
+test('PATCH com documentosAtivos preserva o próximo RPS informado (não força numero 1)', () => {
+  const payload = {
+    cpfCnpj: '17422651000172',
+    nfse: {
+      ativo: true,
+      tipoContrato: 0,
+      config: { producao: true, rps: { serie: '2', numero: 37, lote: 4 } }
+    }
+  };
+  applyEmpresaPlugnotasDocumentSelectionForPatch(
+    payload,
+    { nfse: true, nfe: false, nfce: false },
+    { nfseMode: 'nacional' }
+  );
+  assert.deepEqual(payload.nfse.config.rps, { serie: '2', numero: 37, lote: 4 });
+});
+
+test('PATCH com documentosAtivos cai no canónico quando o cliente não envia rps', () => {
+  const payload = {
+    cpfCnpj: '17422651000172',
+    nfse: { ativo: true, tipoContrato: 0, config: { producao: true } }
+  };
+  applyEmpresaPlugnotasDocumentSelectionForPatch(
+    payload,
+    { nfse: true, nfe: false, nfce: false },
+    { nfseMode: 'nacional' }
+  );
+  assert.deepEqual(payload.nfse.config.rps, { serie: '1', numero: 1, lote: 1 });
 });

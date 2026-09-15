@@ -188,6 +188,21 @@ const cloneIncomingPrefeituraConfig = (payload) => {
 };
 
 /**
+ * Série/número/lote do RPS informados pelo cliente — remontar o bloco sem eles
+ * fazia a política cair no canónico (numero 1) e zerar a sequência do cadastro.
+ * @param {Record<string, unknown>} payload
+ */
+const cloneIncomingNfseConfigRps = (payload) => {
+  const raw = payload?.nfse;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const cfg = raw.config;
+  if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) return null;
+  const rps = cfg.rps;
+  if (!rps || typeof rps !== 'object' || Array.isArray(rps)) return null;
+  return { ...rps };
+};
+
+/**
  * @param {Record<string, unknown>} payload
  * @param {{ nfse: boolean, nfe: boolean, nfce: boolean }} selection
  * @param {{ nfseMode?: 'nacional' | 'municipal' }} [opts]
@@ -195,6 +210,7 @@ const cloneIncomingPrefeituraConfig = (payload) => {
 const assignDocumentBlocksFromSelection = (payload, selection, opts = {}) => {
   const nfseMode = opts.nfseMode === 'municipal' ? 'municipal' : 'nacional';
   const incomingPrefeitura = cloneIncomingPrefeituraConfig(payload);
+  const incomingRps = cloneIncomingNfseConfigRps(payload);
 
   if (selection.nfse) {
     payload.nfse = {
@@ -202,7 +218,8 @@ const assignDocumentBlocksFromSelection = (payload, selection, opts = {}) => {
       tipoContrato: 0,
       config: {
         producao: true,
-        ...(incomingPrefeitura ? { prefeitura: incomingPrefeitura } : {})
+        ...(incomingPrefeitura ? { prefeitura: incomingPrefeitura } : {}),
+        ...(incomingRps ? { rps: incomingRps } : {})
       }
     };
     if (nfseMode === 'municipal') {
