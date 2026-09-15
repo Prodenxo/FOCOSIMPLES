@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   allocateNfseRpsForEmit,
   reserveNextNfseRpsNumber,
+  resolveAutoNfseRpsNext,
 } from '../src/services/plugnotas/nfse-rps-allocator.js';
 
 test('reserveNextNfseRpsNumber usa RPC quando disponível', async () => {
@@ -93,6 +94,59 @@ test('allocateNfseRpsForEmit ignora contador Postgres inflado e segue empresa Pl
     assert.equal(allocation.numero, 112);
     assert.equal(setLastCalls, 1);
     assert.equal(reserveCalls, 1);
+  } finally {
+    global.fetch = original;
+  }
+});
+
+test('resolveAutoNfseRpsNext segue histórico acima do cadastro PlugNotas', () => {
+  assert.equal(resolveAutoNfseRpsNext(61, 1), 62);
+  assert.equal(resolveAutoNfseRpsNext(0, 5), 5);
+});
+
+test('allocateNfseRpsForEmit usa cadastro Foco 1-1-1 abaixo do histórico PlugNotas', async () => {
+  const original = global.fetch;
+  global.fetch = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      notas: [{ rps: { numero: 61, serie: '1' }, dps: { numero: 61, serie: '1' } }],
+    }),
+  });
+
+  try {
+    const getDb = () => ({
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => ({ data: { last_numero: 61 }, error: null }),
+          }),
+        }),
+        upsert: async () => ({ error: null }),
+      }),
+      rpc: async (name, args) => {
+        if (name === 'mei_nfse_set_rps_last') {
+          assert.equal(args.p_last, 0);
+          return { error: null };
+        }
+        if (name === 'mei_nfse_reserve_rps') {
+          assert.equal(args.p_floor, 0);
+          return { data: 1, error: null };
+        }
+        return { data: null, error: { message: 'unknown' } };
+      },
+    });
+
+    const allocation = await allocateNfseRpsForEmit(
+      getDb,
+      '65805583000173',
+      61,
+      { nfse: { config: { rps: { serie: '1', numero: 62, lote: 26 } } } },
+      { serie: '1', lote: 1, numero: 1 },
+    );
+    assert.equal(allocation.numero, 1);
+    assert.equal(allocation.serie, '1');
+    assert.equal(allocation.lote, 1);
   } finally {
     global.fetch = original;
   }

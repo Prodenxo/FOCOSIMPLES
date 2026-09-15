@@ -162,13 +162,33 @@ export async function queryKnownNfseRpsMax(getDb, cnpj, localMax = 0) {
 }
 
 /**
+ * Próximo número automático (histórico PlugNotas + cadastro empresa).
+ * @param {number} historyMax
+ * @param {number} empresaNumero
+ * @returns {number}
+ */
+export function resolveAutoNfseRpsNext(historyMax, empresaNumero) {
+  const hist = Math.max(parsePositiveInt(historyMax, 0), 0);
+  const emp = parsePositiveInt(empresaNumero, 0);
+  return Math.max(hist + 1, emp >= 1 ? emp : 1);
+}
+
+/**
  * Próximo DPS seguro: histórico PlugNotas + GET empresa fresco (nunca pula só por Postgres inflado).
+ * Se `configuredRps.numero` no Foco for menor que o automático, usa o cadastro (faixa nova / migração).
  * @param {() => import('@supabase/supabase-js').SupabaseClient} getDb
  * @param {string} cnpj
  * @param {number} localMax
  * @param {unknown} [empresaJson]
+ * @param {{ serie?: string, lote?: number, numero?: number }|null} [configuredRps]
  */
-export async function allocateNfseRpsForEmit(getDb, cnpj, localMax = 0, empresaJson = null) {
+export async function allocateNfseRpsForEmit(
+  getDb,
+  cnpj,
+  localMax = 0,
+  empresaJson = null,
+  configuredRps = null,
+) {
   const normalizedCnpj = normalizeDoc(cnpj);
   const historyMax = await queryPlugnotasAndLocalNfseRpsMax(normalizedCnpj, localMax);
 
@@ -183,10 +203,24 @@ export async function allocateNfseRpsForEmit(getDb, cnpj, localMax = 0, empresaJ
 
   const empresaNext = readPlugnotasNfseNextRpsFromEmpresa(empresaJsonFresh);
   const empresaNumero = empresaNext?.numero >= 1 ? empresaNext.numero : 0;
-  const safeNext = Math.max(
-    historyMax + 1,
-    empresaNumero >= 1 ? empresaNumero : 1,
-  );
+  const autoNext = resolveAutoNfseRpsNext(historyMax, empresaNumero);
+
+  const configuredNumero = parsePositiveInt(configuredRps?.numero, 0);
+  const configuredSerie = String(configuredRps?.serie ?? '').trim();
+  const configuredLote = parsePositiveInt(configuredRps?.lote, 0);
+
+  let safeNext = autoNext;
+  let usedConfiguredFloor = false;
+  if (configuredNumero >= 1 && configuredNumero < autoNext) {
+    safeNext = configuredNumero;
+    usedConfiguredFloor = true;
+    console.warn('[plugnotas-rps] próximo RPS do cadastro Foco abaixo do histórico PlugNotas', {
+      configuredNumero,
+      autoNext,
+      historyMax,
+    });
+  }
+
   const targetFloor = safeNext - 1;
   const counterBefore = await readNfseRpsCounterLast(getDb, normalizedCnpj);
 
@@ -196,20 +230,27 @@ export async function allocateNfseRpsForEmit(getDb, cnpj, localMax = 0, empresaJ
     floor: targetFloor,
   });
 
+  const serie = configuredSerie || String(empresaNext?.serie ?? '1').trim() || '1';
+  const lote = configuredLote >= 1 ? configuredLote : parsePositiveInt(empresaNext?.lote, 1);
+
   console.info('[plugnotas-rps] DPS reservado', {
     cnpj: `${normalizedCnpj.slice(0, 2)}***${normalizedCnpj.slice(-4)}`,
     historyMax,
     empresaNumero: empresaNumero || null,
     counterBefore,
+    autoNext,
     safeNext,
+    usedConfiguredFloor,
     targetFloor,
     numero,
+    serie,
+    lote,
   });
 
   return {
     numero,
-    serie: String(empresaNext?.serie ?? '1').trim() || '1',
-    lote: parsePositiveInt(empresaNext?.lote, 1),
+    serie,
+    lote,
     floor: targetFloor,
     empresaJson: empresaJsonFresh,
   };

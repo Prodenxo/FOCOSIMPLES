@@ -1603,6 +1603,7 @@ const emitNfseWithAutoRpsRecovery = async (
       cnpjPrestadorNfse,
       localMax,
       empresaJsonCache,
+      prep.configuredRps ?? null,
     );
     localMax = Math.max(localMax, allocation.numero);
 
@@ -2513,10 +2514,18 @@ export const emitirNota = async (userId, input) => {
             });
           }
         }
-        const [initialLocalMax, authoritativeMax] = await Promise.all([
+        const [initialLocalMax, authoritativeMax, emitenteRpsSnap] = await Promise.all([
           queryMaxRpsNumeroEmitted(userId, cnpjPrestadorNfse),
           queryAuthoritativeNfseRpsMaxUsed(cnpjPrestadorNfse, 0),
+          getEmitenteNfseSnapshot(userId),
         ]);
+        const configuredRps = emitenteRpsSnap
+          ? {
+            serie: String(emitenteRpsSnap.rpsSerie ?? '1').trim() || '1',
+            lote: Number.parseInt(String(emitenteRpsSnap.rpsLote ?? 1), 10) || 1,
+            numero: Number.parseInt(String(emitenteRpsSnap.rpsNumero ?? 1), 10) || 1,
+          }
+          : null;
         nfseEmitPrep = {
           empresaJson: empresaJsonCache,
           simplesNacional: empresaJsonCache?.simplesNacional !== false,
@@ -2525,6 +2534,7 @@ export const emitirNota = async (userId, input) => {
           issnetOnline30,
           initialLocalMax: Math.max(initialLocalMax ?? 0, authoritativeMax),
           periodoMax: authoritativeMax,
+          configuredRps,
           obraContext: {
             servicosInput: Array.isArray(input?.servicos)
               ? input.servicos
