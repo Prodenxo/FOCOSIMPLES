@@ -301,6 +301,25 @@ const resolveOperacaoPessoalValue = (value) => {
 export const NFSE_REG_AP_IBSCBS_SN_SIMPLES = 1;
 
 /**
+ * PlugNotas exige `ibscbs.indicadorOperacao` numérico; `codigoOperacao` permanece string (cIndOp 6 dígitos).
+ *
+ * @param {unknown} value
+ * @param {unknown} [fallbackCIndOp]
+ * @returns {number|null}
+ */
+export const resolveIndicadorOperacaoForPlugnotas = (value, fallbackCIndOp) => {
+  const toNum = (raw) => {
+    if (raw === undefined || raw === null || raw === '') return null;
+    if (typeof raw === 'number' && Number.isFinite(raw)) return Math.trunc(raw);
+    const digits = String(raw).replace(/\D/g, '');
+    if (!digits) return null;
+    const parsed = Number.parseInt(digits, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  return toNum(value) ?? toNum(fallbackCIndOp);
+};
+
+/**
  * Monta `ibscbs` no formato aceito pela PlugNotas (evita tags inválidas no XML ISSNET).
  *
  * @param {Record<string, unknown>} built
@@ -312,6 +331,14 @@ export const sanitizeIbscbsForPlugnotasEmit = (built = {}) => {
     if (built[key] !== undefined && built[key] !== null) {
       out[key] = built[key];
     }
+  }
+  if (Object.prototype.hasOwnProperty.call(out, 'indicadorOperacao')) {
+    const coerced = resolveIndicadorOperacaoForPlugnotas(
+      out.indicadorOperacao,
+      out.codigoOperacao,
+    );
+    if (coerced == null) delete out.indicadorOperacao;
+    else out.indicadorOperacao = coerced;
   }
   return out;
 };
@@ -513,11 +540,17 @@ export const buildMinimalServicoIbscbs = (ibscbsInput = {}, options = {}) => {
 
   const destinatario = resolveDestinatarioForPlugnotasEmit(destinatarioSource, source);
 
+  const codigoOperacao = source.codigoOperacao ?? cIndOp;
+  const indicadorOperacao = resolveIndicadorOperacaoForPlugnotas(
+    source.indicadorOperacao,
+    codigoOperacao ?? cIndOp,
+  );
+
   const built = {
     finalidadeNFSe: source.finalidadeNFSe ?? source.finalidadeNfse ?? finNFSe,
     operacaoPessoal,
-    codigoOperacao: source.codigoOperacao ?? cIndOp,
-    indicadorOperacao: source.indicadorOperacao ?? source.codigoOperacao ?? cIndOp,
+    ...(codigoOperacao ? { codigoOperacao } : {}),
+    ...(indicadorOperacao != null ? { indicadorOperacao } : {}),
     destinatario,
     valores: {
       ...existingValores,

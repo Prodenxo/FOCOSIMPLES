@@ -16,6 +16,8 @@ import {
   resolveCodigoTributacaoIssnetFromAliquota,
   resolveCIndOpForServico,
   resolveFinNfseValue,
+  resolveIndicadorOperacaoForPlugnotas,
+  sanitizeIbscbsForPlugnotasEmit,
   stripIncompleteServicoIbscbsFromEmitPayload,
   validateNfseCatalogProdutoMetadata,
 } from '../src/services/nfse-reforma-defaults.js';
@@ -49,6 +51,23 @@ test('readCodigoIbgeFromEmpresa: prefeitura.config', () => {
   );
 });
 
+test('sanitizeIbscbsForPlugnotasEmit: converte indicadorOperacao string para número', () => {
+  const out = sanitizeIbscbsForPlugnotasEmit({
+    finalidadeNFSe: 0,
+    operacaoPessoal: 0,
+    codigoOperacao: '020201',
+    indicadorOperacao: '020201',
+    valores: { tributacao: { cst: '000', cct: '000001' } },
+  });
+  assert.equal(out.indicadorOperacao, 20201);
+  assert.equal(out.codigoOperacao, '020201');
+});
+
+test('resolveIndicadorOperacaoForPlugnotas: aceita número ou cIndOp', () => {
+  assert.equal(resolveIndicadorOperacaoForPlugnotas('160201'), 160201);
+  assert.equal(resolveIndicadorOperacaoForPlugnotas(100301), 100301);
+});
+
 test('buildMinimalServicoIbscbs: formato PlugNotas com valores.tributacao e indDest', () => {
   const ibscbs = buildMinimalServicoIbscbs({}, {
     finNFSe: 0,
@@ -59,6 +78,7 @@ test('buildMinimalServicoIbscbs: formato PlugNotas com valores.tributacao e indD
 
   assert.equal(ibscbs.finalidadeNFSe, 0);
   assert.equal(ibscbs.codigoOperacao, '050101');
+  assert.equal(ibscbs.indicadorOperacao, 50101);
   assert.equal(ibscbs.valores.tributacao.cst, '000');
   assert.equal(ibscbs.valores.tributacao.cct, '000001');
   assert.equal(ibscbs.destinatario.indicador, 0);
@@ -84,6 +104,7 @@ test('enrichNfseReformaCabecalhoInEmitPayload: obra 07.xx usa cIndOp 020201', ()
     servico: [{ codigo: '070602', cnae: '4330403', iss: { aliquota: 0 } }],
   }, { simplesNacional: true, nfseNacional: false, codigoIbge: '3543402' });
   assert.equal(out.servico[0].ibscbs.codigoOperacao, '020201');
+  assert.equal(out.servico[0].ibscbs.indicadorOperacao, 20201);
 });
 
 test('enrichNfseReformaCabecalhoInEmitPayload: obra 07.xx sem municipioIncidenciaIbsCbs duplicado', () => {
