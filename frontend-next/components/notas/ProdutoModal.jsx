@@ -89,12 +89,11 @@ export function ProdutoModal({ produto, catalogKind = 'nfse', onClose, onSuccess
           form.nfseReforma || emptyNfseCatalogProdutoFormFields(),
         )
         : {};
-      const payload = {
+      const baseFields = {
         codigo: form.codigo.trim(),
         nome: form.nome?.trim() || form.discriminacao?.trim(),
         discriminacao: form.discriminacao?.trim() || form.nome?.trim(),
         descricao: form.descricao?.trim() || form.discriminacao?.trim() || form.nome?.trim(),
-        documentType: resolvedDocumentType,
         ...(isNfse
           ? {
             cnae: form.cnae?.replace(/\D/g, '') || undefined,
@@ -109,9 +108,10 @@ export function ProdutoModal({ produto, catalogKind = 'nfse', onClose, onSuccess
       };
 
       if (produto?.id) {
-        await atualizarCatalogoProduto(produto.id, payload);
+        // PATCH: backend não aceita documentType/dedupe_key na edição.
+        await atualizarCatalogoProduto(produto.id, baseFields);
       } else {
-        await criarCatalogoProduto(payload);
+        await criarCatalogoProduto({ ...baseFields, documentType: resolvedDocumentType });
       }
 
       onSuccess?.();

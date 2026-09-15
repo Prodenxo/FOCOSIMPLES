@@ -5,7 +5,7 @@
  */
 
 import { normalizeCodigoNbs, normalizeCodigoTributacaoMunicipal } from './nfse-codigo-nbs.js';
-import { buildNfseObraEndereco, requiresNfseObraForServicoCodigo } from './nfse-obra-defaults.js';
+import { requiresNfseObraForServicoCodigo } from './nfse-obra-defaults.js';
 
 /** NFS-e regular — emissão padrão de serviço. */
 export const NFSE_FIN_NFSE_REGULAR = 0;
@@ -23,10 +23,10 @@ export const NFSE_CINDOP_SERVICO_GERAL = '100301';
 export const NFSE_CINDOP_OBRA_NO_LOCAL = '020201';
 
 /**
- * Prefixos cIndOp (IndOp ANEXO) ligados a imóvel — rejeição E0932 se faltar ibscbs.imovel.
- * Obra (02) usa `servico.obra`; estabelecimento (05) e geral (10) não usam imóvel.
+ * Grupos IndOp (2 primeiros dígitos) que **não** exigem ibscbs.imovel.
+ * Demais grupes com cIndOp válido → repetir endereço do tomador (E0932).
  */
-export const NFSE_CINDOP_REQUIRES_IMOVEL_PREFIXES = Object.freeze(['01', '03', '04', '06', '16']);
+export const NFSE_CINDOP_IMOVEL_EXEMPT_PREFIXES = Object.freeze(['02', '05', '10']);
 
 /** CST IBS/CBS — tributação padrão (PlugNotas / ISSNET RTC v1.01). */
 export const NFSE_SITUACAO_TRIBUTARIA_IBSCBS_DEFAULT = '000';
@@ -165,19 +165,60 @@ export const resolveSituacaoTributariaIbsCbsForServico = (servico = {}) => {
 export const cIndOpRequiresImovelInformacoes = (cIndOpInput) => {
   const code = normalizeCIndOp(cIndOpInput);
   if (!code) return false;
-  if (code.startsWith('02') || code.startsWith('05') || code.startsWith('10')) return false;
-  return NFSE_CINDOP_REQUIRES_IMOVEL_PREFIXES.some((prefix) => code.startsWith(prefix));
+  const prefix2 = code.slice(0, 2);
+  if (NFSE_CINDOP_IMOVEL_EXEMPT_PREFIXES.includes(prefix2)) return false;
+  const group = Number.parseInt(prefix2, 10);
+  return Number.isFinite(group) && group >= 1 && group <= 99;
 };
 
 /**
- * Endereço do imóvel na DPS (contador: repetir endereço do tomador quando aplicável).
+ * Endereço do imóvel na DPS — espelha tomador (ISSNet / contador).
+ * @param {Record<string, unknown>|null|undefined} enderecoInput
+ * @returns {Record<string, string>|null}
+ */
+export const buildIbscbsImovelEnderecoFromTomador = (enderecoInput = {}) => {
+  if (!enderecoInput || typeof enderecoInput !== 'object') return null;
+  const cep = String(enderecoInput.cep || '').replace(/\D/g, '').slice(0, 8);
+  const logradouro = String(enderecoInput.logradouro || '').trim();
+  const numero = String(enderecoInput.numero || '').trim();
+  const bairro = String(enderecoInput.bairro || '').trim();
+  const codigoCidade = String(enderecoInput.codigoCidade || '').replace(/\D/g, '').slice(0, 7);
+  const estado = String(enderecoInput.estado || enderecoInput.uf || '').trim().toUpperCase().slice(0, 2);
+  if (cep.length !== 8 || !logradouro || !numero || !bairro || codigoCidade.length !== 7 || estado.length !== 2) {
+    return null;
+  }
+  const descricaoCidade = String(enderecoInput.descricaoCidade || '').trim();
+  const complemento = String(enderecoInput.complemento || '').trim();
+  const tipoLogradouro = String(enderecoInput.tipoLogradouro || 'Rua').trim() || 'Rua';
+  const tipoBairro = String(enderecoInput.tipoBairro || 'Bairro').trim() || 'Bairro';
+
+  return {
+    cep,
+    logradouro,
+    numero,
+    bairro,
+    codigoCidade,
+    descricaoCidade: descricaoCidade || undefined,
+    estado,
+    tipoLogradouro,
+    tipoBairro,
+    codigoPais: String(enderecoInput.codigoPais || '1058').trim() || '1058',
+    descricaoPais: String(enderecoInput.descricaoPais || 'Brasil').trim() || 'Brasil',
+    ...(complemento ? { complemento } : {}),
+  };
+};
+
+/**
  * @param {Record<string, unknown>|null|undefined} enderecoInput
  * @returns {{ endereco: Record<string, string> }|null}
  */
 export const buildIbscbsImovelFromTomadorEndereco = (enderecoInput = {}) => {
-  const endereco = buildNfseObraEndereco(enderecoInput);
-  if (!endereco?.cep || !endereco?.logradouro || !endereco?.numero) return null;
-  return { endereco };
+  const endereco = buildIbscbsImovelEnderecoFromTomador(enderecoInput);
+  if (!endereco) return null;
+  const cleaned = Object.fromEntries(
+    Object.entries(endereco).filter(([, v]) => v !== undefined && v !== null && v !== ''),
+  );
+  return { endereco: cleaned };
 };
 
 /**
@@ -476,6 +517,7 @@ export const buildMinimalServicoIbscbs = (ibscbsInput = {}, options = {}) => {
     finalidadeNFSe: source.finalidadeNFSe ?? source.finalidadeNfse ?? finNFSe,
     operacaoPessoal,
     codigoOperacao: source.codigoOperacao ?? cIndOp,
+    indicadorOperacao: source.indicadorOperacao ?? source.codigoOperacao ?? cIndOp,
     destinatario,
     valores: {
       ...existingValores,
