@@ -371,9 +371,7 @@ export function buildNfsePayload(form) {
       descricaoCidade: form.tomadorEndereco.descricaoCidade.trim(),
     },
     servico,
-    cidadePrestacao: form.cidadePrestacao?.codigo
-      ? { codigo: onlyDigits(form.cidadePrestacao.codigo), descricao: form.cidadePrestacao.descricao || '', estado: form.cidadePrestacao.estado || '' }
-      : undefined,
+    // Local da prestação (obra 07.xx) é montado no backend a partir do tomador — não enviar IBGE do prestador aqui.
     informacoesComplementares: String(form.informacoesComplementares || '').trim() || undefined,
     enviarEmail: Boolean(form.enviarEmail),
   };

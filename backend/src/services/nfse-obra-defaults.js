@@ -527,11 +527,19 @@ export const enrichNfseIssnetRtcCidadePrestacaoFromObra = (payload, options = {}
   if (!payload || typeof payload !== 'object') return payload;
   if (!payloadHasNfseObraServico(payload)) return payload;
 
-  const cidade = resolveCidadePrestacaoForIssnetRtcObraPayload(payload, options);
-  if (!cidade) return sanitizeCidadePrestacaoForIssnetRtc(payload);
+  // Nunca reutilizar `cidadePrestacao` vinda da UI/API (só IBGE do prestador → PlugNotas preenche José de Magalhães).
+  const base = payload.cidadePrestacao
+    ? (() => {
+      const { cidadePrestacao: _removed, ...rest } = payload;
+      return rest;
+    })()
+    : payload;
+
+  const cidade = resolveCidadePrestacaoForIssnetRtcObraPayload(base, options);
+  if (!cidade) return sanitizeCidadePrestacaoForIssnetRtc(base);
 
   return sanitizeCidadePrestacaoForIssnetRtc({
-    ...payload,
+    ...base,
     cidadePrestacao: cidade,
   });
 };

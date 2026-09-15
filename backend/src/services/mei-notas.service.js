@@ -1641,9 +1641,14 @@ const emitNfseWithAutoRpsRecovery = async (
       applyIss: false,
     });
     logNfseEmitPayloadIfDebug(emitPayload, {
+      assemblyRevision: 'nfse-v5',
       attempt: attempt + 1,
       cnpjPrestador: cnpjPrestadorNfse,
       idIntegracao: emitPayload.idIntegracao,
+      codigoTributacao: emitPayload?.servico?.[0]?.codigoTributacao,
+      tributosFederaisRetidos: emitPayload?.servico?.[0]?.tributosFederaisRetidos,
+      cidadePrestacaoCep: emitPayload?.cidadePrestacao?.cep,
+      hasObraEndereco: Boolean(emitPayload?.servico?.[0]?.obra?.endereco),
     });
     response = await adapter.emitir(emitPayload);
 
