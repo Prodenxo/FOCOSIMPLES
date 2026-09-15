@@ -240,7 +240,7 @@ test('assembleNfsePlugnotasEmitPayload: inclui frases do Simples em informacoesC
   assert.equal(out.informacoesComplementares, SIMPLES_NACIONAL_NFE_INF_CPL_LINES.join('|'));
 });
 
-test('assembleNfsePlugnotasEmitPayload: obra 071601 ISSNET usa RTC007 e cidadePrestacao DPS', () => {
+test('assembleNfsePlugnotasEmitPayload: obra 071601 ISSNET usa RTC007 e omit cidadePrestacao', () => {
   const out = assembleNfsePlugnotasEmitPayload({
     prestador: { endereco: { codigoCidade: '3543402', cep: '14092200', logradouro: 'JOSE DE MAGALHAES', numero: '860', bairro: 'JARDIM ANHANGUERA', estado: 'SP' } },
     tomador: {
@@ -261,10 +261,15 @@ test('assembleNfsePlugnotasEmitPayload: obra 071601 ISSNET usa RTC007 e cidadePr
       cIndOp: '020201',
       iss: { aliquota: 2 },
     }],
-  }, { simplesNacional: true, nfseNacional: false, codigoIbge: '3543402' });
+  }, {
+    simplesNacional: true,
+    nfseNacional: false,
+    codigoIbge: '3543402',
+    obraContext: { servicosInput: [{ codigo: '071601', obra: { usarEnderecoTomador: true } }] },
+  });
   assert.equal(out.versaoEsquema, NFSE_VERSAO_ESQUEMA_RTC007);
-  assert.equal(out.cidadePrestacao?.tipoLogradouro, undefined);
-  assert.equal(out.cidadePrestacao?.logradouro, 'R DOUTOR ANTONIO CARLOS TINOCO');
+  assert.equal(out.cidadePrestacao, undefined);
+  assert.equal(out.servico[0].obra?.endereco?.logradouro, 'R DOUTOR ANTONIO CARLOS TINOCO');
   assert.equal(out.servico[0].obra?.endereco?.codigoPais, undefined);
 });
 

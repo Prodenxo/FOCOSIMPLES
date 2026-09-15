@@ -10,6 +10,7 @@ import {
   enrichNfseObraOnEmitPayload,
   sanitizeCidadePrestacaoForIssnetRtc,
   sanitizeNfseObraEnderecoForIssnetRtc,
+  stripCidadePrestacaoForIssnetRtcObra,
 } from './nfse-obra-defaults.js';
 import {
   applyIbscbsImovelTomadorEnderecoToEmitPayload,
@@ -67,6 +68,7 @@ export const assembleNfsePlugnotasEmitPayload = (basePayload, prep = {}) => {
   if (issnetOnline30) {
     emitPayload = sanitizeCidadePrestacaoForIssnetRtc(emitPayload);
     emitPayload = sanitizeNfseObraEnderecoForIssnetRtc(emitPayload);
+    emitPayload = stripCidadePrestacaoForIssnetRtcObra(emitPayload);
   } else {
     emitPayload = stripIncompleteServicoIbscbsFromEmitPayload(emitPayload);
   }

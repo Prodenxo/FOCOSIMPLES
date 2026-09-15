@@ -527,6 +527,12 @@ export const enrichNfseIssnetRtcCidadePrestacaoFromObra = (payload, options = {}
   if (!payload || typeof payload !== 'object') return payload;
   if (!payloadHasNfseObraServico(payload)) return payload;
 
+  // Com `servico[].obra.endereco` completo, omitir `cidadePrestacao`: a PlugNotas repete o bloco
+  // com tipoLogradouro ABRASF no XML municipal → E160 (schema DPS 1.01 / ISSNETONLINE30).
+  if (payloadHasNfseObraEnderecoOnServico(payload)) {
+    return stripCidadePrestacaoForIssnetRtcObra(payload);
+  }
+
   const cidade = resolveCidadePrestacaoForIssnetRtcObraPayload(payload, options);
   if (!cidade) return sanitizeCidadePrestacaoForIssnetRtc(payload);
 
