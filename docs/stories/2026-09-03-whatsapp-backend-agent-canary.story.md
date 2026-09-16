@@ -1,6 +1,6 @@
 # WhatsApp: teste do robô no backend (só o dono)
 
-Status: InReview
+Status: InProgress
 
 ## Objetivo
 
@@ -31,5 +31,17 @@ Permitir que o superadmin ligue/desligue o OpenClaw **só no próprio WhatsApp**
 - `backend/src/services/whatsapp-backend-agent-intent.js`
 - `backend/src/services/whatsapp-backend-agent-prompt.js`
 - `backend/src/services/whatsapp-backend-agent.service.js`
+- `backend/tests/whatsapp-backend-agent-actions.test.js`
+- `docs/ops/openclaw-focosimples/SOUL.md`
 - `frontend/components/settings/WhatsappAgentLogsModal.tsx`
 - `frontend/screens/SettingsScreen.tsx`
+
+## Dev Notes
+
+- [x] Tratar resposta numérica após lista de serviços como `servicoIndice`.
+- [x] Impedir nova listagem após escolha válida e impedir edição de arquivos pelo robô.
+- [ ] Publicar o SOUL atualizado no OpenClaw e validar pelo WhatsApp.
+
+## Change Log
+
+- 2026-09-16 — Reaberta para corrigir escolha numérica de serviço NFS-e no WhatsApp.

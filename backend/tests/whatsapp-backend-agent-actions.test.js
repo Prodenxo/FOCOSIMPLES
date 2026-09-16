@@ -29,4 +29,8 @@ test('o prompt carrega o SOUL inteiro e a camada do site', () => {
   assert.match(prompt, /send_das_whatsapp/);
   assert.match(prompt, /2026-09-03/);
   assert.match(prompt, /2026-08-01/);
+  assert.match(prompt, /resposta curta após lista numerada/);
+  assert.match(prompt, /servicoIndice` igual ao número escolhido/);
+  assert.match(prompt, /PROIBIDO.*list_catalog_servicos` novamente/);
+  assert.match(prompt, /Nunca uses ferramentas de edição de ficheiros/);
 });
