@@ -134,7 +134,6 @@ export function ClienteModal({ cliente, onClose, onSuccess }) {
 
     try {
       const payload = {
-        documento: doc,
         nome: form.nome.trim(),
         email: form.email?.trim() || undefined,
         telefone: form.telefone?.trim() || undefined,
@@ -155,9 +154,10 @@ export function ClienteModal({ cliente, onClose, onSuccess }) {
       };
 
       if (cliente?.id) {
+        // PATCH recusa `documento` — trocar CPF/CNPJ exige novo cadastro.
         await atualizarCatalogoCliente(cliente.id, payload);
       } else {
-        await criarCatalogoCliente(payload);
+        await criarCatalogoCliente({ documento: doc, ...payload });
       }
 
       onSuccess?.();

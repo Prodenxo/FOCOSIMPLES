@@ -1213,6 +1213,8 @@ export const buildOpenclawNfseEmitInput = async (userId, payload = {}) => {
 
   return {
     documentType: 'NFSE',
+    // WhatsApp: devolve PROCESSANDO sem poll de 28s — PDF segue no webhook/retry.
+    waitForNfseTerminal: false,
     ...prestador,
     ...tomador,
     ...(tomadorEndereco ? { tomadorEndereco } : {}),

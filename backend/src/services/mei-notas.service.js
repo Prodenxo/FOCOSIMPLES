@@ -1438,7 +1438,7 @@ const healNfseRpsAfterE0014RecordIfNeeded = async (userId, record, response, sta
  */
 const finalizeNfseEmitStateBeforePersist = async (
   adapter,
-  { response, emitPayload, cnpjPrestadorNfse },
+  { response, emitPayload, cnpjPrestadorNfse, waitForNfseTerminal = true },
 ) => {
   let currentResponse = response;
   let status = extractPlugNotasStatus(currentResponse);
@@ -1450,7 +1450,7 @@ const finalizeNfseEmitStateBeforePersist = async (
 
   if (normalized === 'processando') {
     const integracao = extractIntegracaoId(currentResponse) || emitPayload?.idIntegracao;
-    if (integracao && cnpjPrestadorNfse.length === 14) {
+    if (waitForNfseTerminal !== false && integracao && cnpjPrestadorNfse.length === 14) {
       currentResponse = await awaitNfseEmitTerminalResponse(adapter, {
         initialResponse: currentResponse,
         idIntegracao: integracao,
@@ -1480,7 +1480,7 @@ const finalizeNfseEmitStateBeforePersist = async (
   }
 
   const integracao = extractIntegracaoId(currentResponse) || emitPayload?.idIntegracao;
-  if (integracao && cnpjPrestadorNfse.length === 14) {
+  if (waitForNfseTerminal !== false && integracao && cnpjPrestadorNfse.length === 14) {
     currentResponse = await awaitNfseEmitTerminalResponse(adapter, {
       initialResponse: currentResponse,
       idIntegracao: integracao,
@@ -1656,7 +1656,12 @@ const emitNfseWithAutoRpsRecovery = async (
     let status = extractPlugNotasStatus(response);
     let normalized = normalizeStatus(status);
 
-    if (normalized !== 'concluido' && integracaoPoll && cnpjPrestadorNfse.length === 14) {
+    if (
+      prep.waitForNfseTerminal !== false
+      && normalized !== 'concluido'
+      && integracaoPoll
+      && cnpjPrestadorNfse.length === 14
+    ) {
       response = await awaitNfseEmitTerminalResponse(adapter, {
         initialResponse: response,
         idIntegracao: integracaoPoll,
@@ -2523,6 +2528,7 @@ export const emitirNota = async (userId, input) => {
           nfseNacional: nfseNacionalEmit,
           codigoIbge: codigoIbgePrestador,
           issnetOnline30,
+          waitForNfseTerminal: input?.waitForNfseTerminal !== false,
           initialLocalMax: Math.max(initialLocalMax ?? 0, authoritativeMax),
           periodoMax: authoritativeMax,
           configuredRps,
@@ -2616,6 +2622,7 @@ export const emitirNota = async (userId, input) => {
         response,
         emitPayload,
         cnpjPrestadorNfse,
+        waitForNfseTerminal: nfseEmitPrep?.waitForNfseTerminal !== false,
       });
       response = finalized.response;
       status = finalized.status;
