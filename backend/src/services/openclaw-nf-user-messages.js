@@ -323,6 +323,26 @@ export const formatNfCatalogAmbiguousMessage = (label, matches = [], documentTyp
   return `Encontrei vários ${tipo}s parecidos com "${label}". Qual é?\n${lines.join('\n')}`;
 };
 
+/** Documento do catálogo com rótulo CPF/CNPJ — nunca inventar número. */
+const formatClienteDocumentoLabel = (documento) => {
+  const doc = String(documento || '').replace(/\D/g, '');
+  if (doc.length === 14) return `CNPJ ${doc}`;
+  if (doc.length === 11) return `CPF ${doc}`;
+  return doc || 'sem documento';
+};
+
+/**
+ * Clientes homónimos no catálogo NFS-e: a lista vai no próprio `message` para o agente
+ * repetir o texto sem inventar documentos.
+ */
+export const formatNfseClienteAmbiguousMessage = (nome, matches = []) => {
+  const list = Array.isArray(matches) ? matches : [];
+  const lines = list.map(
+    (c, i) => `${i + 1}. ${String(c.nome || '—').trim()} (${formatClienteDocumentoLabel(c.documento)})`,
+  );
+  return `Encontrei vários clientes com o nome "${nome}". Qual deles?\n${lines.join('\n')}`;
+};
+
 export const formatNfCatalogNotFoundMessage = (label, catalog = [], documentType = 'NFSE') => {
   const tipo = documentType === 'NFE' ? 'produto' : 'serviço';
   const list = Array.isArray(catalog) ? catalog : [];

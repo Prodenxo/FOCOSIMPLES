@@ -6,12 +6,17 @@ import {
   isNfsePdfReadyStatus,
   normalizeCatalogDiscriminacao,
   parseValorReais,
+  pickClienteCatalogoByIndexResult,
   pickClienteCatalogoByNomeResult,
   pickProdutoCatalogoByCodigoCnaeResult,
   pickProdutoCatalogoByCodigoResult,
   pickProdutoCatalogoByNomeResult,
+  pickTomadorIndiceFromPayload,
 } from '../src/services/openclaw-nfse.service.js';
-import { formatNfseCatalogChoiceMessage } from '../src/services/openclaw-nf-user-messages.js';
+import {
+  formatNfseCatalogChoiceMessage,
+  formatNfseClienteAmbiguousMessage,
+} from '../src/services/openclaw-nf-user-messages.js';
 
 /** Valor da nota fiscal (emit_nfse), não lançamento financeiro. */
 test('parseValorReais NFSe — número e formato BR', () => {
@@ -208,4 +213,32 @@ test('formatOpenclawNfseProdutosMessage — lista formatada', () => {
   assert.match(msg, /1 serviço/);
   assert.match(msg, /Pintura/);
   assert.match(msg, /CNAE 4330404/);
+});
+
+test('pickClienteCatalogoByIndexResult — número escolhido na lista de homónimos', () => {
+  const matches = [
+    { id: 'c1', nome: 'CF Carneiro', documento: '60511506000197' },
+    { id: 'c2', nome: 'CF Carneiro Contabilidade', documento: '12345678901' },
+  ];
+  assert.equal(pickClienteCatalogoByIndexResult(matches, 1).cliente.id, 'c1');
+  assert.equal(pickClienteCatalogoByIndexResult(matches, '2').cliente.id, 'c2');
+  assert.equal(pickClienteCatalogoByIndexResult(matches, 3).kind, 'not_found');
+  assert.equal(pickClienteCatalogoByIndexResult(matches, 0).kind, 'missing');
+  assert.equal(pickClienteCatalogoByIndexResult(matches, undefined).kind, 'missing');
+});
+
+test('pickTomadorIndiceFromPayload — aliases do número do cliente', () => {
+  assert.equal(pickTomadorIndiceFromPayload({ tomadorIndice: 1 }), '1');
+  assert.equal(pickTomadorIndiceFromPayload({ clienteIndice: 2 }), '2');
+  assert.equal(pickTomadorIndiceFromPayload({ tomadorNumero: '3' }), '3');
+  assert.equal(pickTomadorIndiceFromPayload({ tomadorNome: 'CF Carneiro' }), '');
+});
+
+test('formatNfseClienteAmbiguousMessage — documentos reais na mensagem', () => {
+  const msg = formatNfseClienteAmbiguousMessage('CF Carneiro', [
+    { nome: 'CF Carneiro Contabilidade', documento: '60511506000197' },
+    { nome: 'CF Carneiro', documento: '12345678901' },
+  ]);
+  assert.match(msg, /1\. CF Carneiro Contabilidade \(CNPJ 60511506000197\)/);
+  assert.match(msg, /2\. CF Carneiro \(CPF 12345678901\)/);
 });

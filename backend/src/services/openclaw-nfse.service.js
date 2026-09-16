@@ -40,6 +40,7 @@ import {
   isVagueNfItemLabel,
   formatNfseCatalogChoiceMessage,
   formatNfCatalogAmbiguousMessage,
+  formatNfseClienteAmbiguousMessage,
   formatNfCatalogNotFoundMessage,
   isNfEmitConfirmed,
   BOT_NF_EMIT_FAILED_INSTRUCTION,
@@ -695,6 +696,61 @@ const mapClienteResumo = (cliente) => ({
   email: cliente.email ?? null,
 });
 
+/**
+ * Escolha do cliente pelo número da lista mostrada ao utilizador (homónimos no catálogo).
+ * @param {Array<Record<string, unknown>>} matches
+ * @param {unknown} indexRaw
+ */
+export const pickClienteCatalogoByIndexResult = (matches, indexRaw) => {
+  const index = Number(indexRaw);
+  if (!Number.isInteger(index) || index < 1) return { kind: 'missing' };
+  const list = Array.isArray(matches) ? matches : [];
+  const cliente = list[index - 1];
+  if (!cliente) return { kind: 'not_found', index };
+  return { kind: 'ok', cliente };
+};
+
+/** Número escolhido pelo utilizador na lista de clientes homónimos. */
+export const pickTomadorIndiceFromPayload = (payload = {}) => firstNonEmpty(
+  payload?.tomadorIndice,
+  payload?.clienteIndice,
+  payload?.tomadorNumero,
+  payload?.clienteNumero,
+);
+
+/**
+ * Resolve homónimos: número da lista escolhe o cliente; sem número, erro já traz a lista
+ * com os documentos reais para o agente repetir sem inventar.
+ */
+const resolveClienteAmbiguousOrThrow = (lookup, tomadorNome, payload) => {
+  const matches = (lookup.matches || []).map(mapClienteResumo);
+  const indice = pickTomadorIndiceFromPayload(payload);
+  if (indice) {
+    const byIndex = pickClienteCatalogoByIndexResult(lookup.matches, indice);
+    if (byIndex.kind === 'ok') return byIndex.cliente;
+    throw badRequest(
+      `O número ${indice} não está na lista de clientes "${tomadorNome}". Escolha um número válido.`,
+      {
+        code: 'NFSE_TOMADOR_AMBIGUOUS',
+        tomadorNome,
+        matches,
+        botHint:
+          'Repita APENAS o message. Os números válidos são 1 até '
+          + `${matches.length}. PROIBIDO inventar documento.`,
+      },
+    );
+  }
+  throw badRequest(formatNfseClienteAmbiguousMessage(tomadorNome, matches), {
+    code: 'NFSE_TOMADOR_AMBIGUOUS',
+    tomadorNome,
+    matches,
+    botHint:
+      'Repita APENAS o message (já traz nome + documento reais de cada cliente). '
+      + 'PROIBIDO inventar CPF/CNPJ. Quando o utilizador responder o número, chame de novo com '
+      + 'tomadorCpfCnpj do cliente escolhido (ou tomadorIndice com o mesmo número) e os MESMOS dados.',
+  });
+};
+
 const assertTomadorDocumentoValido = (tomadorDoc) => {
   if (!tomadorDoc) {
     throw badRequest('CPF ou CNPJ do tomador é obrigatório.', {
@@ -755,14 +811,10 @@ const resolveTomador = async (userId, payload) => {
       });
     }
     if (lookup.kind === 'ambiguous') {
-      throw badRequest(`Vários clientes encontrados para "${tomadorNome}".`, {
-        code: 'NFSE_TOMADOR_AMBIGUOUS',
-        tomadorNome,
-        matches: (lookup.matches || []).map(mapClienteResumo),
-        botHint: 'Liste nome + documento de cada match (só catálogo NFSe) e peça ao utilizador para escolher um.',
-      });
+      catalogo = resolveClienteAmbiguousOrThrow(lookup, tomadorNome, payload);
+    } else {
+      catalogo = lookup.cliente;
     }
-    catalogo = lookup.cliente;
     tomadorDoc = normalizeDoc(catalogo?.documento || '');
     assertTomadorDocumentoValido(tomadorDoc);
   }
@@ -859,12 +911,8 @@ export const registerOpenclawNfseCliente = async (userId, payload = {}) => {
         existing = lookup.cliente;
         documento = normalizeDoc(existing?.documento || '');
       } else if (lookup.kind === 'ambiguous') {
-        throw badRequest(`Vários clientes encontrados para "${tomadorNome}".`, {
-          code: 'NFSE_TOMADOR_AMBIGUOUS',
-          tomadorNome,
-          matches: (lookup.matches || []).map(mapClienteResumo),
-          botHint: 'Liste nome + documento de cada match e peça ao utilizador para escolher um.',
-        });
+        existing = resolveClienteAmbiguousOrThrow(lookup, tomadorNome, payload);
+        documento = normalizeDoc(existing?.documento || '');
       }
     }
   }
