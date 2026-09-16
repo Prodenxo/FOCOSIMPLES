@@ -102,12 +102,18 @@ export function empresaFiscalToCompanyForm(empresa) {
     nfeAtivo: empresa?.nfe?.ativo === true,
     nfceAtivo: empresa?.nfce?.ativo === true,
     rpsLote: clampRpsInt(empresa?.rps?.lote ?? empresa?.nfse?.config?.rps?.lote, 1),
+    // PlugNotas devolve a sequência em `nfse.config.rps.numeracao[0]`, não em `rps.numero`.
     rpsNumero: clampRpsInt(
-      empresa?.rps?.numeracao?.[0]?.numero ?? empresa?.nfse?.config?.rps?.numero,
+      empresa?.rps?.numeracao?.[0]?.numero
+        ?? empresa?.nfse?.config?.rps?.numeracao?.[0]?.numero
+        ?? empresa?.nfse?.config?.rps?.numero,
       1,
     ),
     rpsSerie: String(
-      empresa?.rps?.numeracao?.[0]?.serie ?? empresa?.nfse?.config?.rps?.serie ?? '1',
+      empresa?.rps?.numeracao?.[0]?.serie
+        ?? empresa?.nfse?.config?.rps?.numeracao?.[0]?.serie
+        ?? empresa?.nfse?.config?.rps?.serie
+        ?? '1',
     ).trim() || '1',
     nfseNacional: empresa?.nfse?.config?.nfseNacional !== false,
     regimeTributario: empresa?.regimeTributario != null
