@@ -614,16 +614,36 @@ export async function syncPlugnotasNfseRpsBeforeEmit(cnpjInput, targetRps, empre
 }
 
 /**
+ * A PlugNotas mantém uma entrada por série em `numeracao` e só mescla — `[0]` pode ser uma série
+ * antiga. Escolhe a entrada da série esperada; sem match, usa a última gravada.
+ * @param {unknown} numeracao
+ * @param {unknown} expectedSerie
+ */
+const pickNumeracaoEntryBySerie = (numeracao, expectedSerie) => {
+  if (!Array.isArray(numeracao)) return null;
+  const entries = numeracao.filter((entry) => entry && typeof entry === 'object');
+  if (!entries.length) return null;
+
+  const serie = String(expectedSerie ?? '').trim();
+  if (serie) {
+    const match = entries.find((entry) => String(entry.serie ?? '').trim() === serie);
+    if (match) return match;
+  }
+  return entries[entries.length - 1];
+};
+
+/**
  * Lê série/número/lote configurados em `nfse.config.rps` (GET empresa PlugNotas).
  * @param {unknown} empresaJson
+ * @param {unknown} [expectedSerie] — série do cadastro local, para achar a entrada certa.
  * @returns {{ serie: string, numero: number, lote: number }|null}
  */
-export function readPlugnotasNfseNextRpsFromEmpresa(empresaJson) {
+export function readPlugnotasNfseNextRpsFromEmpresa(empresaJson, expectedSerie) {
   const empresa = unwrapPlugnotasEmpresaRecord(empresaJson);
   const rps = empresa?.nfse?.config?.rps;
   if (!rps || typeof rps !== 'object' || Array.isArray(rps)) return null;
 
-  const numeracao = Array.isArray(rps.numeracao) ? rps.numeracao[0] : null;
+  const numeracao = pickNumeracaoEntryBySerie(rps.numeracao, expectedSerie);
   const serie = String(numeracao?.serie ?? rps.serie ?? '1').trim() || '1';
   const numero = parsePositiveInt(numeracao?.numero ?? rps.numero);
   if (!Number.isFinite(numero)) return null;
@@ -915,7 +935,8 @@ export async function advancePlugnotasNfseRpsAfterEmit(cnpjInput, usedRps) {
     return;
   }
 
-  const current = readPlugnotasNfseNextRpsFromEmpresa(empresaJson);
+  // Comparar dentro da mesma série — outra série na lista tem contador independente.
+  const current = readPlugnotasNfseNextRpsFromEmpresa(empresaJson, usedSerie);
   if (current && current.numero >= targetNext) return;
 
   try {

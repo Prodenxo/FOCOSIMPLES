@@ -429,6 +429,7 @@ const emptyNfsePrestadorPrefill = () => ({
   prestadorRazaoSocial: null,
   prestadorEmail: null,
   prestadorInscricaoMunicipal: null,
+  prestadorRpsSerie: null,
   prestadorEndereco: null,
   sourceRowId: null,
 });
@@ -441,6 +442,7 @@ const emptyNfsePrestadorPrefill = () => ({
  *   prestadorRazaoSocial: string|null,
  *   prestadorEmail: string|null,
  *   prestadorInscricaoMunicipal: string|null,
+ *   prestadorRpsSerie: string|null,
  *   prestadorEndereco: object|null,
  *   sourceRowId: string|null,
  * }>}
@@ -463,7 +465,8 @@ export const getNfsePrestadorPrefill = async (userId) => {
       ibge_municipio,
       cep,
       cidade,
-      uf
+      uf,
+      rps_serie
     `)
     .eq('user_id', userId)
     .maybeSingle();
@@ -494,6 +497,10 @@ export const getNfsePrestadorPrefill = async (userId) => {
     prestadorEmail: data.fiscal_email != null ? String(data.fiscal_email) : null,
     prestadorInscricaoMunicipal:
       data.inscricao_municipal != null ? String(data.inscricao_municipal) : null,
+    // Série escolhe a entrada certa em `nfse.config.rps.numeracao` (PlugNotas acumula uma por série).
+    prestadorRpsSerie: data.rps_serie != null && String(data.rps_serie).trim() !== ''
+      ? String(data.rps_serie).trim()
+      : null,
     prestadorEndereco: hasAnyAddress
       ? {
           logradouro: data.logradouro != null ? String(data.logradouro) : null,

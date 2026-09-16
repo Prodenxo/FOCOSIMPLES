@@ -72,10 +72,37 @@ export function getDefaultPlugNotasCompanyForm() {
   };
 }
 
-/** @param {Record<string, unknown>|null|undefined} empresa */
-export function empresaFiscalToCompanyForm(empresa) {
+/**
+ * A PlugNotas acumula uma entrada por série em `numeracao` e nunca substitui a lista, então
+ * `numeracao[0]` fica preso na série antiga. Escolhe a entrada da série esperada; sem match,
+ * usa a última gravada (a série nova entra no fim da lista).
+ * @param {Record<string, unknown>|null|undefined} empresa
+ * @param {unknown} expectedSerie
+ */
+function resolveNfseRpsNumeracaoEntry(empresa, expectedSerie) {
+  const entries = [empresa?.rps?.numeracao, empresa?.nfse?.config?.rps?.numeracao]
+    .filter(Array.isArray)
+    .flat()
+    .filter((entry) => entry && typeof entry === 'object');
+  if (!entries.length) return null;
+
+  const serie = String(expectedSerie ?? '').trim();
+  if (serie) {
+    const match = entries.find((entry) => String(entry.serie ?? '').trim() === serie);
+    if (match) return match;
+  }
+  return entries[entries.length - 1];
+}
+
+/**
+ * @param {Record<string, unknown>|null|undefined} empresa
+ * @param {{ rpsSerie?: unknown }} [options] — série do cadastro local, para achar a entrada certa.
+ */
+export function empresaFiscalToCompanyForm(empresa, options = {}) {
   const defaults = getDefaultPlugNotasCompanyForm();
   if (!empresa) return { ...defaults };
+
+  const rpsEntry = resolveNfseRpsNumeracaoEntry(empresa, options.rpsSerie);
 
   const endereco = empresa?.endereco && typeof empresa.endereco === 'object' ? empresa.endereco : {};
   const ieApi = String(empresa?.inscricaoEstadual || '').trim();
@@ -102,18 +129,13 @@ export function empresaFiscalToCompanyForm(empresa) {
     nfeAtivo: empresa?.nfe?.ativo === true,
     nfceAtivo: empresa?.nfce?.ativo === true,
     rpsLote: clampRpsInt(empresa?.rps?.lote ?? empresa?.nfse?.config?.rps?.lote, 1),
-    // PlugNotas devolve a sequência em `nfse.config.rps.numeracao[0]`, não em `rps.numero`.
+    // PlugNotas devolve a sequência em `nfse.config.rps.numeracao`, não em `rps.numero`.
     rpsNumero: clampRpsInt(
-      empresa?.rps?.numeracao?.[0]?.numero
-        ?? empresa?.nfse?.config?.rps?.numeracao?.[0]?.numero
-        ?? empresa?.nfse?.config?.rps?.numero,
+      rpsEntry?.numero ?? empresa?.nfse?.config?.rps?.numero,
       1,
     ),
     rpsSerie: String(
-      empresa?.rps?.numeracao?.[0]?.serie
-        ?? empresa?.nfse?.config?.rps?.numeracao?.[0]?.serie
-        ?? empresa?.nfse?.config?.rps?.serie
-        ?? '1',
+      rpsEntry?.serie ?? empresa?.nfse?.config?.rps?.serie ?? '1',
     ).trim() || '1',
     nfseNacional: empresa?.nfse?.config?.nfseNacional !== false,
     regimeTributario: empresa?.regimeTributario != null
@@ -249,7 +271,7 @@ export async function buildEnrichedCertPageForm({
   prefillOnlyFillEmpty = true,
   lookupOnlyFillEmpty = true,
 }) {
-  let form = empresaFiscalToCompanyForm(empresa);
+  let form = empresaFiscalToCompanyForm(empresa, { rpsSerie: prefill?.prestadorRpsSerie });
   if (!empresa) {
     form = { ...form, cpfCnpj: normalizeDoc(cnpj || '') };
   }

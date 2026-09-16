@@ -306,6 +306,40 @@ test('readPlugnotasNfseNextRpsFromEmpresa lê numeracao em nfse.config.rps', () 
   );
 });
 
+test('readPlugnotasNfseNextRpsFromEmpresa escolhe a entrada da série esperada', () => {
+  // PlugNotas acumula uma entrada por série e nunca substitui a lista.
+  const empresa = {
+    cpfCnpj: '12345678000199',
+    nfse: {
+      config: {
+        rps: {
+          numeracao: [{ serie: '1', numero: 2 }, { serie: '70000', numero: 22 }],
+          lote: 1
+        }
+      }
+    }
+  };
+
+  assert.deepEqual(
+    readPlugnotasNfseNextRpsFromEmpresa(empresa, '70000'),
+    { serie: '70000', numero: 22, lote: 1 }
+  );
+  assert.deepEqual(
+    readPlugnotasNfseNextRpsFromEmpresa(empresa, '1'),
+    { serie: '1', numero: 2, lote: 1 }
+  );
+  // Sem série esperada: última gravada (série nova entra no fim), nunca a primeira.
+  assert.deepEqual(
+    readPlugnotasNfseNextRpsFromEmpresa(empresa),
+    { serie: '70000', numero: 22, lote: 1 }
+  );
+  // Série desconhecida cai na última em vez de devolver a série errada como se fosse a pedida.
+  assert.deepEqual(
+    readPlugnotasNfseNextRpsFromEmpresa(empresa, '999'),
+    { serie: '70000', numero: 22, lote: 1 }
+  );
+});
+
 test('applyPlugnotasNfseEmitRpsFromEmpresaConfig injeta rps explícito quando ausente', async () => {
   const originalFetch = global.fetch;
 

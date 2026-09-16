@@ -201,7 +201,7 @@ export async function allocateNfseRpsForEmit(
     });
   }
 
-  const empresaNext = readPlugnotasNfseNextRpsFromEmpresa(empresaJsonFresh);
+  const empresaNext = readPlugnotasNfseNextRpsFromEmpresa(empresaJsonFresh, configuredRps?.serie);
   const empresaNumero = empresaNext?.numero >= 1 ? empresaNext.numero : 0;
   const autoNext = resolveAutoNfseRpsNext(historyMax, empresaNumero);
 
