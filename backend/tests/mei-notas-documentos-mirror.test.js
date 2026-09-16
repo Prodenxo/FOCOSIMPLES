@@ -3,8 +3,46 @@ import assert from 'node:assert/strict';
 import {
   consultarEmpresaAndReconcileMirror,
   persistDocumentosAtivosMirrorAfterEmpresa,
+  readRpsMirrorFromEmpresaPayload,
   reconcileMirrorFromEmpresaJson
 } from '../src/services/mei-notas-documentos-mirror.js';
+
+test('readRpsMirrorFromEmpresaPayload lê série/número escolhidos no payload', () => {
+  assert.deepStrictEqual(
+    readRpsMirrorFromEmpresaPayload({
+      nfse: { config: { rps: { serie: '70000', numero: 22, lote: 1 } } }
+    }),
+    { rpsSerie: '70000', rpsNumero: 22, rpsLote: 1 }
+  );
+
+  // Sem `nfse.config.rps`, cai na numeração da raiz.
+  assert.deepStrictEqual(
+    readRpsMirrorFromEmpresaPayload({
+      rps: { lote: 4, numeracao: [{ serie: '2', numero: 37 }] }
+    }),
+    { rpsSerie: '2', rpsNumero: 37, rpsLote: 4 }
+  );
+
+  assert.equal(readRpsMirrorFromEmpresaPayload({ nfse: { ativo: true } }), null);
+  assert.equal(readRpsMirrorFromEmpresaPayload(null), null);
+});
+
+test('persistDocumentosAtivosMirrorAfterEmpresa grava a série do RPS no espelho', async () => {
+  const patches = [];
+  await persistDocumentosAtivosMirrorAfterEmpresa(
+    'user-1',
+    { nfse: { config: { rps: { serie: '70000', numero: 22, lote: 1 } } } },
+    {
+      reconcileEmitenteMirrorFromEmpresaJson: async () => {},
+      patchEmitenteNfseFields: async (uid, fragment) => {
+        patches.push({ uid, fragment });
+      }
+    }
+  );
+  assert.equal(patches.length, 1);
+  assert.equal(patches[0].uid, 'user-1');
+  assert.deepStrictEqual(patches[0].fragment, { rpsSerie: '70000', rpsNumero: 22, rpsLote: 1 });
+});
 
 test('persistDocumentosAtivosMirrorAfterEmpresa chama save com userId e seleção normalizada', async () => {
   const calls = [];

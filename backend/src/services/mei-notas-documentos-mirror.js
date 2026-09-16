@@ -1,5 +1,6 @@
 import {
   clearEmitenteInscricaoMunicipalMirror,
+  patchEmitenteNfseFields,
   saveDocumentosAtivosMirror,
 } from './mei-certificate-store.js';
 import { shouldSuppressInscricaoMunicipalForNfseNacional } from './plugnotas/plugnotas-mei-empresa-policy.js';
@@ -10,6 +11,31 @@ import {
   extractDocumentosAtivosFromEmpresaResponse,
   normalizeDocumentosAtivosShape
 } from './plugnotas/plugnotas-empresa-documentos-ativos.js';
+
+/**
+ * Série/número do RPS escolhidos pelo utilizador no payload de escrita.
+ * Só do payload — a PlugNotas devolve `numeracao` com uma entrada por série, e ler de lá
+ * traria a série errada de volta para o espelho.
+ * @param {Record<string, unknown>} payload
+ * @returns {{ rpsSerie?: string, rpsNumero?: number, rpsLote?: number }|null}
+ */
+export function readRpsMirrorFromEmpresaPayload(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+
+  const configRps = payload?.nfse?.config?.rps;
+  const rootRps = payload?.rps;
+  const numeracaoFirst = Array.isArray(rootRps?.numeracao) ? rootRps.numeracao[0] : null;
+
+  const serie = String(configRps?.serie ?? numeracaoFirst?.serie ?? '').trim();
+  const numero = Number.parseInt(String(configRps?.numero ?? numeracaoFirst?.numero ?? ''), 10);
+  const lote = Number.parseInt(String(configRps?.lote ?? rootRps?.lote ?? ''), 10);
+
+  const out = {};
+  if (serie) out.rpsSerie = serie;
+  if (Number.isFinite(numero) && numero >= 1) out.rpsNumero = numero;
+  if (Number.isFinite(lote) && lote >= 1) out.rpsLote = lote;
+  return Object.keys(out).length ? out : null;
+}
 
 /**
  * Espelho Supabase após sucesso Plugnotas (FR-CAD-DOC P1); não falha a resposta HTTP.
@@ -26,6 +52,13 @@ export async function persistDocumentosAtivosMirrorAfterEmpresa(userId, payload,
   if (!userId || !payload || typeof payload !== 'object') return;
 
   await syncEmitente(userId, payload).catch(() => {});
+
+  // Guarda qual série o utilizador escolheu — é ela que identifica a entrada certa em `numeracao`.
+  const rpsMirror = readRpsMirrorFromEmpresaPayload(payload);
+  if (rpsMirror) {
+    const patchEmitente = deps.patchEmitenteNfseFields ?? patchEmitenteNfseFields;
+    await patchEmitente(userId, rpsMirror).catch(() => {});
+  }
 
   const im = String(payload.inscricaoMunicipal ?? '').trim();
   if (shouldSuppressInscricaoMunicipalForNfseNacional(payload) && !im) {
