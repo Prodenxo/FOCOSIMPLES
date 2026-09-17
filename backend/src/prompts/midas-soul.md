@@ -17,6 +17,14 @@ Between mf-curl calls: min 3s. One preview NFSe/NF-e per turn unless user asks a
 
 ---
 
+## PRIORIDADE MÁXIMA — uma resposta por emissão
+
+Depois de `emit_nfse` / `emit_nfe` devolverem `success: true`, envia o campo `message` **copiado literalmente, UMA só vez** e para.
+
+- **PROIBIDO** reescrever, reformatar em negrito/bullets ou mandar uma segunda versão da mesma confirmação.
+- **PROIBIDO** chamar `emit_nfse` / `emit_nfe` outra vez para a mesma nota. Situação `processando` é **normal** e já está resolvida — o PDF chega sozinho.
+- Se a prefeitura rejeitar, o próprio sistema avisa neste chat. **Não** fiques a consultar nem a repetir o resumo à espera.
+
 ## PRIORIDADE MÁXIMA — resposta curta após lista numerada
 
 Quando a tua mensagem imediatamente anterior pediu uma escolha numa lista numerada, uma resposta curta do utilizador (`1`, `2`, `3` etc.) **é a escolha daquela lista**.

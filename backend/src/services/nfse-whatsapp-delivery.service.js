@@ -470,6 +470,53 @@ export const scheduleOpenclawNfseWhatsappDeliveryRetries = (userId, notaId, docu
   scheduledRetryTimers.set(key, timers);
 };
 
+const TERMINAL_FAILURE_LABELS = {
+  rejeitado: 'foi rejeitada pela prefeitura',
+  cancelado: 'foi cancelada',
+  erro: 'falhou no processamento',
+};
+
+/**
+ * Texto do aviso de nota não autorizada (WhatsApp).
+ * @param {string} statusKey
+ * @param {string} [reason] motivo devolvido pela prefeitura
+ */
+export const buildNotaTerminalFailureMessage = (statusKey, reason = '') => {
+  const label = TERMINAL_FAILURE_LABELS[statusKey] || 'não foi autorizada';
+  const motivo = String(reason || '').trim();
+  const lines = [`Não consegui emitir a nota: ela ${label}.`];
+  if (motivo) lines.push('', `Motivo: ${motivo}`);
+  lines.push('', 'Corrija os dados e peça a emissão de novo, ou veja os detalhes no app Foco Simples → MEI → Notas.');
+  return lines.join('\n');
+};
+
+/**
+ * Nota em estado terminal sem PDF: avisa o utilizador no WhatsApp.
+ * Sem isto, quem pediu a nota fica à espera de um PDF que nunca chega.
+ * @param {{ phone: string, statusKey: string, record: Record<string, unknown>|null }} input
+ */
+const notifyOpenclawNotaTerminalFailure = async ({ phone, statusKey, record }) => {
+  if (!phone || !isWhatsappOutboundConfigured()) return;
+
+  let reason = '';
+  try {
+    const { extractNfseRejectionMessage } = await import('./plugnotas/plugnotas-empresa-rps-heal.js');
+    reason = String(extractNfseRejectionMessage(record?.response_json) || '').trim();
+  } catch {
+    reason = '';
+  }
+
+  try {
+    const message = buildNotaTerminalFailureMessage(statusKey, reason);
+    await sendWhatsappMessage({ phone, message });
+  } catch (err) {
+    console.warn('[nfse-whatsapp] falha ao avisar rejeição da nota', {
+      notaId: record?.id,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+};
+
 const processPendingRow = async (row) => {
   const userId = row.user_id;
   const notaId = row.id;
@@ -492,14 +539,17 @@ const processPendingRow = async (row) => {
   }
 
   let noteStatus = row.status;
+  let syncedRecord = null;
   try {
     const { obterNota } = await import('./mei-notas.service.js');
     const synced = await obterNota(userId, notaId, { sync: true, skipWhatsappDelivery: true });
+    syncedRecord = synced;
     noteStatus = synced.status;
     if (!isOpenclawNotaPdfReadyStatus(noteStatus)) {
       const statusKey = normalizeStatusKey(noteStatus);
       if (TERMINAL_FAILURE_STATUSES.has(statusKey)) {
         await markOpenclawNfseWhatsappFailed(userId, notaId, `nota_${statusKey}`, { clearPending: true });
+        await notifyOpenclawNotaTerminalFailure({ phone, statusKey, record: synced });
         return { notaId, userId, status: statusKey };
       }
       return { notaId, userId, status: 'waiting', noteStatus };
@@ -517,6 +567,7 @@ const processPendingRow = async (row) => {
   const statusKey = normalizeStatusKey(noteStatus);
   if (TERMINAL_FAILURE_STATUSES.has(statusKey)) {
     await markOpenclawNfseWhatsappFailed(userId, notaId, `nota_${statusKey}`, { clearPending: true });
+    await notifyOpenclawNotaTerminalFailure({ phone, statusKey, record: syncedRecord });
     return { notaId, userId, status: statusKey };
   }
 
