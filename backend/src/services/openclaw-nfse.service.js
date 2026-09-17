@@ -1541,12 +1541,34 @@ export const formatOpenclawNfseProdutosMessage = (produtos) => {
   return `${list.length} serviço(s) no catálogo NFSe:\n${lines.join('\n')}`;
 };
 
+/**
+ * Erros que pedem dados DIFERENTES na próxima chamada (escolha de cliente/serviço).
+ * Não levam {@link BOT_NF_EMIT_FAILED_INSTRUCTION}: esse guard manda repetir os MESMOS
+ * dados, o que reproduz o mesmo erro em ciclo.
+ */
+const NFSE_CHOICE_REQUIRED_CODES = new Set([
+  'NFSE_TOMADOR_AMBIGUOUS',
+  'NFSE_SERVICO_AMBIGUOUS',
+  'NFSE_SERVICO_CHOICE_REQUIRED',
+  'NFSE_SERVICO_NOT_FOUND',
+]);
+
 export const rethrowNfseErrorForBot = (err) => {
   const code = err?.errors?.code || err?.code;
   const existingHint = err?.errors?.botHint || err?.botHint;
   const rawMsg = String(err?.message || '');
   const userMessage = formatNfseEmitErrorForUser(rawMsg);
   const loopGuard = `${BOT_NF_EMIT_FAILED_INSTRUCTION} ${existingHint || ''}`.trim();
+
+  // A lista de opções vive no próprio message; `matches` tem os documentos reais.
+  if (NFSE_CHOICE_REQUIRED_CODES.has(code)) {
+    throw badRequest(rawMsg || userMessage, {
+      code,
+      botHint: existingHint,
+      ...(err?.errors?.matches ? { matches: err.errors.matches } : {}),
+      ...(err?.errors?.servicos ? { servicos: err.errors.servicos } : {}),
+    });
+  }
 
   if (code === 'NFSE_TOMADOR_ENDERECO_INCOMPLETE') {
     throw badRequest(rawMsg || userMessage, {

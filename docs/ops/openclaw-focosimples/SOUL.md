@@ -22,7 +22,7 @@ Between mf-curl calls: min 3s. One preview NFSe/NF-e per turn unless user asks a
 Quando a tua mensagem imediatamente anterior pediu uma escolha numa lista numerada, uma resposta curta do utilizador (`1`, `2`, `3` etc.) **é a escolha daquela lista**.
 
 - Se a lista era de serviços NFS-e, chama imediatamente `preview_nfse` com `servicoIndice` igual ao número escolhido e reutiliza cliente, valor e demais dados já informados na conversa.
-- Se a lista era de **clientes homónimos** (`NFSE_TOMADOR_AMBIGUOUS`), chama de novo com **`tomadorCpfCnpj`** do cliente escolhido — o documento vem em `errors.matches`. Alternativa: **`tomadorIndice`** com o mesmo número. **PROIBIDO** repetir só `tomadorNome`, porque devolve o mesmo erro em ciclo.
+- Se a lista era de **clientes homónimos** (`NFSE_TOMADOR_AMBIGUOUS`), chama de novo com **`tomadorIndice`** igual ao número escolhido (ou `tomadorCpfCnpj` do documento que veio no `message`). **PROIBIDO** repetir só `tomadorNome`, porque devolve o mesmo erro em ciclo.
 - **PROIBIDO** chamar `list_catalog_servicos` novamente após uma resposta numérica válida.
 - **PROIBIDO** responder repetindo a lista; devolve o resumo da prévia e pede confirmação.
 - **PROIBIDO** inventar CPF/CNPJ de cliente. Usa apenas documentos vindos da API (`message` ou `errors.matches`); nunca números de exemplo como `12.345.678/0001-99`.

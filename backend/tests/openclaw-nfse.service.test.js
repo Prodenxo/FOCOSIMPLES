@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { badRequest } from '../src/utils/errors.js';
 import {
   formatOpenclawNfseProdutosMessage,
   hasExplicitNfseServicoSelection,
@@ -12,6 +13,7 @@ import {
   pickProdutoCatalogoByCodigoResult,
   pickProdutoCatalogoByNomeResult,
   pickTomadorIndiceFromPayload,
+  rethrowNfseErrorForBot,
 } from '../src/services/openclaw-nfse.service.js';
 import {
   formatNfseCatalogChoiceMessage,
@@ -232,6 +234,25 @@ test('pickTomadorIndiceFromPayload — aliases do número do cliente', () => {
   assert.equal(pickTomadorIndiceFromPayload({ clienteIndice: 2 }), '2');
   assert.equal(pickTomadorIndiceFromPayload({ tomadorNumero: '3' }), '3');
   assert.equal(pickTomadorIndiceFromPayload({ tomadorNome: 'CF Carneiro' }), '');
+});
+
+test('rethrowNfseErrorForBot — escolha de cliente preserva lista e não manda repetir os mesmos dados', () => {
+  const matches = [{ nome: 'CF Carneiro', documento: '60511506000197' }];
+  const original = badRequest(
+    formatNfseClienteAmbiguousMessage('CF Carneiro', matches),
+    { code: 'NFSE_TOMADOR_AMBIGUOUS', matches, botHint: 'Repita APENAS o message.' },
+  );
+
+  assert.throws(
+    () => rethrowNfseErrorForBot(original),
+    (err) => {
+      assert.equal(err.errors.code, 'NFSE_TOMADOR_AMBIGUOUS');
+      assert.deepEqual(err.errors.matches, matches);
+      assert.match(err.message, /60511506000197/);
+      assert.doesNotMatch(err.errors.botHint, /MESMOS dados/);
+      return true;
+    },
+  );
 });
 
 test('formatNfseClienteAmbiguousMessage — documentos reais na mensagem', () => {
