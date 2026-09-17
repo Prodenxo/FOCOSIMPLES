@@ -1,5 +1,59 @@
 /** Mensagens para o utilizador final (WhatsApp) — sem payload, action nem JSON. */
 
+/** O que fazer, por código de rejeição da prefeitura. */
+const NFSE_REJECTION_ACTIONS = {
+  E0312:
+    'O código do serviço não é administrado pela sua cidade. '
+    + 'Abra Foco Simples → MEI → Notas, edite o serviço e use um código da lista nacional que o seu município aceita.',
+  E0116:
+    'Falta a Inscrição Municipal. Preencha em Foco Simples → Certificado → Empresa.',
+  E0120:
+    'A Inscrição Municipal enviada não é aceite neste município. Limpe o campo em Foco Simples → Certificado → Empresa.',
+  E0714:
+    'Erro na assinatura do arquivo enviado à prefeitura. É falha do emissor fiscal — fale com o suporte.',
+  EM012:
+    'A empresa não está autorizada a emitir pelo portal do município. O contador precisa liberar a emissão por webservice.',
+};
+
+/** Ruído do emissor que não ajuda o utilizador. */
+const NFSE_REJECTION_NOISE = /^(erro desconhecido|erro ao realizar a requisi[çc][ãa]o)[:.\s]*/gi;
+
+/**
+ * Motivo de rejeição legível: extrai `Codigo`/`Descricao` do JSON cru da prefeitura.
+ * @param {string} rawReason
+ * @returns {{ text: string, codes: string[] }}
+ */
+export const formatNfseRejectionReason = (rawReason = '') => {
+  const raw = String(rawReason || '').trim();
+  if (!raw) return { text: '', codes: [] };
+
+  const codes = [];
+  const parts = [];
+  const pairs = raw.matchAll(/"Codigo"\s*:\s*"([^"]+)"\s*,\s*"Descricao"\s*:\s*"([^"]+)"/g);
+  for (const [, codigo, descricao] of pairs) {
+    const code = codigo.trim().toUpperCase();
+    codes.push(code);
+    parts.push(`${code} — ${descricao.trim()}`);
+  }
+
+  if (parts.length) return { text: parts.join('\n'), codes };
+
+  const cleaned = raw.replace(NFSE_REJECTION_NOISE, '').trim();
+  return { text: cleaned || raw, codes: [] };
+};
+
+/**
+ * Linha de "o que fazer" para os códigos reconhecidos.
+ * @param {string[]} codes
+ */
+export const resolveNfseRejectionAction = (codes = []) => {
+  for (const code of Array.isArray(codes) ? codes : []) {
+    const action = NFSE_REJECTION_ACTIONS[String(code).trim().toUpperCase()];
+    if (action) return action;
+  }
+  return '';
+};
+
 export const formatValorBr = (value) => {
   const n = Number(value);
   if (!Number.isFinite(n)) return String(value ?? '').trim() || '—';

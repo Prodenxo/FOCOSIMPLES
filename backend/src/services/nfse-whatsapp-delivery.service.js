@@ -9,6 +9,10 @@ import {
   isWhatsappOutboundConfigured,
   sendWhatsappMessage,
 } from './whatsapp-outbound.service.js';
+import {
+  formatNfseRejectionReason,
+  resolveNfseRejectionAction,
+} from './openclaw-nf-user-messages.js';
 
 const MEI_NFSE_TABLE = 'mei_nfse';
 const DOCUMENT_TYPE_NFSE = 'NFSE';
@@ -483,10 +487,12 @@ const TERMINAL_FAILURE_LABELS = {
  */
 export const buildNotaTerminalFailureMessage = (statusKey, reason = '') => {
   const label = TERMINAL_FAILURE_LABELS[statusKey] || 'não foi autorizada';
-  const motivo = String(reason || '').trim();
+  const { text: motivo, codes } = formatNfseRejectionReason(reason);
+  const action = resolveNfseRejectionAction(codes);
+
   const lines = [`Não consegui emitir a nota: ela ${label}.`];
   if (motivo) lines.push('', `Motivo: ${motivo}`);
-  lines.push('', 'Corrija os dados e peça a emissão de novo, ou veja os detalhes no app Foco Simples → MEI → Notas.');
+  lines.push('', action || 'Corrija os dados e peça a emissão de novo, ou veja os detalhes no app Foco Simples → MEI → Notas.');
   return lines.join('\n');
 };
 

@@ -15,6 +15,18 @@ test('buildNotaTerminalFailureMessage — rejeição avisa o utilizador com o mo
   assert.match(msg, /Motivo: E0714/);
 });
 
+test('buildNotaTerminalFailureMessage — E0312 sai limpo e com o que fazer', () => {
+  const msg = buildNotaTerminalFailureMessage(
+    'rejeitado',
+    'Erro desconhecido: Erro ao realizar a requisição. '
+    + '[{"Codigo":"E0312","Descricao":"O código de tributação nacional informado não está administrado pelo município."}]',
+  );
+  assert.match(msg, /Motivo: E0312 — O código de tributação nacional/);
+  assert.doesNotMatch(msg, /Erro desconhecido/);
+  assert.doesNotMatch(msg, /"Codigo"/);
+  assert.match(msg, /edite o serviço e use um código da lista nacional/);
+});
+
 test('buildNotaTerminalFailureMessage — sem motivo não inventa linha vazia', () => {
   const msg = buildNotaTerminalFailureMessage('cancelado');
   assert.match(msg, /foi cancelada/);
