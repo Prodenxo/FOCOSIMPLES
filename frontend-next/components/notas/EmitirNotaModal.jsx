@@ -1315,6 +1315,7 @@ function NfseServicoForm({ form, setForm, showProdutoList, setShowProdutoList, p
           <Input label="Alíquota ISS (%)" value={form.servico.aliquota} onChange={(v) => handleChange('aliquota', v)} placeholder="5" />
           <Input label="Código NBS" value={form.servico.codigoNbs} onChange={(v) => handleChange('codigoNbs', v.replace(/\D/g, '').slice(0, 9))} placeholder="9 dígitos" hint="Reforma Tributária (quando exigido)" />
           <Input label="cIndOp" value={form.servico.cIndOp} onChange={(v) => handleChange('cIndOp', v.replace(/\D/g, '').slice(0, 6))} placeholder="6 dígitos" hint="Indicador de operação (Reforma Tributária)" />
+          <Input label="Código na prefeitura (cTribMun)" value={form.servico.codigoTributacao} onChange={(v) => handleChange('codigoTributacao', v.replace(/\D/g, '').slice(0, 10))} placeholder="Ex.: 71602" hint="Código do serviço no cadastro da prefeitura" />
         </div>
       </div>
 

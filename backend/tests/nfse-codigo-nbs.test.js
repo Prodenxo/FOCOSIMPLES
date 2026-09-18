@@ -48,3 +48,8 @@ test('resolveCodigoTributacaoForServico só envia se veio no cadastro', () => {
   assert.equal(resolveCodigoTributacaoForServico({ codigoTributacao: '12' }), '012');
   assert.equal(resolveCodigoTributacaoForServico({ cTribMun: '045' }), '045');
 });
+
+test('resolveCodigoTributacaoForServico preserva código municipal longo (ISSNET Ribeirão)', () => {
+  assert.equal(resolveCodigoTributacaoForServico({ codigoTributacao: '71602' }), '71602');
+  assert.equal(resolveCodigoTributacaoForServico({ codigo_tributacao: '7.16.02' }), '71602');
+});

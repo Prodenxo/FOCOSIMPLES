@@ -33,6 +33,7 @@ import {
   lookupSuggestedCodigoNbs,
   nfseCatalogProdutoFormFieldsFromMetadata,
   NFSE_CINDOP_FIELD_HINT,
+  NFSE_CODIGO_TRIBUTACAO_FIELD_HINT,
   type NfseCatalogProdutoFormFields,
 } from '../lib/nfseCatalogProdutoMetadata'
 import { useAuthStore } from '../store/authStore'
@@ -1046,6 +1047,20 @@ export default function MeiCatalogoProdutosModal ({
           }
           keyboardType="number-pad"
           maxLength={6}
+        />
+        <MeiFormField
+          label="Código do serviço na prefeitura (cTribMun)"
+          placeholder="Ex.: 71602"
+          hint={NFSE_CODIGO_TRIBUTACAO_FIELD_HINT}
+          value={form.nfse.codigoTributacao ?? ''}
+          onChangeText={(t) =>
+            setForm((f) => ({
+              ...f,
+              nfse: { ...f.nfse, codigoTributacao: t.replace(/\D/g, '').slice(0, 10) },
+            }))
+          }
+          keyboardType="number-pad"
+          maxLength={10}
         />
           </>
         ) : null}

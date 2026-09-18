@@ -105,6 +105,8 @@ export interface NfseServicoInput {
   codigoNbs?: string;
   /** Indicador de operação IBS/CBS (6 dígitos) — configurado no catálogo pelo contador. */
   cIndOp?: string;
+  /** cTribMun — código do serviço no cadastro da prefeitura (ex.: 71602 em Ribeirão Preto). */
+  codigoTributacao?: string;
   /** Dados da obra — obrigatório para serviços LC 116 de construção civil (E0370). */
   obra?: {
     usarEnderecoTomador?: boolean;

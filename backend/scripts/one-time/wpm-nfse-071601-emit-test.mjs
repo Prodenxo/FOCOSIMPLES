@@ -44,14 +44,11 @@ const input = {
     codigo: '071601',
     cnae: '4222701',
     codigoNbs: '119011000',
-    cIndOp: '020201',
-    discriminacao: 'Teste automatizado Foco Simples — redes 071601',
+    discriminacao: 'Teste automatizado Foco Simples - redes 071601',
     valorServico: 0.01,
     aliquota: 2,
-    // Normalmente vem do enriquecimento da reforma; explícito aqui para o teste
-    // continuar válido quando NFSE_ISSNET_RTC_SCHEMA_DISABLED desliga esse preenchimento.
-    codigoTributacao: '001',
-    obra: { usarEnderecoTomador: true },
+    // cTribMun do cadastro ISS.net da empresa (contador) — sem isto a prefeitura devolve EPM70.
+    codigoTributacao: '71602',
   }],
 };
 
@@ -71,7 +68,7 @@ const readArg = (name, fallback) => {
 payload.rps = buildNfseEmitRpsPayload({
   lote: Number.parseInt(String(readArg('lote', '1')), 10),
   serie: String(readArg('serie', '70000')),
-  numero: Number.parseInt(String(readArg('numero', '22')), 10),
+  numero: Number.parseInt(String(readArg('numero', '23')), 10),
 });
 
 const critical = {
@@ -82,6 +79,7 @@ const critical = {
   cidadePrestacao: payload.cidadePrestacao,
   obraEndereco: payload.servico?.[0]?.obra?.endereco ?? null,
   ibscbs: payload.servico?.[0]?.ibscbs,
+  discriminacao: payload.servico?.[0]?.discriminacao,
 };
 
 console.log('Payload crítico (pré-POST):');

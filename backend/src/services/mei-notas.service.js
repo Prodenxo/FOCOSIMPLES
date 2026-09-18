@@ -76,6 +76,7 @@ import {
   validateNfseObraEndereco,
 } from './nfse-obra-defaults.js';
 import { assembleNfsePlugnotasEmitPayload } from './nfse-emit-payload-assembler.js';
+import { sanitizeNfseXmlSafeText } from './nfse-xml-safe-text.js';
 import { redactPayload } from './plugnotas/plugnotas-emit-400-log.js';
 import {
   extractNfeItemQuantidade,
@@ -476,7 +477,9 @@ const buildServicoFromInput = (input) => {
   const codigoKey = normalizeNfseServicoCodigoForLength(codigoRaw);
   // ADN / PlugNotas: cTribNac costuma ir sem máscara (ex.: 171901).
   const codigo = codigoKey || codigoRaw;
-  const discriminacao = input.discriminacao || input.descricaoServico || null;
+  const discriminacao = sanitizeNfseXmlSafeText(
+    input.discriminacao || input.descricaoServico || null,
+  );
   const cnae = input.cnae || null;
   const valorServico = input.valorServico ?? valor.servico;
   const codigoNbs = resolveCodigoNbsForServico({

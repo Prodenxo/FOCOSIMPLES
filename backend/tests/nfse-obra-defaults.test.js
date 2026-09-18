@@ -24,9 +24,16 @@ test('requiresNfseObraForServicoCodigo — 070602 gesso exige obra', () => {
   assert.equal(requiresNfseObraForServicoCodigo('140101'), false);
 });
 
-test('requiresNfseObraForServicoCodigo — 071601 redes (07.16) exige obra como demais 07.xx', () => {
-  assert.equal(requiresNfseObraForServicoCodigo('071601'), true);
-  assert.equal(requiresNfseObraForServicoCodigo('07.16.01'), true);
+test('requiresNfseObraForServicoCodigo — 071601 reflorestamento NÃO é obra (E0932/EM042)', () => {
+  assert.equal(requiresNfseObraForServicoCodigo('071601'), false);
+  assert.equal(requiresNfseObraForServicoCodigo('07.16.01'), false);
+});
+
+test('requiresNfseObraForServicoCodigo — só os subitens listados pela prefeitura', () => {
+  for (const codigo of ['070201', '070401', '070701', '071701', '071901', '141403']) {
+    assert.equal(requiresNfseObraForServicoCodigo(codigo), true);
+  }
+  assert.equal(requiresNfseObraForServicoCodigo('070301'), false);
 });
 
 test('buildNfseObraPayload — PlugNotas só aceita art/codigo/cei (sem endereco)', () => {
@@ -349,7 +356,7 @@ test('stripNfseObraEnderecoForIssnetRtcWhenCidadePrestacaoSet — remove enderec
   const out = stripNfseObraEnderecoForIssnetRtcWhenCidadePrestacaoSet({
     cidadePrestacao: { codigo: '3543402', logradouro: 'Rua A', cep: '14000000' },
     servico: [{
-      codigo: '071601',
+      codigo: '070602',
       obra: {
         endereco: { cep: '14000000', logradouro: 'Rua A', numero: '1', bairro: 'Centro', codigoCidade: '3543402' },
         art: '123',

@@ -5,6 +5,7 @@ import {
   buildMinimalServicoIbscbs,
   enrichNfseReformaCabecalhoInEmitPayload,
   hasCompleteServicoIbscbs,
+  NFSE_CINDOP_OBRA_NO_LOCAL,
   NFSE_CINDOP_SERVICO_GERAL,
   NFSE_CINDOP_SERVICO_NO_ESTABELECIMENTO,
   NFSE_FIN_NFSE_REGULAR,
@@ -136,16 +137,28 @@ test('enrichNfseReformaCabecalhoInEmitPayload: obra 07.xx sem municipioIncidenci
   assert.equal(out.servico[0].codigoCidadeIncidencia, '3543402');
 });
 
-test('enrichNfseReformaCabecalhoInEmitPayload: obra 07.xx ISSNET infere codigoTributacao 001 (alíquota 2%)', () => {
+test('resolveCIndOpForServico: 071601 não é obra — cIndOp geral (EM042/E0932)', () => {
+  assert.equal(resolveCIndOpForServico({ codigo: '071601', cnae: '4222701' }), NFSE_CINDOP_SERVICO_GERAL);
+  assert.equal(resolveCIndOpForServico({ codigo: '070602', cnae: '4330403' }), NFSE_CINDOP_OBRA_NO_LOCAL);
+});
+
+test('enrichNfseReformaCabecalhoInEmitPayload: ISSNET não adivinha codigoTributacao pela alíquota (EPM70)', () => {
   const out = enrichNfseReformaCabecalhoInEmitPayload({
     servico: [{ codigo: '070602', iss: { aliquota: 2 } }],
   }, { simplesNacional: true, nfseNacional: false, codigoIbge: '3543402' });
-  assert.equal(out.servico[0].codigoTributacao, '001');
+  assert.equal(out.servico[0].codigoTributacao, undefined);
+});
+
+test('enrichNfseReformaCabecalhoInEmitPayload: ISSNET preserva codigoTributacao de 5 dígitos do cadastro', () => {
+  const out = enrichNfseReformaCabecalhoInEmitPayload({
+    servico: [{ codigo: '071601', codigoTributacao: '71602', iss: { aliquota: 2 } }],
+  }, { simplesNacional: true, nfseNacional: false, codigoIbge: '3543402' });
+  assert.equal(out.servico[0].codigoTributacao, '71602');
 });
 
 test('enrichNfseReformaCabecalhoInEmitPayload: ISSNETONLINE30 Ribeirão Preto', () => {
   const out = enrichNfseReformaCabecalhoInEmitPayload({
-    servico: [{ codigo: '140101', cnae: '4520001', iss: { aliquota: 2 } }],
+    servico: [{ codigo: '140101', cnae: '4520001', codigoTributacao: '001', iss: { aliquota: 2 } }],
   }, { simplesNacional: true, nfseNacional: false, codigoIbge: '3543402' });
   assert.equal(out.versao, NFSE_VERSAO_LAYOUT_NACIONAL);
   assert.equal(out.versaoEsquema, NFSE_VERSAO_ESQUEMA_RTC007);
@@ -230,6 +243,7 @@ test('assembleNfsePlugnotasEmitPayload: cIndOp no serviço vira ibscbs completo 
       cnae: '9511800',
       codigoNbs: '120013110',
       cIndOp: '160201',
+      codigoTributacao: '001',
       iss: { aliquota: 2 },
     }],
   }, { simplesNacional: true, nfseNacional: false, codigoIbge: '3543402' });
@@ -245,13 +259,14 @@ test('assembleNfsePlugnotasEmitPayload: inclui frases do Simples em informacoesC
       codigo: '140101',
       codigoNbs: '120013110',
       cIndOp: '050101',
+      codigoTributacao: '001',
       iss: { aliquota: 2 },
     }],
   }, { simplesNacional: true, nfseNacional: false, codigoIbge: '3543402' });
   assert.equal(out.informacoesComplementares, SIMPLES_NACIONAL_NFE_INF_CPL_LINES.join('|'));
 });
 
-test('assembleNfsePlugnotasEmitPayload: obra 071601 ISSNET usa RTC007 e só cidadePrestacao', () => {
+test('assembleNfsePlugnotasEmitPayload: obra 070602 ISSNET usa RTC007 e só cidadePrestacao', () => {
   const out = assembleNfsePlugnotasEmitPayload({
     prestador: { endereco: { codigoCidade: '3543402', cep: '14092200', logradouro: 'JOSE DE MAGALHAES', numero: '860', bairro: 'JARDIM ANHANGUERA', estado: 'SP' } },
     tomador: {
@@ -268,23 +283,24 @@ test('assembleNfsePlugnotasEmitPayload: obra 071601 ISSNET usa RTC007 e só cida
       },
     },
     servico: [{
-      codigo: '071601',
-      codigoNbs: '119011000',
-      cnae: '4222701',
+      codigo: '070602',
+      codigoNbs: '101072000',
+      cnae: '4330403',
       cIndOp: '020201',
+      codigoTributacao: '70602',
       iss: { aliquota: 2 },
     }],
   }, {
     simplesNacional: true,
     nfseNacional: false,
     codigoIbge: '3543402',
-    obraContext: { servicosInput: [{ codigo: '071601', obra: { usarEnderecoTomador: true } }] },
+    obraContext: { servicosInput: [{ codigo: '070602', obra: { usarEnderecoTomador: true } }] },
   });
   assert.equal(out.versaoEsquema, NFSE_VERSAO_ESQUEMA_RTC007);
   assert.equal(out.cidadePrestacao?.logradouro, 'R DOUTOR ANTONIO CARLOS TINOCO');
   assert.equal(out.cidadePrestacao?.tipoLogradouro, undefined);
   assert.equal(out.cidadePrestacao?.estado, undefined);
-  assert.equal(out.servico[0].codigoTributacao, '001');
+  assert.equal(out.servico[0].codigoTributacao, '70602');
   assert.equal(out.servico[0].tributosFederaisRetidos, false);
   assert.equal(out.servico[0].obra?.endereco, undefined);
 });
@@ -298,6 +314,7 @@ test('assembleNfsePlugnotasEmitPayload: não envia indicadorOperacao (PlugNotas)
       codigoNbs: '119011000',
       cIndOp: '020201',
       codigoOperacao: '020201',
+      codigoTributacao: '71602',
       iss: { aliquota: 2 },
     }],
   }, {

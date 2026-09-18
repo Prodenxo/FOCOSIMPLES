@@ -316,6 +316,15 @@ const pickCodigoNbsFromCatalogMetadata = (metadataJson) => {
   return String(raw).trim();
 };
 
+const pickCodigoTributacaoFromCatalogMetadata = (metadataJson) => {
+  if (!metadataJson || typeof metadataJson !== 'object' || Array.isArray(metadataJson)) {
+    return null;
+  }
+  const raw = metadataJson.codigoTributacao ?? metadataJson.codigo_tributacao ?? metadataJson.cTribMun;
+  if (raw === undefined || raw === null || raw === '') return null;
+  return String(raw).trim();
+};
+
 const applyProdutoCatalogoToServico = (produto, refs) => {
   if (!produto) return refs;
   const next = { ...refs };
@@ -333,6 +342,10 @@ const applyProdutoCatalogoToServico = (produto, refs) => {
   if (!next.codigoNbs) {
     const fromMeta = pickCodigoNbsFromCatalogMetadata(produto.metadata_json);
     if (fromMeta) next.codigoNbs = fromMeta;
+  }
+  if (!next.codigoTributacao) {
+    const fromMeta = pickCodigoTributacaoFromCatalogMetadata(produto.metadata_json);
+    if (fromMeta) next.codigoTributacao = fromMeta;
   }
   return next;
 };
@@ -369,6 +382,11 @@ const resolveServicoDefaults = async (userId, payload, emitente) => {
   let codigo = firstNonEmpty(payload?.codigoServico, payload?.codigo);
   let cnae = firstNonEmpty(payload?.cnae);
   let codigoNbs = firstNonEmpty(payload?.codigoNbs, payload?.codigo_nbs);
+  let codigoTributacaoRaw = firstNonEmpty(
+    payload?.codigoTributacao,
+    payload?.codigo_tributacao,
+    payload?.cTribMun,
+  );
   let aliquotaRaw = payload?.aliquota ?? payload?.aliquotaIss;
 
   const catalogNfse = await listarCatalogoProdutos(userId, { limit: 50, documentType: 'NFSE' });
@@ -387,12 +405,14 @@ const resolveServicoDefaults = async (userId, payload, emitente) => {
       codigo,
       cnae,
       codigoNbs,
+      codigoTributacao: codigoTributacaoRaw,
       aliquotaRaw,
       discriminacao,
     });
     codigo = merged.codigo || codigo;
     cnae = merged.cnae || cnae;
     codigoNbs = merged.codigoNbs || codigoNbs;
+    codigoTributacaoRaw = merged.codigoTributacao || codigoTributacaoRaw;
     aliquotaRaw = merged.aliquotaRaw ?? aliquotaRaw;
     if (produto?.discriminacao) {
       discriminacao = String(produto.discriminacao).trim();
@@ -580,11 +600,7 @@ const resolveServicoDefaults = async (userId, payload, emitente) => {
     codigoNbs,
   });
   const codigoTributacao = resolveCodigoTributacaoForServico({
-    codigoTributacao: firstNonEmpty(
-      payload?.codigoTributacao,
-      payload?.codigo_tributacao,
-      payload?.cTribMun,
-    ),
+    codigoTributacao: codigoTributacaoRaw,
   });
 
   const servico = {

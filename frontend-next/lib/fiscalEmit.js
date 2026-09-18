@@ -156,6 +156,7 @@ export function getDefaultNfseForm() {
       valorServico: '',
       codigoNbs: '',
       cIndOp: '',
+      codigoTributacao: '',
       obra: { usarEnderecoTomador: true, cno: '', cei: '', art: '', codigoObra: '' },
     },
     cidadePrestacao: { codigo: '', descricao: '', estado: '' },
@@ -338,6 +339,9 @@ export function buildNfsePayload(form) {
     ...(form.servico.aliquota?.toString().trim() ? { aliquota: parseDecimal(form.servico.aliquota) ?? 0 } : {}),
     ...(form.servico.codigoNbs?.trim() ? { codigoNbs: onlyDigits(form.servico.codigoNbs) } : {}),
     ...(form.servico.cIndOp?.trim() ? { cIndOp: form.servico.cIndOp.trim() } : {}),
+    ...(form.servico.codigoTributacao?.toString().trim()
+      ? { codigoTributacao: onlyDigits(form.servico.codigoTributacao) }
+      : {}),
     obra: { usarEnderecoTomador: Boolean(form.servico.obra?.usarEnderecoTomador) },
     ...(form.servico.obra?.cno?.trim() ? { obra: { ...form.servico.obra, cno: form.servico.obra.cno.trim() } } : {}),
   };

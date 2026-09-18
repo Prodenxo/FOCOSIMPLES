@@ -71,7 +71,8 @@ export const resolveCodigoNbsForServico = (input = {}) => {
 
 /**
  * Código complementar municipal (cTribMun) — PlugNotas: `servico.codigoTributacao`.
- * Padrão Nacional NFS-e: 3 dígitos. No RJ e na maioria dos municípios o valor exigido é `001`.
+ * Mínimo 3 dígitos (no RJ e vários municípios é `001`); ISSNET Ribeirão usa 5 (ex.: `71602`).
+ * Nunca truncar: cortar `71602` para `716` gera rejeição de código inexistente.
  * @param {unknown} value
  * @returns {string|null}
  */
@@ -79,7 +80,7 @@ export const normalizeCodigoTributacaoMunicipal = (value) => {
   if (value === undefined || value === null || value === '') return null;
   const digits = String(value).replace(/\D/g, '');
   if (!digits) return null;
-  return digits.slice(0, 3).padStart(3, '0');
+  return digits.length >= 3 ? digits : digits.padStart(3, '0');
 };
 
 /**

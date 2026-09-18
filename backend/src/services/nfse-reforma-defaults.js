@@ -260,7 +260,7 @@ export const resolveCIndOpForServico = (servico = {}) => {
     return NFSE_CINDOP_SERVICO_NO_ESTABELECIMENTO;
   }
 
-  if (codigoKey.startsWith('07') || codigoKey.startsWith('1414')) {
+  if (requiresNfseObraForServicoCodigo(codigoKey)) {
     return NFSE_CINDOP_OBRA_NO_LOCAL;
   }
 
@@ -701,9 +701,10 @@ export const enrichNfseReformaCabecalhoInEmitPayload = (payload, options = {}) =
     const iss = servicoRest.iss && typeof servicoRest.iss === 'object' ? servicoRest.iss : {};
     const { codigoTributacao: codigoTributacaoInput, ...servicoBase } = servicoRest;
     const explicitCodigoTributacao = normalizeCodigoTributacaoMunicipal(codigoTributacaoInput);
-    // ISSNET Ribeirão: cTribMun (001/004/…) costuma ser obrigatório no XSD mesmo para 07.xx (E160 se omitido).
+    // ISSNET Ribeirão valida o cTribMun contra o cadastro do contribuinte: adivinhar pela alíquota
+    // devolve EPM70/E0312 ("código não pertence a este contribuinte"). Só o cadastro vale.
     const inferFromAliquota = requiresIssnetRtcEmitSchema(codigoIbge)
-      ? resolveCodigoTributacaoIssnetFromAliquota(iss.aliquota)
+      ? null
       : (requiresNfseObraForServicoCodigo(servicoBase.codigo)
         ? null
         : resolveCodigoTributacaoIssnetFromAliquota(iss.aliquota));

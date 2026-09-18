@@ -21,9 +21,11 @@ import {
   emptyNfseCatalogProdutoFormFields,
   lookupSuggestedCodigoNbs,
   NFSE_CINDOP_FIELD_HINT,
+  NFSE_CODIGO_TRIBUTACAO_FIELD_HINT,
   nfseCatalogProdutoFormFieldsFromMetadata,
   normalizeCIndOpInput,
   normalizeCodigoNbsInput,
+  normalizeCodigoTributacaoInput,
   validateNfseCatalogProdutoFormFields,
 } from '@/lib/nfseCatalogProdutoMetadata';
 
@@ -363,6 +365,25 @@ export function ProdutoModal({ produto, catalogKind = 'nfse', onClose, onSuccess
                         className="w-full rounded-[10px] border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-sm"
                       />
                       <p className="mt-1 text-[10px] text-[var(--text-muted)]">{NFSE_CINDOP_FIELD_HINT}</p>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">Código do serviço na prefeitura (cTribMun)</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={form.nfseReforma?.codigoTributacao || ''}
+                        onChange={(e) => setForm((prev) => ({
+                          ...prev,
+                          nfseReforma: {
+                            ...prev.nfseReforma,
+                            codigoTributacao: normalizeCodigoTributacaoInput(e.target.value),
+                          },
+                        }))}
+                        placeholder="Ex.: 71602"
+                        maxLength={10}
+                        className="w-full rounded-[10px] border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-sm"
+                      />
+                      <p className="mt-1 text-[10px] text-[var(--text-muted)]">{NFSE_CODIGO_TRIBUTACAO_FIELD_HINT}</p>
                     </div>
                   </div>
                 </div>

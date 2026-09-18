@@ -96,12 +96,11 @@ export const validateNfseEmitPreflight = (payload, options = {}) => {
     }
 
     if (issnetRtc) {
-      const aliquota = Number(servico?.iss?.aliquota);
       const codigoTrib = String(servico.codigoTributacao || '').replace(/\D/g, '');
-      if (Number.isFinite(aliquota) && aliquota > 0 && codigoTrib.length !== 3) {
+      if (codigoTrib.length < 3) {
         errors.push(
-          'Código tributação municipal (ISSNET) ausente ou inválido. '
-          + 'Para alíquota 2% em Ribeirão Preto use 001 no cadastro do serviço ou deixe o sistema preencher.',
+          'Falta o código do serviço na prefeitura (cTribMun). Cadastre no serviço do catálogo '
+          + 'o código habilitado para a empresa no ISS.net (ex.: 71602) — peça ao contador.',
         );
       }
     }

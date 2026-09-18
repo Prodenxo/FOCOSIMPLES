@@ -46,7 +46,7 @@ const input = {
     cnae: '4330403',
     codigoNbs: '101072000',
     cIndOp: '020201',
-    discriminacao: 'Teste automatizado Foco Simples — gesso 070602',
+    discriminacao: 'Teste automatizado Foco Simples - gesso 070602',
     valorServico: 0.01,
     aliquota: 2,
     codigoTributacao: '001',
@@ -68,7 +68,7 @@ const readArg = (name, fallback) => {
 payload.rps = buildNfseEmitRpsPayload({
   lote: Number.parseInt(String(readArg('lote', '1')), 10),
   serie: String(readArg('serie', '1')),
-  numero: Number.parseInt(String(readArg('numero', '30')), 10),
+  numero: Number.parseInt(String(readArg('numero', '31')), 10),
 });
 
 console.log('Payload crítico (pré-POST):');
@@ -80,6 +80,7 @@ console.log(JSON.stringify({
   cidadePrestacao: payload.cidadePrestacao,
   obraEndereco: payload.servico?.[0]?.obra?.endereco ?? null,
   ibscbs: payload.servico?.[0]?.ibscbs,
+  discriminacao: payload.servico?.[0]?.discriminacao,
 }, null, 2));
 
 const pickStatus = (body) => {

@@ -28,6 +28,16 @@ describe('nfseCatalogProdutoMetadata', () => {
     expect(meta.codigoOperacao).toBe('050101')
   })
 
+  it('buildNfseCatalogProdutoMetadata guarda cTribMun com 5 dígitos (ISSNET)', () => {
+    const meta = buildNfseCatalogProdutoMetadata(null, {
+      codigoNbs: '',
+      cIndOp: '',
+      codigoTributacao: '71602',
+    })
+    expect(meta.codigoTributacao).toBe('71602')
+    expect(meta.codigo_tributacao).toBe('71602')
+  })
+
   it('applyCatalogProdutoToNfseServico inclui reforma do catálogo', () => {
     const servico = applyCatalogProdutoToNfseServico({
       codigo: '140101',

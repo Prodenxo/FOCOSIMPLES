@@ -40,16 +40,16 @@ export const normalizeNfseServicoCodigoKey = (codigo) => {
 };
 
 /**
- * Alinhado a resolveCIndOpForServico em nfse-reforma-defaults (07.xx / 1414xx → obra no local).
+ * Só os subitens listados pela prefeitura em E0370/E0932 exigem obra.
+ * 07.16.01 (reflorestamento/silvicultura) NÃO entra — tratá-lo como obra gera
+ * EM042/E0932 ("cIndOp de imóvel para subitem que não é de obra").
  * @param {unknown} codigo
  * @returns {boolean}
  */
 export const requiresNfseObraForServicoCodigo = (codigo) => {
   const key = normalizeNfseServicoCodigoKey(codigo);
   if (!key) return false;
-  if (NFSE_OBRA_REQUIRED_LC116_KEYS.has(key)) return true;
-  if (key.startsWith('07') || key.startsWith('1414')) return true;
-  return false;
+  return NFSE_OBRA_REQUIRED_LC116_KEYS.has(key);
 };
 
 /**

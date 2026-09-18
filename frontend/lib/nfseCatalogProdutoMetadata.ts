@@ -15,11 +15,14 @@ export type NfseCatalogProdutoItemMetadata = {
   codigo_nbs?: string
   cIndOp?: string
   codigoOperacao?: string
+  codigoTributacao?: string
 }
 
 export type NfseCatalogProdutoFormFields = {
   codigoNbs: string
   cIndOp: string
+  /** cTribMun — opcional: só municípios como Ribeirão Preto exigem. */
+  codigoTributacao?: string
 }
 
 /** Texto de ajuda — código vem da LC 214 (Anexo VII), conforme orientação do contador. */
@@ -27,8 +30,13 @@ export const NFSE_CINDOP_FIELD_HINT =
   'Código de 6 dígitos da LC 214 (Anexo VII), conforme o tipo de serviço e onde ele é prestado. '
   + 'Consulte seu contador ou a prefeitura se tiver dúvida.'
 
+/** cTribMun — código do serviço no cadastro da prefeitura (ISSNET Ribeirão usa 5 dígitos). */
+export const NFSE_CODIGO_TRIBUTACAO_FIELD_HINT =
+  'Código do serviço no cadastro da prefeitura (cTribMun). Em Ribeirão Preto tem 5 dígitos (ex.: 71602); '
+  + 'em outras cidades costuma ser 001. Peça ao contador o código habilitado para a empresa.'
+
 export function emptyNfseCatalogProdutoFormFields(): NfseCatalogProdutoFormFields {
-  return { codigoNbs: '', cIndOp: '' }
+  return { codigoNbs: '', cIndOp: '', codigoTributacao: '' }
 }
 
 /** Campos IBS/CBS no catálogo NFS-e — cliente ou contador podem preencher. */
@@ -50,6 +58,10 @@ export function normalizeCIndOpInput(value: string): string {
   return onlyDigits(value, 6)
 }
 
+export function normalizeCodigoTributacaoInput(value: string): string {
+  return onlyDigits(value, 10)
+}
+
 export function readNfseCatalogProdutoMetadata(raw: unknown): NfseCatalogProdutoItemMetadata {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
   const o = raw as Record<string, unknown>
@@ -58,6 +70,7 @@ export function readNfseCatalogProdutoMetadata(raw: unknown): NfseCatalogProduto
     codigoNbs: str('codigoNbs') ?? str('codigo_nbs'),
     cIndOp: str('cIndOp') ?? str('codigoOperacao'),
     codigoOperacao: str('codigoOperacao') ?? str('cIndOp'),
+    codigoTributacao: str('codigoTributacao') ?? str('codigo_tributacao') ?? str('cTribMun'),
   }
 }
 
@@ -68,6 +81,7 @@ export function nfseCatalogProdutoFormFieldsFromMetadata(
   return {
     codigoNbs: normalizeCodigoNbsInput(meta.codigoNbs ?? ''),
     cIndOp: normalizeCIndOpInput(meta.cIndOp ?? meta.codigoOperacao ?? ''),
+    codigoTributacao: normalizeCodigoTributacaoInput(meta.codigoTributacao ?? ''),
   }
 }
 
@@ -87,6 +101,10 @@ export function validateNfseCatalogProdutoFormFields(
   if (fields.cIndOp.trim() && cIndOp.length !== 6) {
     return 'Indicador de operação (cIndOp) deve ter 6 dígitos.'
   }
+  const codigoTributacao = normalizeCodigoTributacaoInput(fields.codigoTributacao ?? '')
+  if ((fields.codigoTributacao ?? '').trim() && codigoTributacao.length < 3) {
+    return 'Código do serviço na prefeitura deve ter ao menos 3 dígitos.'
+  }
   // NBS incompleto não bloqueia — na gravação valores inválidos são ignorados.
   return null
 }
@@ -98,6 +116,7 @@ export function buildNfseCatalogProdutoMetadata(
   const base = existingMetadata && typeof existingMetadata === 'object' ? { ...existingMetadata } : {}
   const nbs = normalizeCodigoNbsInput(fields.codigoNbs)
   const cIndOp = normalizeCIndOpInput(fields.cIndOp)
+  const codigoTributacao = normalizeCodigoTributacaoInput(fields.codigoTributacao ?? '')
 
   const next: Record<string, unknown> = { ...base }
   if (nbs.length === 9) {
@@ -113,6 +132,13 @@ export function buildNfseCatalogProdutoMetadata(
   } else {
     delete next.cIndOp
     delete next.codigoOperacao
+  }
+  if (codigoTributacao.length >= 3) {
+    next.codigoTributacao = codigoTributacao
+    next.codigo_tributacao = codigoTributacao
+  } else {
+    delete next.codigoTributacao
+    delete next.codigo_tributacao
   }
   return next
 }
@@ -145,5 +171,6 @@ export function applyCatalogProdutoToNfseServico(
     valorServico: produto.valor_sugerido != null ? String(produto.valor_sugerido) : '',
     ...(reforma.codigoNbs ? { codigoNbs: reforma.codigoNbs } : {}),
     ...(reforma.cIndOp ? { cIndOp: reforma.cIndOp } : {}),
+    ...(reforma.codigoTributacao ? { codigoTributacao: reforma.codigoTributacao } : {}),
   }
 }

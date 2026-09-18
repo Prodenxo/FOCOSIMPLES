@@ -13,8 +13,12 @@ export const NFSE_CINDOP_FIELD_HINT =
   'Código de 6 dígitos da LC 214 (Anexo VII), conforme o tipo de serviço e onde ele é prestado. '
   + 'Consulte seu contador ou a prefeitura se tiver dúvida.';
 
+export const NFSE_CODIGO_TRIBUTACAO_FIELD_HINT =
+  'Código do serviço no cadastro da prefeitura (cTribMun). Em Ribeirão Preto tem 5 dígitos (ex.: 71602); '
+  + 'em outras cidades costuma ser 001. Peça ao contador o código habilitado para a empresa.';
+
 export function emptyNfseCatalogProdutoFormFields() {
-  return { codigoNbs: '', cIndOp: '' };
+  return { codigoNbs: '', cIndOp: '', codigoTributacao: '' };
 }
 
 const onlyDigits = (value, max) => String(value ?? '').replace(/\D/g, '').slice(0, max);
@@ -27,6 +31,10 @@ export function normalizeCIndOpInput(value) {
   return onlyDigits(value, 6);
 }
 
+export function normalizeCodigoTributacaoInput(value) {
+  return onlyDigits(value, 10);
+}
+
 export function readNfseCatalogProdutoMetadata(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
   const o = raw;
@@ -35,6 +43,7 @@ export function readNfseCatalogProdutoMetadata(raw) {
     codigoNbs: str('codigoNbs') ?? str('codigo_nbs'),
     cIndOp: str('cIndOp') ?? str('codigoOperacao'),
     codigoOperacao: str('codigoOperacao') ?? str('cIndOp'),
+    codigoTributacao: str('codigoTributacao') ?? str('codigo_tributacao') ?? str('cTribMun'),
   };
 }
 
@@ -43,6 +52,7 @@ export function nfseCatalogProdutoFormFieldsFromMetadata(metadataJson) {
   return {
     codigoNbs: normalizeCodigoNbsInput(meta.codigoNbs ?? ''),
     cIndOp: normalizeCIndOpInput(meta.cIndOp ?? meta.codigoOperacao ?? ''),
+    codigoTributacao: normalizeCodigoTributacaoInput(meta.codigoTributacao ?? ''),
   };
 }
 
@@ -60,6 +70,10 @@ export function validateNfseCatalogProdutoFormFields(fields) {
   if (fields.cIndOp.trim() && cIndOp.length !== 6) {
     return 'Indicador de operação (cIndOp) deve ter 6 dígitos.';
   }
+  const codigoTributacao = normalizeCodigoTributacaoInput(fields.codigoTributacao);
+  if (fields.codigoTributacao?.trim() && codigoTributacao.length < 3) {
+    return 'Código do serviço na prefeitura deve ter ao menos 3 dígitos.';
+  }
   return null;
 }
 
@@ -67,6 +81,7 @@ export function buildNfseCatalogProdutoMetadata(existingMetadata, fields) {
   const base = existingMetadata && typeof existingMetadata === 'object' ? { ...existingMetadata } : {};
   const nbs = normalizeCodigoNbsInput(fields.codigoNbs);
   const cIndOp = normalizeCIndOpInput(fields.cIndOp);
+  const codigoTributacao = normalizeCodigoTributacaoInput(fields.codigoTributacao);
 
   const next = { ...base };
   if (nbs.length === 9) {
@@ -82,6 +97,13 @@ export function buildNfseCatalogProdutoMetadata(existingMetadata, fields) {
   } else {
     delete next.cIndOp;
     delete next.codigoOperacao;
+  }
+  if (codigoTributacao.length >= 3) {
+    next.codigoTributacao = codigoTributacao;
+    next.codigo_tributacao = codigoTributacao;
+  } else {
+    delete next.codigoTributacao;
+    delete next.codigo_tributacao;
   }
   return next;
 }
@@ -102,5 +124,6 @@ export function applyCatalogProdutoToNfseServico(produto) {
     valorServico: produto?.valor_sugerido != null ? String(produto.valor_sugerido) : '',
     ...(reforma.codigoNbs ? { codigoNbs: reforma.codigoNbs } : {}),
     ...(reforma.cIndOp ? { cIndOp: reforma.cIndOp } : {}),
+    ...(reforma.codigoTributacao ? { codigoTributacao: reforma.codigoTributacao } : {}),
   };
 }

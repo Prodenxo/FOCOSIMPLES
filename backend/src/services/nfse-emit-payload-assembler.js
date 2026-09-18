@@ -7,6 +7,7 @@ import { applySimplesNacionalInformacoesComplementares } from '../lib/simples-na
 import { assertNfseEmitPreflightOrThrow, validateNfseEmitPreflight } from './nfse-emit-preflight.js';
 import { enrichNfseIssInEmitPayload } from './nfse-iss-defaults.js';
 import { normalizeServicoTributosFederaisRetidosForEmit } from './nfse-servico-emit-normalize.js';
+import { sanitizeNfseXmlSafeTextInEmitPayload } from './nfse-xml-safe-text.js';
 import {
   enrichNfseCidadePrestacaoFromObra,
   enrichNfseObraOnEmitPayload,
@@ -78,6 +79,7 @@ export const assembleNfsePlugnotasEmitPayload = (basePayload, prep = {}) => {
   emitPayload = applyIbscbsImovelTomadorEnderecoToEmitPayload(emitPayload);
   emitPayload = stripPlugnotasInvalidServicoReformaFields(emitPayload);
   emitPayload = normalizeServicoTributosFederaisRetidosForEmit(emitPayload);
+  emitPayload = sanitizeNfseXmlSafeTextInEmitPayload(emitPayload);
 
   if (prep.simplesNacional !== false) {
     emitPayload = applySimplesNacionalInformacoesComplementares(emitPayload);
