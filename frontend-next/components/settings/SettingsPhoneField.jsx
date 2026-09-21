@@ -10,7 +10,7 @@ import {
 } from '@/lib/phoneCountries';
 import {
   formatNationalPhoneInput,
-  normalizePhoneDigits,
+  normalizeNationalPhoneInput,
 } from '@/lib/internationalPhone';
 import { AppSelect } from '@/components/ui/AppSelect';
 
@@ -48,8 +48,10 @@ export function SettingsPhoneField({
             ariaLabel="País do telefone"
             value={countryIso}
             onChange={(iso) => {
+              const digits = normalizeNationalPhoneInput(iso, national);
               setCountryIso(iso);
-              emitChange(iso, national);
+              setNational(digits);
+              emitChange(iso, digits);
             }}
             compact
             className="w-[108px] shrink-0"
@@ -63,7 +65,7 @@ export function SettingsPhoneField({
             inputMode="numeric"
             value={formatNationalPhoneInput(countryIso, national)}
             onChange={(e) => {
-              const digits = normalizePhoneDigits(e.target.value);
+              const digits = normalizeNationalPhoneInput(countryIso, e.target.value);
               setNational(digits);
               emitChange(countryIso, digits);
             }}
