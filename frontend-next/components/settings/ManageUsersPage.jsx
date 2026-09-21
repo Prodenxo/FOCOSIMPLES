@@ -34,10 +34,15 @@ import {
   revokeInvite,
 } from '@/lib/invitesManagement';
 import {
+  createEmpresa,
   deleteEmpresa,
   listEmpresasAdmin,
   updateEmpresa,
 } from '@/lib/empresaManagement';
+import { lookupEmpresaCnpj } from '@/lib/empresaOnboardingApi';
+import { mapCnpjLookupToEmpresa } from '@/lib/mapCnpjLookupToEmpresa';
+import { formatEmpresaCnpj, isValidEmpresaCnpj, onlyEmpresaCnpjDigits } from '@/lib/empresaCnpj';
+import { humanizeCnpjLookupError } from '@/lib/humanizeCnpjLookupError';
 import {
   fetchAdminMeiCertificateStatus,
   patchAdminMeiDocumentosAtivos,
@@ -63,6 +68,84 @@ const ROLE_OPTIONS = [
 ];
 
 const ROLE_OPTIONS_CREATE = ROLE_OPTIONS.filter((r) => r.value !== 'outsider');
+
+/** Campos de texto aceites pelo backend em POST /users/empresas. */
+const EMPRESA_TEXT_FIELDS = [
+  'empresa',
+  'razao_social',
+  'nome_fantasia',
+  'inscricao_estadual',
+  'logradouro',
+  'numero',
+  'complemento',
+  'bairro',
+  'cidade',
+  'estado',
+  'cep',
+  'telefone',
+  'email',
+];
+
+const emptyEmpresaForm = () => ({
+  cnpj: '',
+  empresa: '',
+  razao_social: '',
+  nome_fantasia: '',
+  inscricao_estadual: '',
+  logradouro: '',
+  numero: '',
+  complemento: '',
+  bairro: '',
+  cidade: '',
+  estado: '',
+  cep: '',
+  telefone: '',
+  email: '',
+  max_mei: '1',
+  max_usuarios_nao_mei: '',
+});
+
+/** max_mei: 0 desliga o módulo fiscal; max_usuarios_nao_mei vazio = ilimitado. */
+export function buildCreateEmpresaPayload(form = {}) {
+  const payload = {};
+  for (const field of EMPRESA_TEXT_FIELDS) {
+    const value = String(form[field] ?? '').trim();
+    if (value) payload[field] = value;
+  }
+
+  const cnpj = onlyEmpresaCnpjDigits(form.cnpj);
+  if (cnpj) payload.cnpj = cnpj;
+
+  if (!payload.empresa) {
+    payload.empresa = payload.razao_social || payload.nome_fantasia || '';
+  }
+
+  const maxMei = Number(form.max_mei);
+  payload.max_mei = Number.isFinite(maxMei) && maxMei > 0 ? Math.trunc(maxMei) : 0;
+
+  const maxNaoMei = String(form.max_usuarios_nao_mei ?? '').trim();
+  payload.max_usuarios_nao_mei = maxNaoMei === '' ? null : Number(maxNaoMei);
+
+  return payload;
+}
+
+/** @returns {string|null} mensagem de erro ou null */
+export function validateCreateEmpresaForm(form = {}) {
+  const payload = buildCreateEmpresaPayload(form);
+  if (!payload.empresa) return 'Informe o nome da empresa.';
+
+  const cnpj = onlyEmpresaCnpjDigits(form.cnpj);
+  if (cnpj && !isValidEmpresaCnpj(cnpj)) {
+    return 'CNPJ inválido. Confira os dígitos ou deixe o campo em branco.';
+  }
+
+  const maxNaoMei = payload.max_usuarios_nao_mei;
+  if (maxNaoMei !== null && (!Number.isInteger(maxNaoMei) || maxNaoMei < 0)) {
+    return 'Limite de usuários PF deve ser um número inteiro.';
+  }
+
+  return null;
+}
 
 function BackLink() {
   return (
@@ -118,6 +201,11 @@ export function ManageUsersPage() {
 
   const [editingEmpresa, setEditingEmpresa] = useState(null);
   const [empresaLimits, setEmpresaLimits] = useState({ max_mei: '', max_usuarios_nao_mei: '' });
+
+  const [showCreateEmpresa, setShowCreateEmpresa] = useState(false);
+  const [empresaForm, setEmpresaForm] = useState(emptyEmpresaForm);
+  const [empresaCnpjLoading, setEmpresaCnpjLoading] = useState(false);
+  const [empresaCnpjError, setEmpresaCnpjError] = useState('');
 
   const load = useCallback(async () => {
     if (!canManage) return;
@@ -371,6 +459,52 @@ export function ManageUsersPage() {
     }
   };
 
+  const openCreateEmpresa = () => {
+    setEmpresaForm(emptyEmpresaForm());
+    setEmpresaCnpjError('');
+    setShowCreateEmpresa(true);
+  };
+
+  const handleEmpresaCnpjLookup = async () => {
+    const digits = onlyEmpresaCnpjDigits(empresaForm.cnpj);
+    if (digits.length !== 14) return;
+    if (!isValidEmpresaCnpj(digits)) {
+      setEmpresaCnpjError('CNPJ inválido. Confira os dígitos verificadores.');
+      return;
+    }
+    setEmpresaCnpjLoading(true);
+    setEmpresaCnpjError('');
+    try {
+      const data = await lookupEmpresaCnpj(digits);
+      setEmpresaForm((prev) => mapCnpjLookupToEmpresa(data, { ...prev, cnpj: digits }));
+    } catch (err) {
+      setEmpresaCnpjError(humanizeCnpjLookupError(err));
+    } finally {
+      setEmpresaCnpjLoading(false);
+    }
+  };
+
+  const saveNewEmpresa = async () => {
+    const validationError = validateCreateEmpresaForm(empresaForm);
+    if (validationError) {
+      setMsg({ type: 'error', text: validationError });
+      return;
+    }
+    setActing('createEmpresa');
+    setMsg(null);
+    try {
+      const empresa = await createEmpresa(buildCreateEmpresaPayload(empresaForm));
+      setMsg({ type: 'success', text: `Empresa ${empresa.empresa} criada.` });
+      setShowCreateEmpresa(false);
+      setTab('empresas');
+      await load();
+    } catch (err) {
+      setMsg({ type: 'error', text: err instanceof Error ? err.message : 'Falha ao criar empresa.' });
+    } finally {
+      setActing(null);
+    }
+  };
+
   const handleDeleteEmpresa = async (empresa) => {
     setActing(empresa.id);
     try {
@@ -429,6 +563,15 @@ export function ManageUsersPage() {
           >
             Gerar convite
           </button>
+          {isSuperadmin ? (
+            <button
+              type="button"
+              onClick={openCreateEmpresa}
+              className="inline-flex h-10 items-center gap-2 rounded-[12px] border border-[var(--card-border)] px-4 text-sm font-semibold"
+            >
+              <Plus className="h-4 w-4" /> Nova empresa
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -608,7 +751,19 @@ export function ManageUsersPage() {
             />
           </label>
           {filteredEmpresas.length === 0 ? (
-            <EmptyPanel title="Nenhuma empresa" />
+            <EmptyPanel
+              title="Nenhuma empresa"
+              description="Cadastre a primeira empresa para vincular usuários a ela."
+              action={(
+                <button
+                  type="button"
+                  onClick={openCreateEmpresa}
+                  className="inline-flex h-10 items-center gap-2 rounded-[12px] bg-[var(--accent)] px-4 text-sm font-semibold text-white"
+                >
+                  <Plus className="h-4 w-4" /> Nova empresa
+                </button>
+              )}
+            />
           ) : (
             <ul className="divide-y divide-[var(--card-border)]">
               {filteredEmpresas.map((e) => (
@@ -834,6 +989,138 @@ export function ManageUsersPage() {
         </ModalShell>
       ) : null}
 
+      {showCreateEmpresa ? (
+        <ModalShell title="Nova empresa" onClose={() => setShowCreateEmpresa(false)}>
+          <div className="space-y-3">
+            <label className="block text-sm">
+              <span className="mb-1 block text-xs font-semibold text-[var(--text-muted)]">CNPJ</span>
+              <input
+                className="h-10 w-full rounded-[12px] border border-[var(--card-border)] bg-[var(--canvas)] px-3 text-sm"
+                placeholder="00.000.000/0000-00"
+                inputMode="numeric"
+                value={empresaForm.cnpj}
+                onChange={(e) => setEmpresaForm({ ...empresaForm, cnpj: formatEmpresaCnpj(e.target.value) })}
+                onBlur={handleEmpresaCnpjLookup}
+              />
+              {empresaCnpjLoading ? (
+                <span className="mt-1 flex items-center gap-2 text-xs text-[var(--text-muted)]">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Buscando dados do CNPJ…
+                </span>
+              ) : empresaCnpjError ? (
+                <span className="mt-1 block text-xs text-red-600">{empresaCnpjError}</span>
+              ) : (
+                <span className="mt-1 block text-xs text-[var(--text-muted)]">
+                  Ao sair do campo, os dados da empresa são preenchidos automaticamente.
+                </span>
+              )}
+            </label>
+
+            <EmpresaField
+              label="Nome da empresa"
+              value={empresaForm.empresa}
+              onChange={(empresa) => setEmpresaForm({ ...empresaForm, empresa })}
+              placeholder="Como aparece nas listas"
+            />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <EmpresaField
+                label="Razão social"
+                value={empresaForm.razao_social}
+                onChange={(razao_social) => setEmpresaForm({ ...empresaForm, razao_social })}
+              />
+              <EmpresaField
+                label="Nome fantasia"
+                value={empresaForm.nome_fantasia}
+                onChange={(nome_fantasia) => setEmpresaForm({ ...empresaForm, nome_fantasia })}
+              />
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <EmpresaField
+                label="Vagas fiscais (MEI)"
+                type="number"
+                value={empresaForm.max_mei}
+                onChange={(max_mei) => setEmpresaForm({ ...empresaForm, max_mei })}
+                hint="0 desliga o módulo de notas para a empresa."
+              />
+              <EmpresaField
+                label="Limite de usuários PF"
+                type="number"
+                value={empresaForm.max_usuarios_nao_mei}
+                onChange={(max_usuarios_nao_mei) => setEmpresaForm({ ...empresaForm, max_usuarios_nao_mei })}
+                hint="Em branco = ilimitado."
+              />
+            </div>
+
+            <details className="rounded-[12px] border border-[var(--card-border)] p-3">
+              <summary className="cursor-pointer text-xs font-semibold text-[var(--text-muted)]">
+                Endereço e contato
+              </summary>
+              <div className="mt-3 space-y-3">
+                <div className="grid gap-3 sm:grid-cols-[2fr_1fr]">
+                  <EmpresaField
+                    label="Logradouro"
+                    value={empresaForm.logradouro}
+                    onChange={(logradouro) => setEmpresaForm({ ...empresaForm, logradouro })}
+                  />
+                  <EmpresaField
+                    label="Número"
+                    value={empresaForm.numero}
+                    onChange={(numero) => setEmpresaForm({ ...empresaForm, numero })}
+                  />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <EmpresaField
+                    label="Bairro"
+                    value={empresaForm.bairro}
+                    onChange={(bairro) => setEmpresaForm({ ...empresaForm, bairro })}
+                  />
+                  <EmpresaField
+                    label="Complemento"
+                    value={empresaForm.complemento}
+                    onChange={(complemento) => setEmpresaForm({ ...empresaForm, complemento })}
+                  />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-[2fr_1fr_1fr]">
+                  <EmpresaField
+                    label="Cidade"
+                    value={empresaForm.cidade}
+                    onChange={(cidade) => setEmpresaForm({ ...empresaForm, cidade })}
+                  />
+                  <EmpresaField
+                    label="UF"
+                    value={empresaForm.estado}
+                    onChange={(estado) => setEmpresaForm({ ...empresaForm, estado: estado.toUpperCase().slice(0, 2) })}
+                  />
+                  <EmpresaField
+                    label="CEP"
+                    value={empresaForm.cep}
+                    onChange={(cep) => setEmpresaForm({ ...empresaForm, cep })}
+                  />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <EmpresaField
+                    label="Telefone"
+                    value={empresaForm.telefone}
+                    onChange={(telefone) => setEmpresaForm({ ...empresaForm, telefone })}
+                  />
+                  <EmpresaField
+                    label="E-mail"
+                    value={empresaForm.email}
+                    onChange={(email) => setEmpresaForm({ ...empresaForm, email })}
+                  />
+                </div>
+              </div>
+            </details>
+          </div>
+          <ModalActions
+            onCancel={() => setShowCreateEmpresa(false)}
+            onConfirm={saveNewEmpresa}
+            confirmLabel={acting === 'createEmpresa' ? 'Criando…' : 'Criar empresa'}
+            disabled={acting === 'createEmpresa'}
+          />
+        </ModalShell>
+      ) : null}
+
       {editingEmpresa ? (
         <ModalShell title={`Limites — ${editingEmpresa.empresa}`} onClose={() => setEditingEmpresa(null)}>
           <div className="space-y-3">
@@ -875,10 +1162,26 @@ function IconBtn({ label, onClick, icon: Icon, disabled, destructive }) {
   );
 }
 
+function EmpresaField({ label, value, onChange, placeholder, hint, type = 'text' }) {
+  return (
+    <label className="block text-sm">
+      <span className="mb-1 block text-xs font-semibold text-[var(--text-muted)]">{label}</span>
+      <input
+        className="h-10 w-full rounded-[12px] border border-[var(--card-border)] bg-[var(--canvas)] px-3 text-sm"
+        type={type}
+        placeholder={placeholder}
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {hint ? <span className="mt-1 block text-xs text-[var(--text-muted)]">{hint}</span> : null}
+    </label>
+  );
+}
+
 function ModalShell({ title, onClose, children }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-lg overflow-visible rounded-[16px] border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div className="max-h-[88vh] w-full max-w-lg overflow-y-auto overflow-x-visible rounded-[16px] border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-semibold text-[var(--text-primary)]">{title}</h3>
         <div className="mt-4">{children}</div>
       </div>
