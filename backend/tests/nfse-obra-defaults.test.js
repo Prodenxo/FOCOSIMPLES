@@ -138,7 +138,7 @@ test('attachNfseObraToServico — ignora serviços fora da lista', () => {
   assert.equal(next.obra, undefined);
 });
 
-test('buildNfseObraPayload — ISSNET RTC: endereco aninhado, sem codigo placeholder', () => {
+test('buildNfseObraPayload — ISSNET RTC: endereco aninhado identifica a obra sem CNO', () => {
   const obra = buildNfseObraPayload(
     {
       codigo: '070602',
@@ -157,10 +157,25 @@ test('buildNfseObraPayload — ISSNET RTC: endereco aninhado, sem codigo placeho
       },
     },
   );
+  // `codigo: 000` não é CNO válido — a prefeitura descarta o grupo e devolve E0370.
   assert.equal(obra?.codigo, undefined);
+  assert.equal(obra?.endereco?.cep, '14000000');
   assert.equal(obra?.endereco?.codigoCidade, '3543402');
   assert.equal(obra?.endereco?.estado, undefined);
-  assert.equal(obra?.endereco?.descricaoCidade, undefined);
+});
+
+test('buildNfseObraPayload — ISSNET RTC sem endereço cai no codigo sem cadastro', () => {
+  const obra = buildNfseObraPayload(
+    {
+      codigo: '070602',
+      obra: { art: 'ART-1', usarEnderecoTomador: false },
+    },
+    null,
+    { issnetOnline30: true },
+  );
+  assert.equal(obra?.codigo, NFSE_OBRA_CODIGO_SEM_CADASTRO);
+  assert.equal(obra?.art, 'ART-1');
+  assert.equal(obra?.endereco, undefined);
 });
 
 test('buildNfseObraPayload — ISSNET RTC: CNO real informado pelo usuário', () => {
@@ -352,19 +367,35 @@ test('enrichNfseCidadePrestacaoFromObra — ISSNET RTC obra com endereco preench
   assert.equal(out.servico[0].obra.endereco.cep, '14000000');
 });
 
-test('stripNfseObraEnderecoForIssnetRtcWhenCidadePrestacaoSet — remove endereco duplicado', () => {
+test('stripNfseObraEnderecoForIssnetRtcWhenCidadePrestacaoSet — remove endereco quando há CNO', () => {
   const out = stripNfseObraEnderecoForIssnetRtcWhenCidadePrestacaoSet({
     cidadePrestacao: { codigo: '3543402', logradouro: 'Rua A', cep: '14000000' },
     servico: [{
       codigo: '070602',
       obra: {
+        codigo: '123456789012',
         endereco: { cep: '14000000', logradouro: 'Rua A', numero: '1', bairro: 'Centro', codigoCidade: '3543402' },
         art: '123',
       },
     }],
   });
   assert.equal(out.servico[0].obra?.endereco, undefined);
+  assert.equal(out.servico[0].obra?.codigo, '123456789012');
   assert.equal(out.servico[0].obra?.art, '123');
+});
+
+test('stripNfseObraEnderecoForIssnetRtcWhenCidadePrestacaoSet — mantém endereco sem CNO (E0370)', () => {
+  const out = stripNfseObraEnderecoForIssnetRtcWhenCidadePrestacaoSet({
+    cidadePrestacao: { codigo: '3543402', logradouro: 'Rua A', cep: '14000000' },
+    servico: [{
+      codigo: '070201',
+      obra: {
+        endereco: { cep: '14000000', logradouro: 'Rua A', numero: '1', bairro: 'Centro', codigoCidade: '3543402' },
+      },
+    }],
+  });
+  assert.equal(out.servico[0].obra?.endereco?.cep, '14000000');
+  assert.equal(out.servico[0].obra?.codigo, undefined);
 });
 
 test('sanitizeNfseObraEnderecoForIssnetRtc — remove codigoPais e estado', () => {

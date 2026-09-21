@@ -27,6 +27,20 @@ test('buildNotaTerminalFailureMessage — E0312 sai limpo e com o que fazer', ()
   assert.match(msg, /edite o serviço e use um código da lista nacional/);
 });
 
+test('buildNotaTerminalFailureMessage — formato ISSNET (codigo-descricao) vira lista com ação', () => {
+  const msg = buildNotaTerminalFailureMessage(
+    'rejeitado',
+    'E0370-O grupo de informações de obra é obrigatório quando o código de tributação nacional '
+    + 'pertencer a um dos subitens 07.02.01 (regra do validador.) | '
+    + 'EM062-O Cód. Tributação Nacional, NBS, Cód. Ind. Operação e Classificação Tributária '
+    + 'precisam estar correlacionados. (Acesse a tabela oficial.)',
+  );
+  assert.match(msg, /E0370 — O grupo de informações de obra é obrigatório/);
+  assert.match(msg, /EM062 — O Cód\. Tributação Nacional/);
+  assert.doesNotMatch(msg, /regra do validador/);
+  assert.match(msg, /endereço do local da obra/);
+});
+
 test('buildNotaTerminalFailureMessage — sem motivo não inventa linha vazia', () => {
   const msg = buildNotaTerminalFailureMessage('cancelado');
   assert.match(msg, /foi cancelada/);

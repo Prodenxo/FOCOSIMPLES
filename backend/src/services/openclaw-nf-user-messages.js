@@ -13,13 +13,31 @@ const NFSE_REJECTION_ACTIONS = {
     'Erro na assinatura do arquivo enviado à prefeitura. É falha do emissor fiscal — fale com o suporte.',
   EM012:
     'A empresa não está autorizada a emitir pelo portal do município. O contador precisa liberar a emissão por webservice.',
+  E0370:
+    'Serviço de obra: a prefeitura exige o endereço do local da obra. '
+    + 'Confirme o endereço do cliente ou informe o endereço da obra na emissão.',
+  EM062:
+    'O código do serviço e o NBS cadastrados não combinam na tabela oficial da NFS-e. '
+    + 'Abra Foco Simples → MEI → Notas, edite o serviço e corrija o NBS — peça ao contador o código certo.',
+  E0713:
+    'A prefeitura não reconhece a empresa como optante do Simples Nacional nesta data. '
+    + 'O contador precisa verificar a opção pelo Simples no cadastro da prefeitura e na Receita.',
+  E0712:
+    'A prefeitura aceita apenas um bloco de total de tributos. É ajuste do emissor fiscal — fale com o suporte.',
+  EM016:
+    'A série do RPS não é aceite pela prefeitura. Ajuste a série em Foco Simples → Certificado → Empresa (ex.: 1).',
 };
 
 /** Ruído do emissor que não ajuda o utilizador. */
 const NFSE_REJECTION_NOISE = /^(erro desconhecido|erro ao realizar a requisi[çc][ãa]o)[:.\s]*/gi;
 
+/** Frase explicativa entre parênteses no fim de cada motivo (regra do validador). */
+const NFSE_REJECTION_EXPLANATION = /\s*\([^()]*\)\s*$/;
+
 /**
- * Motivo de rejeição legível: extrai `Codigo`/`Descricao` do JSON cru da prefeitura.
+ * Motivo de rejeição legível: aceita o JSON com `Codigo`/`Descricao` e o formato do ISSNET
+ * (`E0370-descrição | E0713-descrição`).
+ *
  * @param {string} rawReason
  * @returns {{ text: string, codes: string[] }}
  */
@@ -34,6 +52,14 @@ export const formatNfseRejectionReason = (rawReason = '') => {
     const code = codigo.trim().toUpperCase();
     codes.push(code);
     parts.push(`${code} — ${descricao.trim()}`);
+  }
+
+  if (parts.length) return { text: parts.join('\n'), codes };
+
+  for (const [, codigo, descricao] of raw.matchAll(/(?:^|\|)\s*([A-Z]{1,4}\d{2,4})\s*-\s*([^|]+)/g)) {
+    const code = codigo.trim().toUpperCase();
+    codes.push(code);
+    parts.push(`${code} — ${descricao.replace(NFSE_REJECTION_EXPLANATION, '').trim()}`);
   }
 
   if (parts.length) return { text: parts.join('\n'), codes };

@@ -1,6 +1,12 @@
 /**
- * Teste one-shot: WPM 071601 Ribeirão — emite e aguarda status terminal na PlugNotas.
- * Uso: node scripts/one-time/wpm-nfse-071601-emit-test.mjs
+ * Teste one-shot: WPM Ribeirão — emite e aguarda status terminal na PlugNotas.
+ *
+ * Uso (produção — exige aceite explícito):
+ *   ALLOW_PROD_NFSE_EMIT=1 node scripts/one-time/wpm-nfse-071601-emit-test.mjs --serie=1 --numero=3
+ *
+ * Trio alinhado à ficha cadastral da prefeitura (não usar 071601+71602 com
+ * discriminação de redes de água — a Receita trata como Não Optante / E0713):
+ *   LC 116 070201 + cTribMun 70201 + NBS 101025310 + obra no local.
  */
 import dotenv from 'dotenv';
 import { dirname, resolve } from 'node:path';
@@ -41,14 +47,15 @@ const input = {
   tomadorRazaoSocial: 'CF CARNEIRO CONTABILIDADE LTDA',
   tomadorEndereco,
   servicos: [{
-    codigo: '071601',
+    codigo: '070201',
     cnae: '4222701',
-    codigoNbs: '119011000',
-    discriminacao: 'Teste automatizado Foco Simples - redes 071601',
+    codigoNbs: '101025310',
+    discriminacao: 'Teste automatizado Foco Simples - redes de abastecimento de agua e esgoto',
     valorServico: 0.01,
     aliquota: 2,
-    // cTribMun do cadastro ISS.net da empresa (contador) — sem isto a prefeitura devolve EPM70.
-    codigoTributacao: '71602',
+    // cTribMun da ficha cadastral (Atividades do Municipio): 70201 = LC 07.02
+    codigoTributacao: '70201',
+    obra: { usarEnderecoTomador: true },
   }],
 };
 
@@ -67,8 +74,8 @@ const readArg = (name, fallback) => {
 };
 payload.rps = buildNfseEmitRpsPayload({
   lote: Number.parseInt(String(readArg('lote', '1')), 10),
-  serie: String(readArg('serie', '70000')),
-  numero: Number.parseInt(String(readArg('numero', '23')), 10),
+  serie: String(readArg('serie', '1')),
+  numero: Number.parseInt(String(readArg('numero', '3')), 10),
 });
 
 const critical = {
@@ -76,9 +83,13 @@ const critical = {
   rps: payload.rps,
   versao: payload.versao,
   versaoEsquema: payload.versaoEsquema,
+  codigo: payload.servico?.[0]?.codigo,
+  codigoTributacao: payload.servico?.[0]?.codigoTributacao,
+  codigoNbs: payload.servico?.[0]?.codigoNbs,
+  cIndOp: payload.servico?.[0]?.ibscbs?.codigoOperacao,
+  tributacao: payload.servico?.[0]?.ibscbs?.valores?.tributacao,
   cidadePrestacao: payload.cidadePrestacao,
-  obraEndereco: payload.servico?.[0]?.obra?.endereco ?? null,
-  ibscbs: payload.servico?.[0]?.ibscbs,
+  obra: payload.servico?.[0]?.obra ?? null,
   discriminacao: payload.servico?.[0]?.discriminacao,
 };
 

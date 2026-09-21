@@ -5,6 +5,7 @@
  */
 
 import { normalizeCodigoNbs, normalizeCodigoTributacaoMunicipal } from './nfse-codigo-nbs.js';
+import { resolveNfseCorrelacaoReforma } from './nfse-correlacao-reforma.js';
 import { requiresNfseObraForServicoCodigo } from './nfse-obra-defaults.js';
 
 /** NFS-e regular — emissão padrão de serviço. */
@@ -102,27 +103,105 @@ export const normalizeClassificacaoTributariaIbsCbs = (value) => {
 
 /**
  * @param {Record<string, unknown>|null|undefined} servico
- * @returns {string}
+ * @returns {Record<string, unknown>}
  */
-export const resolveClassificacaoTributariaIbsCbsForServico = (servico = {}) => {
-  const ibscbs = servico.ibscbs && typeof servico.ibscbs === 'object' && !Array.isArray(servico.ibscbs)
+const readServicoIbscbs = (servico = {}) => (
+  servico.ibscbs && typeof servico.ibscbs === 'object' && !Array.isArray(servico.ibscbs)
     ? servico.ibscbs
-    : {};
-  const tributacao = ibscbs.valores?.tributacao && typeof ibscbs.valores.tributacao === 'object'
+    : {}
+);
+
+/**
+ * @param {Record<string, unknown>|null|undefined} servico
+ * @returns {Record<string, unknown>}
+ */
+const readServicoIbscbsTributacao = (servico = {}) => {
+  const ibscbs = readServicoIbscbs(servico);
+  return ibscbs.valores?.tributacao && typeof ibscbs.valores.tributacao === 'object'
     ? ibscbs.valores.tributacao
     : {};
+};
 
-  const explicit = normalizeClassificacaoTributariaIbsCbs(
-    tributacao.cct
+/**
+ * Classificação IBS/CBS informada no cadastro/payload (sem padrão).
+ * @param {Record<string, unknown>|null|undefined} servico
+ * @returns {string|null}
+ */
+export const readExplicitClassificacaoTributariaIbsCbs = (servico = {}) => {
+  const ibscbs = readServicoIbscbs(servico);
+  return normalizeClassificacaoTributariaIbsCbs(
+    readServicoIbscbsTributacao(servico).cct
     ?? ibscbs.classificacaoTributariaIbsCbs
     ?? ibscbs.cClassTrib
     ?? ibscbs.classCode
     ?? servico.classificacaoTributariaIbsCbs
     ?? servico.cClassTrib,
   );
-  if (explicit) return explicit;
+};
 
-  return NFSE_CLASSIFICACAO_TRIBUTARIA_IBSCBS_DEFAULT;
+/**
+ * CST IBS/CBS informado no cadastro/payload (sem padrão).
+ * @param {Record<string, unknown>|null|undefined} servico
+ * @returns {string|null}
+ */
+export const readExplicitSituacaoTributariaIbsCbs = (servico = {}) => {
+  const ibscbs = readServicoIbscbs(servico);
+  return normalizeSituacaoTributariaIbsCbs(
+    readServicoIbscbsTributacao(servico).cst
+    ?? ibscbs.situacaoTributariaIbsCbs
+    ?? ibscbs.cst
+    ?? ibscbs.situationCode
+    ?? servico.situacaoTributariaIbsCbs
+    ?? servico.cstIbsCbs,
+  );
+};
+
+/**
+ * cIndOp informado no cadastro/payload (sem inferência).
+ * @param {Record<string, unknown>|null|undefined} servico
+ * @returns {string|null}
+ */
+export const readExplicitCIndOp = (servico = {}) => {
+  const ibscbs = readServicoIbscbs(servico);
+  return normalizeCIndOp(
+    ibscbs.cIndOp
+    ?? ibscbs.codigoOperacao
+    ?? servico.cIndOp
+    ?? servico.codigoOperacao,
+  );
+};
+
+/**
+ * Linha da tabela oficial para o serviço. Só resolve com NBS válido: sem NBS a tabela teria
+ * que escolher por conta e sobrescreveria o cIndOp inferido pela atividade (CNAE/oficina).
+ *
+ * @param {Record<string, unknown>|null|undefined} servico
+ * @returns {import('./nfse-correlacao-reforma.js').NfseCorrelacaoReforma|null}
+ */
+export const resolveCorrelacaoReformaForServico = (servico = {}) => {
+  const ibscbs = readServicoIbscbs(servico);
+  const codigoNbs = normalizeCodigoNbs(servico.codigoNbs ?? servico.nbs ?? ibscbs.codigoNbs);
+  if (!codigoNbs) return null;
+  return resolveNfseCorrelacaoReforma({
+    codigo: servico.codigo ?? servico.codigoServico,
+    codigoNbs,
+    cClassTrib: readExplicitClassificacaoTributariaIbsCbs(servico),
+    cst: readExplicitSituacaoTributariaIbsCbs(servico),
+    cIndOp: readExplicitCIndOp(servico),
+  });
+};
+
+/**
+ * @param {Record<string, unknown>|null|undefined} servico
+ * @returns {string}
+ */
+export const resolveClassificacaoTributariaIbsCbsForServico = (servico = {}) => {
+  // A tabela oficial vence o valor informado: conjunto sem correlação é rejeitado (EM062).
+  const correlacao = resolveCorrelacaoReformaForServico(servico);
+  if (correlacao) return correlacao.cClassTrib;
+
+  return readExplicitClassificacaoTributariaIbsCbs(servico)
+    ?? NFSE_CLASSIFICACAO_TRIBUTARIA_IBSCBS_DEFAULT;
 };
 
 /**
@@ -130,21 +209,10 @@ export const resolveClassificacaoTributariaIbsCbsForServico = (servico = {}) => 
  * @returns {string}
  */
 export const resolveSituacaoTributariaIbsCbsForServico = (servico = {}) => {
-  const ibscbs = servico.ibscbs && typeof servico.ibscbs === 'object' && !Array.isArray(servico.ibscbs)
-    ? servico.ibscbs
-    : {};
-  const tributacao = ibscbs.valores?.tributacao && typeof ibscbs.valores.tributacao === 'object'
-    ? ibscbs.valores.tributacao
-    : {};
+  const correlacao = resolveCorrelacaoReformaForServico(servico);
+  if (correlacao) return correlacao.cst;
 
-  const explicit = normalizeSituacaoTributariaIbsCbs(
-    tributacao.cst
-    ?? ibscbs.situacaoTributariaIbsCbs
-    ?? ibscbs.cst
-    ?? ibscbs.situationCode
-    ?? servico.situacaoTributariaIbsCbs
-    ?? servico.cstIbsCbs,
-  );
+  const explicit = readExplicitSituacaoTributariaIbsCbs(servico);
   if (explicit) return explicit;
 
   const classificacao = resolveClassificacaoTributariaIbsCbsForServico(servico);
@@ -237,17 +305,16 @@ export const enrichServicoIbscbsImovelFromTomador = (ibscbs, tomadorEndereco) =>
   return { ...ibscbs, imovel };
 };
 
+/**
+ * Indicador de operação: tabela oficial (quando há NBS) > informado > inferido pela atividade.
+ * @param {Record<string, unknown>|null|undefined} servico
+ * @returns {string}
+ */
 export const resolveCIndOpForServico = (servico = {}) => {
-  const ibscbs = servico.ibscbs && typeof servico.ibscbs === 'object' && !Array.isArray(servico.ibscbs)
-    ? servico.ibscbs
-    : {};
+  const correlacao = resolveCorrelacaoReformaForServico(servico);
+  if (correlacao) return correlacao.cIndOp;
 
-  const explicit = normalizeCIndOp(
-    ibscbs.cIndOp
-    ?? ibscbs.codigoOperacao
-    ?? servico.cIndOp
-    ?? servico.codigoOperacao,
-  );
+  const explicit = readExplicitCIndOp(servico);
   if (explicit) return explicit;
 
   const codigoKey = normalizeLc116CodigoDigits(servico.codigo);
@@ -550,10 +617,12 @@ export const buildMinimalServicoIbscbs = (ibscbsInput = {}, options = {}) => {
     cClassTrib: classificacaoTributariaIbsCbs,
   });
 
+  // Conjunto da tabela oficial não pode ser desfeito pelo valor cru do payload (EM062).
+  const correlacao = resolveCorrelacaoReformaForServico({ ...servico, ibscbs: source });
   const normalizedSourceCst = normalizeSituacaoTributariaIbsCbs(
     source.cst ?? source.cstIbsCbs ?? source.situacaoTributariaIbsCbs,
   );
-  const cstFinal = normalizedSourceCst ?? situacaoTributariaIbsCbs;
+  const cstFinal = correlacao?.cst ?? normalizedSourceCst ?? situacaoTributariaIbsCbs;
 
   const destinatarioSource = source.destinatario && typeof source.destinatario === 'object' && !Array.isArray(source.destinatario)
     ? source.destinatario
@@ -568,7 +637,7 @@ export const buildMinimalServicoIbscbs = (ibscbsInput = {}, options = {}) => {
 
   const destinatario = resolveDestinatarioForPlugnotasEmit(destinatarioSource, source);
 
-  const codigoOperacao = normalizeCIndOp(source.codigoOperacao ?? cIndOp);
+  const codigoOperacao = correlacao?.cIndOp ?? normalizeCIndOp(source.codigoOperacao ?? cIndOp);
 
   const built = {
     finalidadeNFSe: source.finalidadeNFSe ?? source.finalidadeNfse ?? finNFSe,

@@ -235,20 +235,23 @@ test('hasCompleteServicoIbscbs: detecta ibscbs montado', () => {
   assert.equal(hasCompleteServicoIbscbs({ codigoOperacao: '160201' }), false);
 });
 
-test('assembleNfsePlugnotasEmitPayload: cIndOp no serviço vira ibscbs completo em Ribeirão Preto', () => {
+test('assembleNfsePlugnotasEmitPayload: ibscbs completo segue a tabela oficial em Ribeirão Preto', () => {
   const out = assembleNfsePlugnotasEmitPayload({
     prestador: { endereco: { codigoCidade: '3543402' } },
     servico: [{
       codigo: '171901',
-      cnae: '9511800',
-      codigoNbs: '120013110',
+      cnae: '6920601',
+      codigoNbs: '113022100',
       cIndOp: '160201',
       codigoTributacao: '001',
       iss: { aliquota: 2 },
     }],
   }, { simplesNacional: true, nfseNacional: false, codigoIbge: '3543402' });
   assert.equal(hasCompleteServicoIbscbs(out.servico[0].ibscbs), true);
-  assert.equal(out.servico[0].ibscbs.codigoOperacao, '160201');
+  // cIndOp informado não correlaciona com 17.19.01 + NBS 113022100 — vale a tabela (EM062).
+  assert.equal(out.servico[0].ibscbs.codigoOperacao, '100301');
+  assert.equal(out.servico[0].ibscbs.valores.tributacao.cct, '200052');
+  assert.equal(out.servico[0].ibscbs.valores.tributacao.cst, '200');
   assert.equal(out.servico[0].ibscbs.indicadorOperacao, undefined);
 });
 
@@ -266,7 +269,7 @@ test('assembleNfsePlugnotasEmitPayload: inclui frases do Simples em informacoesC
   assert.equal(out.informacoesComplementares, SIMPLES_NACIONAL_NFE_INF_CPL_LINES.join('|'));
 });
 
-test('assembleNfsePlugnotasEmitPayload: obra 070602 ISSNET usa RTC007 e só cidadePrestacao', () => {
+test('assembleNfsePlugnotasEmitPayload: obra 070602 ISSNET usa RTC007 com endereço da obra', () => {
   const out = assembleNfsePlugnotasEmitPayload({
     prestador: { endereco: { codigoCidade: '3543402', cep: '14092200', logradouro: 'JOSE DE MAGALHAES', numero: '860', bairro: 'JARDIM ANHANGUERA', estado: 'SP' } },
     tomador: {
@@ -302,7 +305,12 @@ test('assembleNfsePlugnotasEmitPayload: obra 070602 ISSNET usa RTC007 e só cida
   assert.equal(out.cidadePrestacao?.estado, undefined);
   assert.equal(out.servico[0].codigoTributacao, '70602');
   assert.equal(out.servico[0].tributosFederaisRetidos, false);
-  assert.equal(out.servico[0].obra?.endereco, undefined);
+  // Sem CNO, o endereço é a única identificação da obra aceita (E0370).
+  assert.equal(out.servico[0].obra?.endereco?.cep, '14092210');
+  assert.equal(out.servico[0].obra?.codigo, undefined);
+  assert.equal(out.servico[0].ibscbs.valores.tributacao.cct, '200046');
+  assert.equal(out.servico[0].ibscbs.valores.tributacao.cst, '200');
+  assert.equal(out.servico[0].ibscbs.codigoOperacao, '020201');
 });
 
 test('assembleNfsePlugnotasEmitPayload: não envia indicadorOperacao (PlugNotas)', () => {

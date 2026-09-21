@@ -5,6 +5,11 @@
 
 import { badRequest } from '../utils/errors.js';
 import { normalizeCodigoNbs, normalizeLc116CodigoKey } from './nfse-codigo-nbs.js';
+import {
+  formatNfseCodigoNbsOptionsMessage,
+  hasNfseCorrelacaoForCodigo,
+  isNfseCodigoNbsValidoForCodigo,
+} from './nfse-correlacao-reforma.js';
 import { requiresNfseObraForServicoCodigo } from './nfse-obra-defaults.js';
 import { requiresIssnetRtcEmitSchema } from './nfse-reforma-defaults.js';
 
@@ -85,6 +90,15 @@ export const validateNfseEmitPreflight = (payload, options = {}) => {
     if (issnetRtc && !nbs) {
       errors.push(
         'Para Ribeirão Preto (ISSNET), informe o NBS de 9 dígitos no serviço ou no produto fiscal.',
+      );
+    }
+
+    // EM062: sem correlação oficial entre código do serviço e NBS a prefeitura rejeita.
+    if (nbs && hasNfseCorrelacaoForCodigo(servico.codigo) && !isNfseCodigoNbsValidoForCodigo(servico.codigo, nbs)) {
+      const opcoes = formatNfseCodigoNbsOptionsMessage(servico.codigo);
+      errors.push(
+        `O NBS ${nbs} não combina com o código de serviço ${codigo} na tabela oficial da NFS-e. `
+        + `NBS aceitos para esse serviço: ${opcoes}.`,
       );
     }
 

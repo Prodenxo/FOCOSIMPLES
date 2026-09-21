@@ -1,7 +1,7 @@
 /**
  * NFS-e Nacional / ISSNET: grupo `obra` obrigatório (rejeição E0370) para itens LC 116 de construção civil.
- * ISSNET RTC007 / DPS 1.01: local da obra só em `cidadePrestacao` (sem `tipoLogradouro`); não duplicar em `obra.endereco` (E160).
- * Não enviar `obra.codigo` placeholder — cObra removido do XSD (E160).
+ * ISSNET RTC007 / DPS 1.01: `cidadePrestacao` vai sem `tipoLogradouro` (E160) e a obra é identificada
+ * por CNO **ou** por `obra.endereco` — `codigo: 000` não é CNO válido e faz a prefeitura devolver E0370.
  * Demais municípios: PlugNotas JSON aceita art, codigo e cei em `servico[].obra`.
  * @see TecnoSpeed plugnotas-php Nfse/Servico/Obra.php
  */
@@ -241,11 +241,14 @@ export const buildNfseObraPayload = (servicoInput, emitInput, options = {}) => {
       ?? resolveNfseObraEndereco(servicoInput, emitInput, options.tomadorEndereco);
     const nested = buildNfseObraNestedForIssnetRtc(endereco);
     if (!nested && !art && !cei && !explicitCodigo) return null;
+    // O grupo obra identifica a obra por CNO **ou** endereço. `codigo: 000` não é CNO válido:
+    // a prefeitura descarta o grupo e devolve E0370. Sem CNO real, vale o endereço.
     return {
       ...(nested || {}),
       ...(art ? { art } : {}),
       ...(cei ? { cei } : {}),
       ...(explicitCodigo ? { codigo: explicitCodigo } : {}),
+      ...(!explicitCodigo && !nested ? { codigo: NFSE_OBRA_CODIGO_SEM_CADASTRO } : {}),
     };
   }
 
@@ -569,8 +572,9 @@ export const payloadHasNfseObraEnderecoOnServico = (payload) => {
 };
 
 /**
- * ISSNET RTC007: com `cidadePrestacao` preenchido, remove `servico[].obra.endereco` (duplicata → E160).
- * Mantém art/cei/codigo na obra quando informados.
+ * ISSNET RTC007: com `cidadePrestacao` preenchido, remove `servico[].obra.endereco` (duplicata → E160)
+ * **apenas** quando a obra tem CNO de 12 dígitos. Sem CNO, o endereço é a única identificação
+ * aceita no grupo obra — removê-lo devolve E0370.
  *
  * @param {Record<string, unknown>|null|undefined} payload
  * @returns {Record<string, unknown>|null|undefined}
@@ -595,12 +599,10 @@ export const stripNfseObraEnderecoForIssnetRtcWhenCidadePrestacaoSet = (payload)
     if (!requiresNfseObraForServicoCodigo(item.codigo)) return item;
     const obra = item.obra;
     if (!obra || typeof obra !== 'object' || Array.isArray(obra) || !obra.endereco) return item;
+    const cno = String(obra.codigo ?? obra.cno ?? '').replace(/\D/g, '');
+    if (cno.length !== 12) return item;
     changed = true;
     const { endereco: _end, ...obraRest } = obra;
-    if (!Object.keys(obraRest).length) {
-      const { obra: _obra, ...servicoRest } = item;
-      return servicoRest;
-    }
     return { ...item, obra: obraRest };
   });
 
