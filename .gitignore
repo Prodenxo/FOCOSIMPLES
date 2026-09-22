@@ -59,6 +59,9 @@ coverage/
 # Supabase CLI temp
 backend/supabase/.temp/
 
+# Pacotes de diagnóstico PlugNotas (dados de cliente)
+backend/tmp/
+
 # Misc
 *.pem
 .turbo/
