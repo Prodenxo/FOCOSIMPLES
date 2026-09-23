@@ -19,3 +19,14 @@ test('proxy Google Calendar aceita apenas rotas/metodos permitidos', async () =>
   assert.equal(isAllowedProxyRoute('events', 'POST'), false);
   assert.equal(isAllowedProxyRoute('unknown', 'GET'), false);
 });
+
+test('proxy Google Calendar libera os compromissos da agenda', async () => {
+  const { isAllowedProxyRoute } = await import('../src/controllers/googleCalendar.controller.js');
+
+  assert.equal(isAllowedProxyRoute('create-custom-event', 'POST'), true);
+  assert.equal(isAllowedProxyRoute('update-custom-event', 'POST'), true);
+  assert.equal(isAllowedProxyRoute('delete-custom-event', 'POST'), true);
+
+  assert.equal(isAllowedProxyRoute('create-custom-event', 'GET'), false);
+  assert.equal(isAllowedProxyRoute('delete-custom-event', 'DELETE'), false);
+});

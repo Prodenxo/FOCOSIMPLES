@@ -7,6 +7,13 @@ const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const GOOGLE_EVENTS_URL = 'https://www.googleapis.com/calendar/v3/calendars/primary/events'
 const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.events'
 
+/** Compromissos da agenda — implementados só na Edge Function `google-calendar`. */
+const CUSTOM_EVENT_PATHS = new Set([
+  'create-custom-event',
+  'update-custom-event',
+  'delete-custom-event',
+])
+
 const ensureGoogleConfigured = () => {
   if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET || !env.GOOGLE_REDIRECT_URI) {
     throw serviceUnavailable(
@@ -294,6 +301,12 @@ export const handleLocalGoogleCalendar = async ({
   if (cleanPath === 'create-event' && normalizedMethod === 'POST') {
     throw serviceUnavailable(
       'Criação automática de eventos via transação ainda não está disponível no modo local.',
+    )
+  }
+
+  if (CUSTOM_EVENT_PATHS.has(cleanPath) && normalizedMethod === 'POST') {
+    throw serviceUnavailable(
+      'Compromissos da agenda dependem da Edge Function do Google Calendar e não estão disponíveis no modo local.',
     )
   }
 
