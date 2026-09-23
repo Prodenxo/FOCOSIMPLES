@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { env } from '../config/env.js'
 import { query } from '../config/pg.js'
 import { badRequest, serviceUnavailable, unauthorized } from '../utils/errors.js'
@@ -7,12 +8,159 @@ const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const GOOGLE_EVENTS_URL = 'https://www.googleapis.com/calendar/v3/calendars/primary/events'
 const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.events'
 
-/** Compromissos da agenda — implementados só na Edge Function `google-calendar`. */
-const CUSTOM_EVENT_PATHS = new Set([
-  'create-custom-event',
-  'update-custom-event',
-  'delete-custom-event',
-])
+/** Fuso usado nos compromissos criados pela agenda. */
+const AGENDA_TIMEZONE = 'America/Sao_Paulo'
+
+/** Marca eventos de Meet criados pelo app (lido pelo frontend em `extendedProperties`). */
+const MEET_FLAG_KEY = 'mfMeet'
+
+const YMD_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+
+const pad2 = (value) => String(value).padStart(2, '0')
+
+const toYmd = (date) => `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
+
+const addDaysToYmd = (ymd, days) => {
+  const [year, month, day] = ymd.split('-').map(Number)
+  return toYmd(new Date(year, month - 1, day + days))
+}
+
+const clampMinuteOfDay = (hour, minute) => {
+  const h = Number.isFinite(Number(hour)) ? Math.trunc(Number(hour)) : 0
+  const m = Number.isFinite(Number(minute)) ? Math.trunc(Number(minute)) : 0
+  return Math.min(Math.max(h * 60 + m, 0), 23 * 60 + 59)
+}
+
+const normalizeYmd = (value, fallback = '') => {
+  const ymd = String(value ?? '').trim()
+  return YMD_PATTERN.test(ymd) ? ymd : fallback
+}
+
+const optionalText = (value) => {
+  const text = String(value ?? '').trim()
+  return text || undefined
+}
+
+/**
+ * Converte o formulário da agenda (data + hora/minuto locais) no par start/end do Google.
+ * Dia inteiro usa `date` com término exclusivo, como a API exige.
+ */
+export const buildGoogleEventPeriod = (payload = {}) => {
+  const startDate = normalizeYmd(payload.startDate)
+  if (!startDate) throw badRequest('Informe a data do compromisso.')
+
+  const endDateRaw = normalizeYmd(payload.endDate, startDate)
+  const endDate = endDateRaw < startDate ? startDate : endDateRaw
+
+  if (payload.isAllDay === true) {
+    return {
+      start: { date: startDate },
+      end: { date: addDaysToYmd(endDate, 1) },
+    }
+  }
+
+  const startMinutes = clampMinuteOfDay(payload.startHour, payload.startMinute)
+  const endMinutes = clampMinuteOfDay(payload.endHour, payload.endMinute)
+  if (endDate === startDate && endMinutes <= startMinutes) {
+    throw badRequest('O horário de término deve ser depois do horário de início.')
+  }
+
+  const asDateTime = (ymd, minutes) =>
+    `${ymd}T${pad2(Math.floor(minutes / 60))}:${pad2(minutes % 60)}:00`
+
+  return {
+    start: { dateTime: asDateTime(startDate, startMinutes), timeZone: AGENDA_TIMEZONE },
+    end: { dateTime: asDateTime(endDate, endMinutes), timeZone: AGENDA_TIMEZONE },
+  }
+}
+
+/**
+ * Corpo do evento no formato da API do Google a partir do payload da agenda.
+ * @param {Record<string, unknown>} payload
+ * @param {{ conferenceData?: Record<string, unknown>|null }} [options]
+ */
+export const buildGoogleEventBody = (payload = {}, options = {}) => {
+  const summary = String(payload.title ?? '').trim()
+  if (!summary) throw badRequest('Informe o título do compromisso.')
+
+  const recurrence = optionalText(payload.recurrence)
+  const reminderMinutes = payload.reminderMinutes
+  const hasReminder = reminderMinutes !== null
+    && reminderMinutes !== undefined
+    && reminderMinutes !== ''
+    && Number.isFinite(Number(reminderMinutes))
+
+  const description = optionalText(payload.description)
+  const location = optionalText(payload.location)
+  const colorId = optionalText(payload.colorId)
+
+  // `events.update` substitui o evento inteiro, então campos omitidos são limpos —
+  // por isso nada de `null` aqui, que a API recusa em alguns campos.
+  const body = {
+    summary,
+    ...buildGoogleEventPeriod(payload),
+    ...(description ? { description } : {}),
+    ...(location ? { location } : {}),
+    ...(colorId ? { colorId } : {}),
+    ...(recurrence ? { recurrence: [recurrence] } : {}),
+    reminders: hasReminder
+      ? { useDefault: false, overrides: [{ method: 'popup', minutes: Math.trunc(Number(reminderMinutes)) }] }
+      : { useDefault: true },
+    ...(payload.createMeetLink === true
+      ? { extendedProperties: { private: { [MEET_FLAG_KEY]: '1' } } }
+      : {}),
+  }
+
+  if (options.conferenceData !== undefined && options.conferenceData !== null) {
+    body.conferenceData = options.conferenceData
+  }
+
+  return body
+}
+
+const readGoogleHangoutLink = (event) => {
+  const direct = String(event?.hangoutLink ?? '').trim()
+  if (direct) return direct
+  for (const entry of event?.conferenceData?.entryPoints || []) {
+    const uri = String(entry?.uri ?? '').trim()
+    if (uri) return uri
+  }
+  return null
+}
+
+const googleEventsRequest = async (accessToken, { path = '', method = 'GET', body = null } = {}) => {
+  const url = new URL(`${GOOGLE_EVENTS_URL}${path}`)
+  url.searchParams.set('conferenceDataVersion', '1')
+
+  const response = await fetch(url.toString(), {
+    method,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  })
+
+  if (!response.ok && !(method === 'DELETE' && response.status === 410)) {
+    throw badRequest(`Erro no Google Calendar: ${await response.text()}`)
+  }
+
+  if (response.status === 204 || method === 'DELETE') return {}
+  return response.json()
+}
+
+const buildMeetCreateRequest = () => ({
+  createRequest: {
+    requestId: randomUUID(),
+    conferenceSolutionKey: { type: 'hangoutsMeet' },
+  },
+})
+
+const jsonResult = (payload) => ({
+  status: 200,
+  contentType: 'application/json',
+  body: JSON.stringify(payload),
+})
 
 const ensureGoogleConfigured = () => {
   if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET || !env.GOOGLE_REDIRECT_URI) {
@@ -304,10 +452,61 @@ export const handleLocalGoogleCalendar = async ({
     )
   }
 
-  if (CUSTOM_EVENT_PATHS.has(cleanPath) && normalizedMethod === 'POST') {
-    throw serviceUnavailable(
-      'Compromissos da agenda dependem da Edge Function do Google Calendar e não estão disponíveis no modo local.',
-    )
+  if (cleanPath === 'create-custom-event' && normalizedMethod === 'POST') {
+    if (!userId) throw unauthorized('Usuário não autenticado')
+    const accessToken = await resolveAccessToken(userId)
+    const wantsMeet = body?.createMeetLink === true
+    const created = await googleEventsRequest(accessToken, {
+      method: 'POST',
+      body: buildGoogleEventBody(body, {
+        conferenceData: wantsMeet ? buildMeetCreateRequest() : undefined,
+      }),
+    })
+    return jsonResult({
+      eventId: String(created?.id || ''),
+      hangoutLink: readGoogleHangoutLink(created),
+    })
+  }
+
+  if (cleanPath === 'update-custom-event' && normalizedMethod === 'POST') {
+    if (!userId) throw unauthorized('Usuário não autenticado')
+    const eventId = String(body?.eventId ?? '').trim()
+    if (!eventId) throw badRequest('Compromisso inválido')
+
+    const accessToken = await resolveAccessToken(userId)
+    const eventPath = `/${encodeURIComponent(eventId)}`
+
+    // Reenviar `createRequest` num evento que já tem Meet recria a conferência:
+    // preserva a existente e só pede uma nova quando o evento ainda não tem.
+    let conferenceData
+    if (body?.createMeetLink === true) {
+      const current = await googleEventsRequest(accessToken, { path: eventPath })
+      conferenceData = current?.conferenceData?.conferenceId
+        ? current.conferenceData
+        : buildMeetCreateRequest()
+    }
+
+    const updated = await googleEventsRequest(accessToken, {
+      path: eventPath,
+      method: 'PUT',
+      body: buildGoogleEventBody(body, { conferenceData }),
+    })
+    return jsonResult({
+      eventId: String(updated?.id || eventId),
+      hangoutLink: readGoogleHangoutLink(updated),
+    })
+  }
+
+  if (cleanPath === 'delete-custom-event' && normalizedMethod === 'POST') {
+    if (!userId) throw unauthorized('Usuário não autenticado')
+    const eventId = String(body?.eventId ?? '').trim()
+    if (!eventId) throw badRequest('Compromisso inválido')
+    const accessToken = await resolveAccessToken(userId)
+    await googleEventsRequest(accessToken, {
+      path: `/${encodeURIComponent(eventId)}`,
+      method: 'DELETE',
+    })
+    return jsonResult({ success: true })
   }
 
   throw badRequest('Rota de integração inválida')
