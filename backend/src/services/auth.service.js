@@ -19,12 +19,20 @@ import {
 } from './password-reset-email.service.js';
 import { buildSignupOriginMetadata, resolveAppOriginFromRequest } from '../utils/app-origin.js';
 import {
+  confirmLocalEmailChange,
+  requestLocalEmailChange,
+} from './email-change.service.js';
+import {
   isLocalAuthMode,
   localGetSession,
   localImpersonate,
+  localReleasePhoneFromOtherUsers,
   localSignIn,
   localSignOut,
   localSignUp,
+  localUpdateDisplayName,
+  localUpdatePhone,
+  verifyLocalAccessToken,
 } from './local-auth.service.js';
 
 const assertValidWhatsappPhone = (phone) => {
@@ -584,6 +592,24 @@ export const updatePhone = async (accessToken, phone) => {
   if (!accessToken) throw unauthorized();
   if (!phone) throw badRequest('Telefone é obrigatório');
 
+  if (isLocalAuthMode()) {
+    const localUser = verifyLocalAccessToken(accessToken);
+    if (!localUser?.id) throw unauthorized();
+
+    const cleanedPhone = assertValidWhatsappPhone(phone);
+    await localReleasePhoneFromOtherUsers(
+      localUser.id,
+      [...phoneLookupVariantSet(cleanedPhone)],
+    );
+    await localUpdatePhone(localUser.id, cleanedPhone);
+    await assignN8nPhoneToUser(
+      createSupabaseClient({ useServiceRole: true }),
+      localUser.id,
+      cleanedPhone,
+    );
+    return cleanedPhone;
+  }
+
   const supabase = createSupabaseClient({ accessToken });
   const { data: { user } = {}, error: userError } = await supabase.auth.getUser();
   if (userError || !user) throw unauthorized();
@@ -622,6 +648,13 @@ export const updateDisplayName = async (accessToken, displayName) => {
   if (!accessToken) throw unauthorized();
   if (!displayName) throw badRequest('Nome inválido');
 
+  if (isLocalAuthMode()) {
+    const localUser = verifyLocalAccessToken(accessToken);
+    if (!localUser?.id) throw unauthorized();
+    await localUpdateDisplayName(localUser.id, displayName);
+    return;
+  }
+
   const supabase = createSupabaseClient({ accessToken });
   const { data: { user } = {}, error: userError } = await supabase.auth.getUser();
   if (userError || !user) throw unauthorized();
@@ -646,6 +679,36 @@ export const updateDisplayName = async (accessToken, displayName) => {
     .from('profiles')
     .update({ display_name: displayName })
     .eq('id', user.id);
+};
+
+/**
+ * Pede a troca do e-mail de login. O endereço só muda quando o dono do novo
+ * e-mail clica no link — no Auth local isso passa pela nossa tabela de pedidos.
+ */
+export const updateEmail = async (accessToken, email) => {
+  if (!accessToken) throw unauthorized();
+
+  const normalized = String(email ?? '').trim().toLowerCase();
+  if (!normalized) throw badRequest('E-mail é obrigatório');
+
+  if (isLocalAuthMode()) {
+    const localUser = verifyLocalAccessToken(accessToken);
+    if (!localUser?.id) throw unauthorized();
+    return requestLocalEmailChange(localUser.id, normalized);
+  }
+
+  const supabase = createSupabaseClient({ accessToken });
+  const { error } = await supabase.auth.updateUser({ email: normalized });
+  if (error) throw badRequest(error.message);
+  return { email: normalized };
+};
+
+/** Consome o token do link enviado ao novo e-mail (rota pública). */
+export const confirmEmailChange = async (token) => {
+  if (!isLocalAuthMode()) {
+    throw badRequest('A confirmação de e-mail é feita pelo link do provedor de autenticação.');
+  }
+  return confirmLocalEmailChange(token);
 };
 
 export const getLastSeenUpdate = async (accessToken) => {

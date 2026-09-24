@@ -477,10 +477,16 @@ export const localGetSession = async (accessToken) => {
   await ensureUserNotBlocked(user.id);
   const { role, empresaId, mei } = await getRoleAndCompany(user.id);
 
+  // E-mail vem do banco: o JWT ainda carrega o antigo depois de uma troca confirmada.
+  const { rows: emailRows } = await query(
+    'SELECT email FROM public.users WHERE id = $1 AND deleted_at IS NULL LIMIT 1',
+    [user.id],
+  );
+
   return {
     user: {
       id: user.id,
-      email: user.email,
+      email: emailRows[0]?.email || user.email,
       phone: user.user_metadata?.phone || null,
       displayName: user.user_metadata?.display_name || null,
     },
@@ -493,6 +499,61 @@ export const localGetSession = async (accessToken) => {
 
 export const localSignOut = async () => {
   // JWT stateless — cliente descarta o token
+};
+
+/** Schema local: nome fica em `users.raw_user_meta_data` (profiles só guarda role). */
+export const localUpdateDisplayName = async (userId, displayName) => {
+  const name = String(displayName || '').trim();
+  if (!userId) throw unauthorized();
+  if (!name) throw badRequest('Nome inválido');
+
+  const { rowCount } = await query(
+    `UPDATE public.users
+     SET raw_user_meta_data = COALESCE(raw_user_meta_data, '{}'::jsonb) || $2::jsonb,
+         updated_at = now()
+     WHERE id = $1 AND deleted_at IS NULL`,
+    [userId, JSON.stringify({ display_name: name, name, full_name: name })],
+  );
+  if (!rowCount) throw badRequest('Usuário não encontrado');
+  return name;
+};
+
+/**
+ * Solta o número de outras contas antes de gravar — mesmo comportamento do Auth
+ * hospedado, onde telefone duplicado bloqueia a gravação.
+ * @param {string} userId
+ * @param {string[]} phoneVariants
+ */
+export const localReleasePhoneFromOtherUsers = async (userId, phoneVariants) => {
+  const variants = [...new Set((phoneVariants || []).filter(Boolean))];
+  if (!userId || variants.length === 0) return;
+
+  await query(
+    `UPDATE public.users
+     SET phone = NULL,
+         raw_user_meta_data = COALESCE(raw_user_meta_data, '{}'::jsonb) || '{"phone": null}'::jsonb,
+         updated_at = now()
+     WHERE id <> $1
+       AND deleted_at IS NULL
+       AND (phone = ANY($2::text[]) OR raw_user_meta_data->>'phone' = ANY($2::text[]))`,
+    [userId, variants],
+  );
+};
+
+export const localUpdatePhone = async (userId, cleanedPhone) => {
+  if (!userId) throw unauthorized();
+  if (!cleanedPhone) throw badRequest('Telefone é obrigatório');
+
+  const { rowCount } = await query(
+    `UPDATE public.users
+     SET phone = $2,
+         raw_user_meta_data = COALESCE(raw_user_meta_data, '{}'::jsonb) || $3::jsonb,
+         updated_at = now()
+     WHERE id = $1 AND deleted_at IS NULL`,
+    [userId, cleanedPhone, JSON.stringify({ phone: cleanedPhone })],
+  );
+  if (!rowCount) throw badRequest('Usuário não encontrado');
+  return cleanedPhone;
 };
 
 const normalizeRoleName = (role) => {

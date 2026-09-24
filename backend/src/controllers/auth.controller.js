@@ -129,6 +129,24 @@ export const updateDisplayName = async (req, res, next) => {
   }
 };
 
+export const updateEmail = async (req, res, next) => {
+  try {
+    const result = await authService.updateEmail(req.accessToken, req.body.email);
+    return sendSuccess(res, result, 'Confirmação enviada para o novo e-mail');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const confirmEmailChange = async (req, res, next) => {
+  try {
+    const result = await authService.confirmEmailChange(req.body.token);
+    return sendSuccess(res, result, 'E-mail atualizado');
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export const updateRole = async (req, res, next) => {
   try {
     const result = await authService.updateRole(req.accessToken, req.body.userId, req.body.role);
