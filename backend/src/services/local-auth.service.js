@@ -469,6 +469,33 @@ export const localSignIn = async ({ email, password }) => {
   };
 };
 
+/**
+ * Perfil atual do banco. O JWT congela e-mail, telefone e nome de quando o login
+ * foi feito, então sem isso uma alteração salva "volta" ao recarregar a página.
+ * @param {string} userId
+ * @param {{ email?: string|null, user_metadata?: Record<string, unknown> }} [tokenUser]
+ * @param {{ query?: Function }} [deps] — injeção para testes
+ */
+export const resolveLocalUserProfile = async (userId, tokenUser = {}, deps = {}) => {
+  const run = deps.query ?? query;
+  const { rows } = await run(
+    `SELECT email, phone, raw_user_meta_data
+     FROM public.users
+     WHERE id = $1 AND deleted_at IS NULL
+     LIMIT 1`,
+    [userId],
+  );
+  const stored = rows[0] || {};
+  const storedMeta = stored.raw_user_meta_data || {};
+  const tokenMeta = tokenUser.user_metadata || {};
+
+  return {
+    email: stored.email || tokenUser.email || null,
+    phone: stored.phone || storedMeta.phone || tokenMeta.phone || null,
+    displayName: storedMeta.display_name || tokenMeta.display_name || null,
+  };
+};
+
 export const localGetSession = async (accessToken) => {
   const user = verifyLocalAccessToken(accessToken);
   if (!user) return null;
@@ -477,18 +504,14 @@ export const localGetSession = async (accessToken) => {
   await ensureUserNotBlocked(user.id);
   const { role, empresaId, mei } = await getRoleAndCompany(user.id);
 
-  // E-mail vem do banco: o JWT ainda carrega o antigo depois de uma troca confirmada.
-  const { rows: emailRows } = await query(
-    'SELECT email FROM public.users WHERE id = $1 AND deleted_at IS NULL LIMIT 1',
-    [user.id],
-  );
+  const profile = await resolveLocalUserProfile(user.id, user);
 
   return {
     user: {
       id: user.id,
-      email: emailRows[0]?.email || user.email,
-      phone: user.user_metadata?.phone || null,
-      displayName: user.user_metadata?.display_name || null,
+      email: profile.email,
+      phone: profile.phone,
+      displayName: profile.displayName,
     },
     access_token: accessToken,
     role,
