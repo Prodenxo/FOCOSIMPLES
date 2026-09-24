@@ -262,6 +262,11 @@ export const env = {
   /** Base da API Z-API (opcional). Padrão `https://api.z-api.io`. */
   ZAPI_API_BASE_URL: (process.env.ZAPI_API_BASE_URL || "").trim(),
   /**
+   * Números das nossas instâncias WhatsApp (lista por vírgula, ex.: `5521984503232`).
+   * Usado para recusar consulta feita com o número do próprio robô no lugar do remetente.
+   */
+  WHATSAPP_BOT_PHONES: (process.env.WHATSAPP_BOT_PHONES || "").trim(),
+  /**
    * Canal de saída WhatsApp: `auto` (Z-API se configurada, senão n8n), `zapi`, `n8n`.
    */
   WHATSAPP_OUTBOUND_MODE: (process.env.WHATSAPP_OUTBOUND_MODE || "auto").trim(),

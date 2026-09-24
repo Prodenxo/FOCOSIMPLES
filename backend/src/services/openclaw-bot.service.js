@@ -6,6 +6,7 @@ import {
   normalizeWhatsappPhoneDigits,
   isBrazilWhatsappDigits,
 } from '../utils/whatsapp-phone.js';
+import { isWhatsappBotPhone } from '../utils/whatsapp-bot-phone.js';
 import {
   buildPhoneLookupCandidates,
   collectUserIdsFromN8nLinkCandidates,
@@ -321,6 +322,18 @@ export const resolveUserIdByPhoneDetailed = async (rawPhone) => {
   const phoneDigits = normalizeWhatsappPhoneDigits(rawPhone);
   if (!phoneDigits) {
     throw badRequest('Telefone ausente ou inválido');
+  }
+  if (isWhatsappBotPhone(phoneDigits)) {
+    throw badRequest(
+      'Este é o número do próprio robô, não do remetente. Refaça com o telefone de quem escreveu.',
+      {
+        code: 'PHONE_IS_BOT_NUMBER',
+        botHint:
+          'Número do robô no 1º argumento do mf-curl.sh. Use o telefone do remetente '
+          + '(REMETENTE_WHATSAPP / mandatorySenderPhone, ou o do dropdown deste chat). '
+          + 'PROIBIDO mostrar este número ao utilizador ou pedir que ele o guarde no perfil.',
+      },
+    );
   }
   const dbConfigError = getServiceDbConfigError();
   if (dbConfigError) {
@@ -890,7 +903,7 @@ export const runOpenclawAction = async (input) => {
   if (!userId) {
     throw notFound(
       'Este WhatsApp ainda não está ligado ao Foco Simples. '
-      + 'Abra a app → Perfil → guarde este número (com DDD 55) e tente de novo.',
+      + 'Abra a app → Perfil → guarde o seu número de WhatsApp e tente de novo.',
       {
         code: 'PHONE_NOT_LINKED',
         phoneDigits,
@@ -898,6 +911,8 @@ export const runOpenclawAction = async (input) => {
         botHint:
           'Repita esta message UMA vez — não insista na mesma conversa. '
           + 'mf-curl: 1º argumento = telefone do remetente no PAINEL OpenClaw (não o que o utilizador digitar). '
+          + 'PROIBIDO escrever phoneDigits/lookupCandidates na resposta ao utilizador — são diagnóstico interno '
+          + 'e podem ser o número errado; ele já sabe qual é o WhatsApp dele. '
           + 'Se pedirem saldo/DAS antes de vincular, não invente valores.',
       },
     );

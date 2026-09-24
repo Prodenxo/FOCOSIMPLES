@@ -266,6 +266,8 @@ No painel OpenClaw vês o remetente (ex.: **Maria Silva (+5548999123456)** ou dr
 - Se o stderr do `mf-curl` disser *"agente (55) ignorado; usa 5587…"* → estás na **conta errada** (pin de outro chat). Repete com o número **completo** do dropdown **deste** chat; o script actualiza o pin.
 - **PROIBIDO** copiar números dos exemplos abaixo ou de outra conversa — **só** o remetente **deste** chat.
 - Mensagem via **Z-API relay** traz `REMETENTE_WHATSAPP=55…` ou `mandatorySenderPhone` → usa **esse** dígito, sem excepção.
+- Erro **`PHONE_IS_BOT_NUMBER`** = passaste o número do **próprio robô**. Refaz com o telefone do remetente; **nunca** peças ao utilizador para guardar esse número.
+- **PROIBIDO mostrar ao utilizador** o número que consultaste (`phoneDigits`, `lookupCandidates`). São diagnóstico interno e podem estar errados. Em **`PHONE_NOT_LINKED`** diz apenas para ele guardar **o WhatsApp dele** em Perfil — sem ditar dígitos.
 - Antes de enviar DAS: corre `resolve_user` com o telefone do remetente e confirma `data.dasAccount.displayName` (ou `displayName` em `resolve_user`) — se o nome não bater com quem pediu, **para** e pergunta.
 - Só usa `subjectPhone` no payload se fores **admin** a pedir DAS de **colaborador da mesma empresa** (nunca para utilizador comum).
 
