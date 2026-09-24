@@ -45,3 +45,15 @@ export function catalogProdutoValorSugerido(value) {
   }
   return null;
 }
+
+/**
+ * Valor do catálogo no formato de input BR (`1234,56`).
+ * `numeric` do Postgres chega como string — nunca chamar `.toFixed()` no valor cru.
+ * @param {unknown} value
+ * @returns {string} vazio quando não há valor
+ */
+export function formatValorSugeridoBR(value) {
+  const n = catalogProdutoValorSugerido(value);
+  if (n === null || n === 0) return '';
+  return n.toFixed(2).replace('.', ',');
+}

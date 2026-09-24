@@ -7,6 +7,36 @@ import { query } from './pg.js'
 
 const quoteIdent = (name) => `"${String(name).replace(/"/g, '""')}"`
 
+const PG_NUMERIC_OID = 1700
+
+/**
+ * PostgREST devolve `numeric` como número JSON; o driver devolve string.
+ * Sem isto o front recebe tipos diferentes em AUTH_MODE=local e quebra
+ * (ex.: `valor_sugerido.toFixed is not a function`).
+ * Converte só colunas `numeric` de verdade (pelo OID) — texto que parece número
+ * (CNPJ, código de serviço, CEP) fica intacto.
+ * @param {import('pg').QueryResult} result
+ * @returns {object[]}
+ */
+export const toPostgrestRows = (result) => {
+  const rows = result?.rows || []
+  if (!rows.length) return rows
+  const numericCols = (result?.fields || [])
+    .filter((field) => field?.dataTypeID === PG_NUMERIC_OID)
+    .map((field) => field.name)
+  if (!numericCols.length) return rows
+  return rows.map((row) => {
+    const out = { ...row }
+    for (const col of numericCols) {
+      const value = out[col]
+      if (typeof value !== 'string' || value.trim() === '') continue
+      const parsed = Number(value)
+      if (Number.isFinite(parsed)) out[col] = parsed
+    }
+    return out
+  })
+}
+
 /**
  * node-pg serializa Array como literal de array Postgres (`{a,b}`), inválido em colunas json/jsonb.
  * Objetos plain já viram JSON via prepareValue; arrays precisam de stringify explícito.
@@ -392,8 +422,7 @@ class PgQueryBuilder {
       if (this.offsetN != null && Number.isFinite(this.offsetN)) {
         sql += ` OFFSET ${Math.max(0, Math.trunc(this.offsetN))}`
       }
-      const { rows } = await query(sql, params)
-      return this._formatSelect(rows)
+      return this._formatSelect(toPostgrestRows(await query(sql, params)))
     }
 
     if (this.action === 'insert') {
@@ -413,7 +442,7 @@ class PgQueryBuilder {
         ? ' RETURNING *'
         : ''
       const sql = `INSERT INTO ${table} (${colSql}) VALUES ${valuesSql}${returning}`
-      const { rows: out } = await query(sql, params)
+      const out = toPostgrestRows(await query(sql, params))
       return this._formatMutate(out, rows.length)
     }
 
@@ -429,7 +458,7 @@ class PgQueryBuilder {
       sql += this._whereSql(params)
       const returning = this.returning || this.expect ? ' RETURNING *' : ''
       sql += returning
-      const { rows: out } = await query(sql, params)
+      const out = toPostgrestRows(await query(sql, params))
       return this._formatMutate(out, out.length)
     }
 
@@ -458,7 +487,7 @@ class PgQueryBuilder {
       const returning = this.returning || this.expect ? ' RETURNING *' : ''
       const sql = `INSERT INTO ${table} (${colSql}) VALUES ${valuesSql}
         ON CONFLICT (${conflictSql}) DO UPDATE SET ${setSql}${returning}`
-      const { rows: out } = await query(sql, params)
+      const out = toPostgrestRows(await query(sql, params))
       return this._formatMutate(out, rows.length)
     }
 
@@ -467,7 +496,7 @@ class PgQueryBuilder {
       sql += this._whereSql(params)
       const returning = this.returning || this.expect ? ' RETURNING *' : ''
       sql += returning
-      const { rows: out } = await query(sql, params)
+      const out = toPostgrestRows(await query(sql, params))
       return this._formatMutate(out, out.length)
     }
 
