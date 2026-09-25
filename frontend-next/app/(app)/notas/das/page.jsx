@@ -569,7 +569,21 @@ export default function DasPage() {
                       </td>
                       <td className="px-5 py-3 text-right">
                         <div className="inline-flex flex-wrap items-center justify-end gap-2">
-                          {period.guideId ? (
+                          <button
+                            type="button"
+                            onClick={() => handleDeclarar(period)}
+                            disabled={generating || !integrationOk || !hasCertificate}
+                            className="inline-flex h-9 items-center gap-1 rounded-[10px] bg-[var(--accent)] px-3 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60"
+                          >
+                            {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <ScrollText className="h-3.5 w-3.5" aria-hidden />}
+                            Simular / declarar
+                          </button>
+                          {period.guideId && (
+                            period.hasDas
+                            || period.hasLocalPdf
+                            || status === 'pago'
+                            || status === 'a_pagar'
+                          ) ? (
                             <button
                               type="button"
                               onClick={() => handleDownload(period)}
@@ -579,17 +593,8 @@ export default function DasPage() {
                               {downloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <FileDown className="h-3.5 w-3.5" aria-hidden />}
                               Baixar PDF
                             </button>
-                          ) : status === 'a_declarar' || period.podeDeclarar ? (
-                            <button
-                              type="button"
-                              onClick={() => handleDeclarar(period)}
-                              disabled={generating || !integrationOk || !hasCertificate}
-                              className="inline-flex h-9 items-center gap-1 rounded-[10px] bg-[var(--accent)] px-3 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60"
-                            >
-                              {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <ScrollText className="h-3.5 w-3.5" aria-hidden />}
-                              Declarar e gerar
-                            </button>
                           ) : (
+                            status !== 'a_declarar' && status !== 'sem_debito' ? (
                             <button
                               type="button"
                               onClick={() => handleGerar(period)}
@@ -599,6 +604,7 @@ export default function DasPage() {
                               {generating ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Download className="h-3.5 w-3.5" aria-hidden />}
                               Gerar guia
                             </button>
+                            ) : null
                           )}
                           <ChevronRight className="h-4 w-4 text-[var(--text-muted)]" aria-hidden />
                         </div>
