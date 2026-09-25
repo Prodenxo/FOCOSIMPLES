@@ -198,6 +198,17 @@ export async function fetchSimplesDasFaturamento(periodoApuracao) {
   return apiClient.get(`/simples-das/faturamento?${params.toString()}`);
 }
 
+/** Consulta o rascunho da declaração salvo para a competência. */
+export async function fetchSimplesDasDraft(cnpj, periodoApuracao) {
+  const params = new URLSearchParams({ cnpj, periodo: periodoApuracao });
+  return apiClient.get(`/simples-das/draft?${params.toString()}`);
+}
+
+/** Salva os campos da declaração sem transmitir para a Receita. */
+export async function saveSimplesDasDraft(payload) {
+  return apiClient.put('/simples-das/draft', payload);
+}
+
 /** Declaração PGDAS-D. */
 export async function declararDas(payload) {
   return apiClient.post('/simples-das/declarar', payload);

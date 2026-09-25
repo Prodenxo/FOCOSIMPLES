@@ -24,9 +24,11 @@ import {
 } from './pgdasd/consultar-extrato-das.js'
 import { tryExtractDasTotalFromPdfBase64 } from '../utils/das-pdf-valor.js'
 import {
+  getDasSimplesDraft,
   getDasSimplesById,
   getDasSimplesByPeriodo,
   listDasSimplesPeriods,
+  saveDasSimplesDraft,
   upsertDasSimples,
 } from './pgdasd/das-simples-store.js'
 import {
@@ -178,6 +180,26 @@ export const getSimplesDasIntegrationStatus = () => {
       ? null
       : SIMPLES_DAS_NOT_CONFIGURED,
   }
+}
+
+export const getSimplesDasDraft = async (userId, { cnpj, periodoApuracao } = {}) => {
+  const periodo = normalizePeriodo(periodoApuracao)
+  if (!periodo) throw badRequest('Competência inválida para consultar o rascunho.')
+  const contribuinteCnpj = await resolveContribuinteCnpj(userId, cnpj)
+  return getDasSimplesDraft({ userId, cnpj: contribuinteCnpj, periodoApuracao: periodo })
+}
+
+export const saveSimplesDasDraft = async (userId, payload = {}) => {
+  const periodo = normalizePeriodo(payload.periodoApuracao)
+  if (!periodo) throw badRequest('Competência inválida para salvar o rascunho.')
+  const contribuinteCnpj = await resolveContribuinteCnpj(userId, payload.cnpj)
+  const draft = await saveDasSimplesDraft({
+    userId,
+    cnpj: contribuinteCnpj,
+    periodoApuracao: periodo,
+    draft: payload.draft || {},
+  })
+  return { cnpj: contribuinteCnpj, periodoApuracao: periodo, draft }
 }
 
 /**

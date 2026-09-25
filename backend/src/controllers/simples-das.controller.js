@@ -57,6 +57,27 @@ export const getFaturamento = async (req, res, next) => {
   }
 }
 
+export const getDraft = async (req, res, next) => {
+  try {
+    const data = await simplesDasService.getSimplesDasDraft(req.user.id, {
+      cnpj: req.query.cnpj,
+      periodoApuracao: req.query.periodo || req.query.periodoApuracao,
+    })
+    return sendSuccess(res, data)
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const saveDraft = async (req, res, next) => {
+  try {
+    const data = await simplesDasService.saveSimplesDasDraft(req.user.id, req.body || {})
+    return sendSuccess(res, data, 'Rascunho salvo')
+  } catch (error) {
+    next(error)
+  }
+}
+
 export const declarar = async (req, res, next) => {
   try {
     const data = await simplesDasService.declararSimplesDas(req.user.id, req.body || {})

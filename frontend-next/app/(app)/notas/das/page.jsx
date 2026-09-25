@@ -21,10 +21,12 @@ import {
   downloadDasPdf,
   declararDas,
   declararDasTrial,
+  fetchSimplesDasDraft,
   fetchSimplesDasFaturamento,
   gerarDas,
   gerarDasTrial,
   simularDas,
+  saveSimplesDasDraft,
   fetchFiscalCompany,
 } from '@/lib/fiscalApi';
 import {
@@ -71,6 +73,7 @@ export default function DasPage() {
   const [declareDraft, setDeclareDraft] = useState(null);
   const [simulationResult, setSimulationResult] = useState(null);
   const [simulatedPayloadKey, setSimulatedPayloadKey] = useState(null);
+  const [draftSavedAt, setDraftSavedAt] = useState(null);
   const [trialResult, setTrialResult] = useState(null);
 
   const cnpj = company?.cpfCnpj || company?.cnpj || certStatus?.documento || null;
@@ -183,9 +186,13 @@ export default function DasPage() {
     setActionMessage(null);
     setSimulationResult(null);
     setSimulatedPayloadKey(null);
+    setDraftSavedAt(null);
 
     try {
-      const fat = await fetchSimplesDasFaturamento(periodoApuracao);
+      const [fat, savedDraft] = await Promise.all([
+        fetchSimplesDasFaturamento(periodoApuracao),
+        fetchSimplesDasDraft(cnpj, periodoApuracao).catch(() => null),
+      ]);
       const total = Number(fat?.total);
       const valorOk = Number.isFinite(total) ? total : 0;
       const valorServicos = Number.isFinite(Number(fat?.valorServicos)) ? Number(fat.valorServicos) : 0;
@@ -199,7 +206,9 @@ export default function DasPage() {
         valorServicos,
         valorMercadorias,
         jaDeclarado: ['pago', 'a_pagar', 'sem_debito'].includes(String(period.status || '')),
+        savedDraft,
       });
+      setDraftSavedAt(savedDraft?.updatedAt || null);
     } catch (err) {
       setActionMessage({
         type: 'error',
@@ -229,6 +238,34 @@ export default function DasPage() {
       outraUf: form.outraUf,
       cnpjsFiliais: form.cnpjsFiliais,
     };
+  };
+
+  const handleSaveDraft = async (form) => {
+    if (!cnpj || !declareDraft) return;
+    const { periodoApuracao, periodoLabel } = declareDraft;
+    setActingId(`draft-${periodoApuracao}`);
+    setActionMessage(null);
+    try {
+      const result = await saveSimplesDasDraft({
+        cnpj,
+        periodoApuracao,
+        draft: form,
+      });
+      const saved = result?.draft || form;
+      setDeclareDraft((current) => current ? { ...current, savedDraft: saved } : current);
+      setDraftSavedAt(saved.updatedAt || new Date().toISOString());
+      setActionMessage({
+        type: 'success',
+        text: `Rascunho de ${periodoLabel} salvo. Nada foi transmitido à Receita.`,
+      });
+    } catch (err) {
+      setActionMessage({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Falha ao salvar o rascunho.',
+      });
+    } finally {
+      setActingId(null);
+    }
   };
 
   const handleSimular = async (form) => {
@@ -628,6 +665,9 @@ export default function DasPage() {
         periodoLabel={declareDraft?.periodoLabel || ''}
         sugerido={declareDraft?.valorOk || 0}
         notasCount={declareDraft?.count || 0}
+        initialDraft={declareDraft?.savedDraft || null}
+        draftSavedAt={draftSavedAt}
+        saving={String(actingId || '').startsWith('draft-')}
         loading={
           String(actingId || '').startsWith('declare-')
           || String(actingId || '').startsWith('simulate-')
@@ -641,7 +681,9 @@ export default function DasPage() {
           setDeclareDraft(null);
           setSimulationResult(null);
           setSimulatedPayloadKey(null);
+          setDraftSavedAt(null);
         }}
+        onSave={handleSaveDraft}
         onSimulate={handleSimular}
         onConfirm={handleConfirmDeclarar}
       />

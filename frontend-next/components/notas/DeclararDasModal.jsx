@@ -37,8 +37,12 @@ export function DeclararDasModal({
   sugerido = 0,
   notasCount = 0,
   loading = false,
+  saving = false,
+  initialDraft = null,
+  draftSavedAt = null,
   simulationResult = null,
   onCancel,
+  onSave,
   onSimulate,
   onConfirm,
 }) {
@@ -55,17 +59,17 @@ export function DeclararDasModal({
 
   useEffect(() => {
     if (!open) return;
-    setFaturamento(moneyToInput(sugerido) || '0,00');
-    setCasoEspecial(false);
-    setIdServico('14');
-    setIdMercadoria('1');
-    setValorExterno('');
-    setValorFolha('');
-    setCodigoMunicipio('');
-    setOutraUf('');
-    setFiliais('');
+    setFaturamento(moneyToInput(initialDraft?.valorReceitaInterna ?? sugerido) || '0,00');
+    setCasoEspecial(initialDraft?.casoEspecial === true);
+    setIdServico(String(initialDraft?.idAtividadeServico || 14));
+    setIdMercadoria(String(initialDraft?.idAtividadeMercadoria || 1));
+    setValorExterno(moneyToInput(initialDraft?.valorReceitaExterna));
+    setValorFolha(moneyToInput(initialDraft?.valorFolha));
+    setCodigoMunicipio(String(initialDraft?.codigoOutroMunicipio || ''));
+    setOutraUf(String(initialDraft?.outraUf || ''));
+    setFiliais(String(initialDraft?.cnpjsFiliais || ''));
     setError(null);
-  }, [open, sugerido]);
+  }, [open, sugerido, initialDraft]);
 
   if (!open) return null;
 
@@ -93,7 +97,7 @@ export function DeclararDasModal({
       return null;
     }
     setError(null);
-    return { valorReceitaInterna: valor, ...extra };
+    return { valorReceitaInterna: valor, casoEspecial, ...extra };
   };
 
   const handleAction = (callback) => {
@@ -107,7 +111,7 @@ export function DeclararDasModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="declarar-das-title"
-      onClick={loading ? undefined : onCancel}
+      onClick={loading || saving ? undefined : onCancel}
     >
       <div
         className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[16px] border border-[var(--card-border)] bg-[var(--card-bg)] p-5 shadow-[var(--shadow-card)]"
@@ -120,7 +124,7 @@ export function DeclararDasModal({
           <button
             type="button"
             onClick={onCancel}
-            disabled={loading}
+            disabled={loading || saving}
             className="rounded-full p-1 text-[var(--text-muted)] hover:bg-[var(--canvas)]"
             aria-label="Fechar"
           >
@@ -229,6 +233,11 @@ export function DeclararDasModal({
         ) : null}
 
         {error ? <p className="mt-3 text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+        {draftSavedAt ? (
+          <p className="mt-3 text-xs text-emerald-700 dark:text-emerald-400">
+            Rascunho salvo. Você pode fechar e continuar depois.
+          </p>
+        ) : null}
         {simulationResult ? (
           <div className="mt-3 rounded-[12px] border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-200">
             <p className="font-semibold">Simulação concluída — nada foi transmitido.</p>
@@ -245,15 +254,24 @@ export function DeclararDasModal({
           <button
             type="button"
             onClick={onCancel}
-            disabled={loading}
+            disabled={loading || saving}
             className="inline-flex h-9 items-center rounded-[10px] border border-[var(--card-border)] px-3 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--canvas)] disabled:opacity-60"
           >
             Cancelar
           </button>
           <button
             type="button"
+            onClick={() => handleAction(onSave)}
+            disabled={loading || saving}
+            className="inline-flex h-9 items-center gap-1 rounded-[10px] border border-[var(--card-border)] px-3 text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--canvas)] disabled:opacity-60"
+          >
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
+            Salvar rascunho
+          </button>
+          <button
+            type="button"
             onClick={() => handleAction(onSimulate)}
-            disabled={loading}
+            disabled={loading || saving}
             className="inline-flex h-9 items-center gap-1 rounded-[10px] border border-[var(--accent)] px-3 text-xs font-semibold text-[var(--accent)] hover:bg-[var(--accent-soft)] disabled:opacity-60"
           >
             {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
@@ -262,7 +280,7 @@ export function DeclararDasModal({
           <button
             type="button"
             onClick={() => handleAction(onConfirm)}
-            disabled={loading}
+            disabled={loading || saving}
             className="inline-flex h-9 items-center gap-1 rounded-[10px] bg-red-600 px-3 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-60"
           >
             Transmitir de verdade

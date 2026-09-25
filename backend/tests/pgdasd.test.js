@@ -4,11 +4,39 @@ import { mapDeclaracoesToPeriods, buildFallbackPeriodList, lastClosedPeriodoApur
 import { aggregateNotasFaturamentoPeriodo, buildDeclaracaoMensalPayload } from '../src/services/pgdasd/transmitir-declaracao.js'
 import { extractPdfBase64FromPgdasdResponse } from '../src/services/pgdasd/client.js'
 import { inspectPgdasdSerproConfig } from '../src/services/pgdasd/client.js'
+import { normalizeDasSimplesDraft } from '../src/services/pgdasd/das-simples-store.js'
 import {
   shouldFallbackToDasExtrato,
   todayYmdSaoPaulo,
   isSemDebitoSerproMessage,
 } from '../src/services/simples-das.service.js'
+
+describe('pgdasd rascunho', () => {
+  it('normaliza apenas os campos permitidos do formulário', () => {
+    assert.deepEqual(normalizeDasSimplesDraft({
+      valorReceitaInterna: '1500.25',
+      casoEspecial: true,
+      idAtividadeServico: 13,
+      idAtividadeMercadoria: 2,
+      valorReceitaExterna: -10,
+      valorFolha: '800',
+      codigoOutroMunicipio: '35.503-08',
+      outraUf: 'sp!',
+      cnpjsFiliais: '11.222.333/0001-81',
+      campoInesperado: 'não salvar',
+    }), {
+      valorReceitaInterna: 1500.25,
+      casoEspecial: true,
+      idAtividadeServico: 13,
+      idAtividadeMercadoria: 2,
+      valorReceitaExterna: 0,
+      valorFolha: 800,
+      codigoOutroMunicipio: '3550308',
+      outraUf: 'SP',
+      cnpjsFiliais: '11.222.333/0001-81',
+    })
+  })
+})
 
 describe('pgdasd consultar map', () => {
   it('mapeia periodos a partir de estrutura CONSDECLARACAO', () => {

@@ -27,6 +27,79 @@ const periodoToCompetencia = (periodo) => {
   return `${p.slice(0, 4)}-${p.slice(4, 6)}`
 }
 
+const DRAFT_SOURCE = 'pgdasd_draft'
+
+const finiteNonNegative = (value) => {
+  const number = Number(value)
+  return Number.isFinite(number) && number >= 0 ? number : 0
+}
+
+/** Mantém no banco somente os campos preenchíveis do formulário PGDAS-D. */
+export const normalizeDasSimplesDraft = (value = {}) => ({
+  valorReceitaInterna: finiteNonNegative(value.valorReceitaInterna),
+  casoEspecial: value.casoEspecial === true,
+  idAtividadeServico: Math.min(Math.max(Number(value.idAtividadeServico) || 14, 1), 43),
+  idAtividadeMercadoria: Math.min(Math.max(Number(value.idAtividadeMercadoria) || 1, 1), 43),
+  valorReceitaExterna: finiteNonNegative(value.valorReceitaExterna),
+  valorFolha: finiteNonNegative(value.valorFolha),
+  codigoOutroMunicipio: String(value.codigoOutroMunicipio || '').replace(/\D/g, '').slice(0, 7),
+  outraUf: String(value.outraUf || '').trim().toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2),
+  cnpjsFiliais: String(value.cnpjsFiliais || '').slice(0, 1000),
+})
+
+export const getDasSimplesDraft = async ({ userId, cnpj, periodoApuracao }) => {
+  const row = await getDasSimplesByPeriodo({ userId, cnpj, periodoApuracao })
+  const draft = row?.detalhamento_json?.rascunho
+  if (!draft || typeof draft !== 'object') return null
+  return {
+    ...normalizeDasSimplesDraft(draft),
+    updatedAt: draft.updatedAt || row.updated_at || null,
+  }
+}
+
+export const saveDasSimplesDraft = async ({ userId, cnpj, periodoApuracao, draft }) => {
+  const periodo = normalizePeriodo(periodoApuracao)
+  const normalizedCnpj = String(cnpj || '').replace(/\D/g, '')
+  if (!userId || normalizedCnpj.length !== 14 || !periodo) {
+    throw badRequest('Dados inválidos para salvar o rascunho do DAS Simples.')
+  }
+
+  const db = getDb()
+  const existing = await getDasSimplesByPeriodo({
+    userId,
+    cnpj: normalizedCnpj,
+    periodoApuracao: periodo,
+  })
+  const updatedAt = new Date().toISOString()
+  const savedDraft = { ...normalizeDasSimplesDraft(draft), updatedAt }
+  const detalhamento = {
+    ...(existing?.detalhamento_json || {}),
+    rascunho: savedDraft,
+  }
+
+  if (existing) {
+    const { error } = await db
+      .from(TABLE)
+      .update({ detalhamento_json: detalhamento, updated_at: updatedAt })
+      .eq('id', existing.id)
+    if (error) throw badRequest(error.message || 'Falha ao salvar rascunho do DAS Simples.')
+  } else {
+    const { error } = await db.from(TABLE).insert({
+      user_id: userId,
+      cnpj: normalizedCnpj,
+      periodo_apuracao: periodo,
+      competencia: periodoToCompetencia(periodo),
+      status: 'pendente',
+      detalhamento_json: detalhamento,
+      source: DRAFT_SOURCE,
+      updated_at: updatedAt,
+    })
+    if (error) throw badRequest(error.message || 'Falha ao salvar rascunho do DAS Simples.')
+  }
+
+  return savedDraft
+}
+
 /**
  * @param {{
  *   userId: string,
@@ -119,7 +192,7 @@ export const listDasSimplesPeriods = async ({ userId, cnpj = null, limit = 24 } 
   const db = getDb()
   let query = db
     .from(TABLE)
-    .select('id, cnpj, competencia, periodo_apuracao, status, numero_documento, valor_total, error_message, updated_at')
+    .select('id, cnpj, competencia, periodo_apuracao, status, numero_documento, valor_total, error_message, source, updated_at')
     .eq('user_id', userId)
   const expectedCnpj = String(cnpj || '').replace(/\D/g, '')
   if (expectedCnpj.length === 14) {
@@ -131,7 +204,7 @@ export const listDasSimplesPeriods = async ({ userId, cnpj = null, limit = 24 } 
   if (error) {
     throw badRequest(error.message || 'Falha ao listar DAS Simples.')
   }
-  return data || []
+  return (data || []).filter((row) => row.source !== DRAFT_SOURCE)
 }
 
 /**
