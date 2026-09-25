@@ -32,7 +32,7 @@ function isParcelamentoEmAberto(situacao) {
 }
 
 export default function NotasInicioPage() {
-  const { userId, canTestDas } = useAuth();
+  const { userId } = useAuth();
   const anoCivil = new Date().getFullYear();
 
   const [certStatus, setCertStatus] = useState(null);
@@ -95,19 +95,13 @@ export default function NotasInicioPage() {
     }
 
     if (cnpjDigits) {
-      // DAS do Simples segue em validação: só superadmin consulta (a API responde 403 aos demais).
-      if (canTestDas) {
-        try {
-          const data = await fetchDasPeriods(cnpjDigits, undefined, false);
-          const list = Array.isArray(data) ? data : (data?.periods || data?.items || []);
-          setDasPeriods(list.filter((p) => p && p.status !== 'indisponivel'));
-        } catch {
-          setDasPeriods([]);
-        } finally {
-          setLoadingDas(false);
-        }
-      } else {
+      try {
+        const data = await fetchDasPeriods(cnpjDigits, undefined, false);
+        const list = Array.isArray(data) ? data : (data?.periods || data?.items || []);
+        setDasPeriods(list.filter((p) => p && p.status !== 'indisponivel'));
+      } catch {
         setDasPeriods([]);
+      } finally {
         setLoadingDas(false);
       }
 
@@ -140,7 +134,7 @@ export default function NotasInicioPage() {
       setLimiteServidor(null);
       setLoadingLimite(false);
     }
-  }, [userId, anoCivil, canTestDas]);
+  }, [userId, anoCivil]);
 
   useEffect(() => {
     loadOverview();
@@ -230,20 +224,18 @@ export default function NotasInicioPage() {
           loading={loadingCert}
         />
 
-        {canTestDas ? (
-          <OverviewCard
-            href="/notas/das"
-            icon={FileText}
-            iconTone="warning"
-            title="DAS · Simples Nacional (teste)"
-            description="Gere e baixe as guias do Simples Nacional mês a mês."
-            metricLabel="Guias em aberto"
-            metricValue={dasMetric.texto}
-            metricTone={dasMetric.tudoEmDia ? 'success' : 'warning'}
-            cta="Abrir guias →"
-            loading={loadingDas}
-          />
-        ) : null}
+        <OverviewCard
+          href="/notas/das"
+          icon={FileText}
+          iconTone="warning"
+          title="DAS · Simples Nacional"
+          description="Gere e baixe as guias do Simples Nacional mês a mês."
+          metricLabel="Guias em aberto"
+          metricValue={dasMetric.texto}
+          metricTone={dasMetric.tudoEmDia ? 'success' : 'warning'}
+          cta="Abrir guias →"
+          loading={loadingDas}
+        />
 
         <OverviewCard
           href="/notas/notas-fiscais"

@@ -219,16 +219,6 @@ export async function simularDas(payload) {
   return apiClient.post('/simples-das/simular', payload);
 }
 
-/** Exercita TRANSDECLARACAO11 com CNPJ fictício no Trial SERPRO. */
-export async function declararDasTrial(payload = {}) {
-  return apiClient.post('/simples-das/trial/declarar', payload);
-}
-
-/** Exercita GERARDAS12 com o período fictício oficial do Trial SERPRO. */
-export async function gerarDasTrial() {
-  return apiClient.post('/simples-das/trial/gerar', {});
-}
-
 /** Download do PDF da guia DAS. */
 export async function downloadDasPdf(id) {
   return apiClient.download(`/simples-das/${encodeURIComponent(id)}/download`, { timeoutMs: 60000 });

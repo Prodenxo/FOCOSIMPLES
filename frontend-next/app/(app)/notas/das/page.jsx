@@ -20,11 +20,9 @@ import {
   fetchDasIntegrationStatus,
   downloadDasPdf,
   declararDas,
-  declararDasTrial,
   fetchSimplesDasDraft,
   fetchSimplesDasFaturamento,
   gerarDas,
-  gerarDasTrial,
   simularDas,
   saveSimplesDasDraft,
   fetchFiscalCompany,
@@ -54,7 +52,7 @@ import { DeclararDasModal } from '@/components/notas/DeclararDasModal';
  * - Geração e download preservam o backend existente; nenhum cálculo tributário é inventado.
  */
 export default function DasPage() {
-  const { userId, canTestDas, booting } = useAuth();
+  const { userId } = useAuth();
   const searchParams = useSearchParams();
 
   const [company, setCompany] = useState(null);
@@ -74,7 +72,6 @@ export default function DasPage() {
   const [simulationResult, setSimulationResult] = useState(null);
   const [simulatedPayloadKey, setSimulatedPayloadKey] = useState(null);
   const [draftSavedAt, setDraftSavedAt] = useState(null);
-  const [trialResult, setTrialResult] = useState(null);
 
   const cnpj = company?.cpfCnpj || company?.cnpj || certStatus?.documento || null;
 
@@ -119,14 +116,14 @@ export default function DasPage() {
   }, [cnpj]);
 
   useEffect(() => {
-    if (!userId || !canTestDas) return;
+    if (!userId) return;
     loadShared();
-  }, [userId, canTestDas, loadShared]);
+  }, [userId, loadShared]);
 
   useEffect(() => {
-    if (!userId || !canTestDas) return;
+    if (!userId) return;
     loadPeriods();
-  }, [userId, canTestDas, loadPeriods]);
+  }, [userId, loadPeriods]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -379,36 +376,7 @@ export default function DasPage() {
     }
   };
 
-  const handleTrial = async (kind) => {
-    setActingId(`trial-${kind}`);
-    setActionMessage(null);
-    setTrialResult(null);
-    try {
-      const result = kind === 'declarar'
-        ? await declararDasTrial({ valorReceitaInterna: 10000 })
-        : await gerarDasTrial();
-      setTrialResult(result);
-      setActionMessage({
-        type: 'success',
-        text: kind === 'declarar'
-          ? 'Declaração fictícia aceita pelo Trial da SERPRO.'
-          : 'Geração fictícia de DAS executada no Trial da SERPRO.',
-      });
-    } catch (err) {
-      setActionMessage({
-        type: 'error',
-        text: err instanceof Error ? err.message : 'Falha no Trial da SERPRO.',
-      });
-    } finally {
-      setActingId(null);
-    }
-  };
-
   const integrationOk = integration?.ok !== false && integration?.integrado !== false;
-
-  if (!booting && !canTestDas) {
-    return <ErrorPanel message="DAS Simples está liberado somente para superadmin durante os testes." />;
-  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -503,52 +471,6 @@ export default function DasPage() {
           <SummaryChip label="Sem débito" value={counts.sem_debito} tone="muted" />
           <SummaryChip label="Falhas" value={counts.erro} tone="danger" />
         </div>
-      </Card>
-
-      <Card className="border border-amber-300 p-5 dark:border-amber-800/60">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
-              Laboratório superadmin
-            </p>
-            <h3 className="mt-1 text-sm font-semibold text-[var(--text-primary)]">
-              Trial oficial da SERPRO
-            </h3>
-            <p className="mt-1 max-w-2xl text-xs text-[var(--text-muted)]">
-              Usa somente dados fictícios da SERPRO. Não acessa nem altera a declaração da empresa selecionada.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => handleTrial('declarar')}
-              disabled={Boolean(actingId)}
-              className="inline-flex h-9 items-center gap-2 rounded-[10px] border border-amber-500 px-3 text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-60 dark:text-amber-300 dark:hover:bg-amber-950/30"
-            >
-              {actingId === 'trial-declarar' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-              Testar declaração fictícia
-            </button>
-            <button
-              type="button"
-              onClick={() => handleTrial('gerar')}
-              disabled={Boolean(actingId)}
-              className="inline-flex h-9 items-center gap-2 rounded-[10px] border border-amber-500 px-3 text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-60 dark:text-amber-300 dark:hover:bg-amber-950/30"
-            >
-              {actingId === 'trial-gerar' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-              Testar DAS fictício
-            </button>
-          </div>
-        </div>
-        {trialResult ? (
-          <details className="mt-4 rounded-[10px] bg-[var(--canvas)] p-3 text-xs text-[var(--text-muted)]">
-            <summary className="cursor-pointer font-semibold text-[var(--text-primary)]">
-              Ver retorno do Trial
-            </summary>
-            <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-all">
-              {JSON.stringify(trialResult.response ?? trialResult, null, 2)}
-            </pre>
-          </details>
-        ) : null}
       </Card>
 
       <Card className="overflow-hidden p-0">

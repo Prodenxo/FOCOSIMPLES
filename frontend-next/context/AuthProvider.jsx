@@ -265,9 +265,6 @@ export function AuthProvider({ children }) {
     return cleaned;
   }, [persistSnapshot]);
 
-  const canTestDas = role === 'superadmin'
-    || (isImpersonating && readLocalAdminBackup()?.role === 'superadmin');
-
   const value = useMemo(
     () => ({
       booting: booting || !hydrated,
@@ -279,7 +276,6 @@ export function AuthProvider({ children }) {
       mei,
       empresaId,
       isImpersonating,
-      canTestDas,
       signIn,
       signUp,
       signOut,
@@ -301,7 +297,6 @@ export function AuthProvider({ children }) {
       mei,
       empresaId,
       isImpersonating,
-      canTestDas,
       signIn,
       signUp,
       signOut,

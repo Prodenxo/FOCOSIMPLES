@@ -6,9 +6,7 @@ import * as controller from '../controllers/simples-das.controller.js'
 
 const router = Router()
 
-// Enquanto o fluxo PGDAS-D está em validação, nenhuma operação (nem leitura)
-// fica disponível para clientes. O bloqueio é no backend, não apenas na tela.
-router.use(requireAuth, requireSuperAdmin, requireMeiEnabled)
+router.use(requireAuth, requireMeiEnabled)
 
 router.get('/status', controller.getIntegrationStatus)
 router.get('/periods', controller.listPeriods)
@@ -17,8 +15,8 @@ router.get('/faturamento', controller.getFaturamento)
 router.get('/draft', controller.getDraft)
 router.put('/draft', controller.saveDraft)
 router.post('/simular', controller.simular)
-router.post('/trial/declarar', controller.declararTrial)
-router.post('/trial/gerar', controller.gerarTrial)
+router.post('/trial/declarar', requireSuperAdmin, controller.declararTrial)
+router.post('/trial/gerar', requireSuperAdmin, controller.gerarTrial)
 router.post('/declarar', controller.declarar)
 router.get('/:id/download', controller.download)
 
