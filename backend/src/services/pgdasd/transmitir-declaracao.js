@@ -144,8 +144,11 @@ export const buildDeclaracaoMensalPayload = (input = {}) => {
     }
   }
 
+  // A Receita valida a soma das atividades contra a receita total do PA
+  // (mercado interno + mercado externo), não apenas contra a parcela interna.
+  const valorTotalPa = roundMoney(valorInterno + valorExterno)
   const { servicos, mercadorias } = splitFaturamentoAtividades({
-    valorTotal: valorInterno,
+    valorTotal: valorTotalPa,
     valorServicos: input.valorServicos,
     valorMercadorias: input.valorMercadorias,
   })

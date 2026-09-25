@@ -260,6 +260,24 @@ describe('pgdasd declaracao draft', () => {
     assert.equal(draft.declaracao.tipoDeclaracao, 2)
   })
 
+  it('faz as atividades somarem receita interna e externa', () => {
+    const draft = buildDeclaracaoMensalPayload({
+      cnpj: '49453916000196',
+      periodoApuracao: '202606',
+      valorReceitaInterna: 1000,
+      valorReceitaExterna: 200,
+      valorServicos: 1000,
+    })
+    const totalAtividades = draft.declaracao.estabelecimentos[0].atividades
+      .reduce((total, atividade) => total + atividade.valorAtividade, 0)
+    assert.equal(totalAtividades, 1200)
+    assert.equal(
+      totalAtividades,
+      draft.declaracao.receitaPaCompetenciaInterno
+        + draft.declaracao.receitaPaCompetenciaExterno,
+    )
+  })
+
   it('mês zerado envia estabelecimento sem atividade', () => {
     const draft = buildDeclaracaoMensalPayload({
       cnpj: '49453916000196',
