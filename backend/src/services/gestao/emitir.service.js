@@ -140,7 +140,8 @@ export const emitirServico = async ({
   versaoSistema = '1.0',
   userId = null,
   contribuinteTipo = null,
-  autorTipo = null
+  autorTipo = null,
+  endpoint = 'Emitir'
 }) => {
   if (!env.SERPRO_API_BASE_URL) {
     throw badRequest('API Serpro não configurada');
@@ -172,6 +173,10 @@ export const emitirServico = async ({
     }
   };
 
+  const endpointName = String(endpoint || 'Emitir').trim();
+  if (!['Emitir', 'Declarar'].includes(endpointName)) {
+    throw badRequest('Operação Serpro inválida para emissão.');
+  }
   const baseUrl = String(env.SERPRO_API_BASE_URL).replace(/\/$/, '');
   const requestEmitir = async (forceRefresh = false) => {
     const headers = await buildSerproHeaders({
@@ -183,7 +188,7 @@ export const emitirServico = async ({
       contribuinteTipo,
       autorTipo
     });
-    const response = await serproApiFetch(`${baseUrl}/Emitir`, {
+    const response = await serproApiFetch(`${baseUrl}/${endpointName}`, {
       method: 'POST',
       headers,
       body: JSON.stringify(requestBody)

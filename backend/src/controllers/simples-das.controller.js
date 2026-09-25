@@ -65,3 +65,30 @@ export const declarar = async (req, res, next) => {
     next(error)
   }
 }
+
+export const simular = async (req, res, next) => {
+  try {
+    const data = await simplesDasService.simularSimplesDas(req.user.id, req.body || {})
+    return sendSuccess(res, data, 'Cálculo simulado sem transmissão')
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const declararTrial = async (req, res, next) => {
+  try {
+    const data = await simplesDasService.declararSimplesDasTrial(req.body || {})
+    return sendSuccess(res, data, 'Declaração fictícia enviada ao Trial SERPRO')
+  } catch (error) {
+    next(error)
+  }
+}
+
+export const gerarTrial = async (_req, res, next) => {
+  try {
+    const data = await simplesDasService.gerarSimplesDasTrial()
+    return sendSuccess(res, data, 'DAS fictício solicitado ao Trial SERPRO')
+  } catch (error) {
+    next(error)
+  }
+}

@@ -16,7 +16,7 @@ import { AppFooter } from '@/components/layout/AppFooter';
 export function FiscalModuleLayout({ children }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { userId } = useAuth();
+  const { userId, canTestDas } = useAuth();
 
   const [company, setCompany] = useState(null);
   const [companyLoading, setCompanyLoading] = useState(false);
@@ -118,7 +118,9 @@ export function FiscalModuleLayout({ children }) {
   const tabs = [
     { id: 'inicio', label: 'Início', href: '/notas' },
     { id: 'certificado', label: 'Certificado', href: '/notas/certificado' },
-    { id: 'das', label: 'DAS Simples', href: '/notas/das' },
+    ...(canTestDas
+      ? [{ id: 'das', label: 'DAS Simples (teste)', href: '/notas/das' }]
+      : []),
     { id: 'parcelamentos', label: 'Parcelamentos', href: '/notas/parcelamentos' },
     { id: 'notas-fiscais', label: 'Notas fiscais', href: '/notas/notas-fiscais' },
   ];

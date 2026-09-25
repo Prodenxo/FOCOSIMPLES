@@ -119,7 +119,10 @@ export const callPgdasdServico = async ({
   if (modo === 'consultar') {
     return consultarServico(params)
   }
-  return emitirServico(params)
+  return emitirServico({
+    ...params,
+    endpoint: modo === 'declarar' ? 'Declarar' : 'Emitir',
+  })
 }
 
 /**

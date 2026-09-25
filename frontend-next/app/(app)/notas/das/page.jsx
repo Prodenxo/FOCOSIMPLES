@@ -20,8 +20,11 @@ import {
   fetchDasIntegrationStatus,
   downloadDasPdf,
   declararDas,
+  declararDasTrial,
   fetchSimplesDasFaturamento,
   gerarDas,
+  gerarDasTrial,
+  simularDas,
   fetchFiscalCompany,
 } from '@/lib/fiscalApi';
 import {
@@ -38,6 +41,7 @@ import { EmptyPanel } from '@/components/ui/EmptyPanel';
 import { ErrorPanel } from '@/components/ui/ErrorPanel';
 import { LoadingPanel } from '@/components/ui/LoadingPanel';
 import { FilterSelect } from '@/components/ui/FilterSelect';
+import { DeclararDasModal } from '@/components/notas/DeclararDasModal';
 
 /**
  * Aba DAS Simples — guia DAS do Simples Nacional por competência.
@@ -48,7 +52,7 @@ import { FilterSelect } from '@/components/ui/FilterSelect';
  * - Geração e download preservam o backend existente; nenhum cálculo tributário é inventado.
  */
 export default function DasPage() {
-  const { userId } = useAuth();
+  const { userId, canTestDas, booting } = useAuth();
   const searchParams = useSearchParams();
 
   const [company, setCompany] = useState(null);
@@ -64,6 +68,10 @@ export default function DasPage() {
 
   const [actingId, setActingId] = useState(null);
   const [actionMessage, setActionMessage] = useState(null);
+  const [declareDraft, setDeclareDraft] = useState(null);
+  const [simulationResult, setSimulationResult] = useState(null);
+  const [simulatedPayloadKey, setSimulatedPayloadKey] = useState(null);
+  const [trialResult, setTrialResult] = useState(null);
 
   const cnpj = company?.cpfCnpj || company?.cnpj || certStatus?.documento || null;
 
@@ -108,14 +116,14 @@ export default function DasPage() {
   }, [cnpj]);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !canTestDas) return;
     loadShared();
-  }, [userId, loadShared]);
+  }, [userId, canTestDas, loadShared]);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !canTestDas) return;
     loadPeriods();
-  }, [userId, loadPeriods]);
+  }, [userId, canTestDas, loadPeriods]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -173,44 +181,108 @@ export default function DasPage() {
     const periodoLabel = formatCompetenciaShort(period.competencia);
     setActingId(`${period.id || period.competencia}`);
     setActionMessage(null);
+    setSimulationResult(null);
+    setSimulatedPayloadKey(null);
 
-    let valorOk = 0;
-    let count = 0;
     try {
       const fat = await fetchSimplesDasFaturamento(periodoApuracao);
       const total = Number(fat?.total);
-      count = Number(fat?.count) || 0;
-      valorOk = Number.isFinite(total) ? total : 0;
+      const valorOk = Number.isFinite(total) ? total : 0;
+      const valorServicos = Number.isFinite(Number(fat?.valorServicos)) ? Number(fat.valorServicos) : 0;
+      const valorMercadorias = Number.isFinite(Number(fat?.valorMercadorias)) ? Number(fat.valorMercadorias) : 0;
+      setDeclareDraft({
+        period,
+        periodoApuracao,
+        periodoLabel,
+        valorOk,
+        count: Number(fat?.count) || 0,
+        valorServicos,
+        valorMercadorias,
+        jaDeclarado: ['pago', 'a_pagar', 'sem_debito'].includes(String(period.status || '')),
+      });
     } catch (err) {
       setActionMessage({
         type: 'error',
         text: err instanceof Error ? err.message : 'Não foi possível consultar o faturamento interno.',
       });
+    } finally {
       setActingId(null);
+    }
+  };
+
+  const buildDeclarePayload = (form) => {
+    if (!cnpj || !declareDraft) return null;
+    const { periodoApuracao, valorServicos, valorMercadorias, jaDeclarado } = declareDraft;
+    return {
+      confirm: true,
+      periodoApuracao,
+      cnpj,
+      valorReceitaInterna: form.valorReceitaInterna,
+      valorServicos,
+      valorMercadorias,
+      tipoDeclaracao: jaDeclarado ? 2 : 1,
+      idAtividadeServico: form.idAtividadeServico,
+      idAtividadeMercadoria: form.idAtividadeMercadoria,
+      valorReceitaExterna: form.valorReceitaExterna,
+      valorFolha: form.valorFolha,
+      codigoOutroMunicipio: form.codigoOutroMunicipio,
+      outraUf: form.outraUf,
+      cnpjsFiliais: form.cnpjsFiliais,
+    };
+  };
+
+  const handleSimular = async (form) => {
+    const payload = buildDeclarePayload(form);
+    if (!payload || !declareDraft) return;
+    const { periodoApuracao, periodoLabel } = declareDraft;
+    setActingId(`simulate-${periodoApuracao}`);
+    setActionMessage(null);
+    setSimulationResult(null);
+    try {
+      const result = await simularDas(payload);
+      setSimulationResult(result);
+      setSimulatedPayloadKey(JSON.stringify(payload));
+      setActionMessage({
+        type: 'success',
+        text: `Simulação de ${periodoLabel} concluída. Nada foi transmitido à Receita.`,
+      });
+    } catch (err) {
+      setActionMessage({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Falha ao simular o cálculo do DAS.',
+      });
+    } finally {
+      setActingId(null);
+    }
+  };
+
+  const handleConfirmDeclarar = async (form) => {
+    const payload = buildDeclarePayload(form);
+    if (!payload || !declareDraft) return;
+    const { periodoApuracao, periodoLabel } = declareDraft;
+    if (simulatedPayloadKey !== JSON.stringify(payload)) {
+      setActionMessage({
+        type: 'error',
+        text: 'Simule exatamente estes dados antes de transmitir de verdade.',
+      });
+      if (typeof window !== 'undefined') {
+        window.alert('Simule exatamente estes dados antes de transmitir de verdade.');
+      }
       return;
     }
-
-    if (typeof window !== 'undefined') {
-      const ok = window.confirm(
-        `Declarar ${periodoLabel}?\n\n`
-        + `Será enviado à Receita o faturamento de ${periodoLabel}, somado das notas concluídas neste app.\n\n`
-        + `Valor: ${formatCurrencyBRL(valorOk)} (${count} nota${count === 1 ? '' : 's'} concluída${count === 1 ? '' : 's'})\n\n`
-        + 'Depois disso a Receita pode gerar a guia DAS.',
-      );
-      if (!ok) {
-        setActingId(null);
-        return;
-      }
-    }
-
+    if (
+      typeof window !== 'undefined'
+      && !window.confirm(
+        `ATENÇÃO: isso vai transmitir ${periodoLabel} de verdade para a Receita Federal.\n\n`
+        + 'Você já conferiu a simulação com o contador?',
+      )
+    ) return;
+    setActingId(`declare-${periodoApuracao}`);
+    setActionMessage(null);
     try {
-      await declararDas({
-        confirm: true,
-        periodoApuracao,
-        cnpj,
-        valorReceitaInterna: valorOk,
-      });
+      await declararDas(payload);
       const result = await gerarDas({ cnpj, periodoApuracao });
+      setDeclareDraft(null);
       setActionMessage({
         type: 'success',
         text: result?.message || `Declaração de ${periodoLabel} enviada. Guia DAS gerada.`,
@@ -270,7 +342,36 @@ export default function DasPage() {
     }
   };
 
+  const handleTrial = async (kind) => {
+    setActingId(`trial-${kind}`);
+    setActionMessage(null);
+    setTrialResult(null);
+    try {
+      const result = kind === 'declarar'
+        ? await declararDasTrial({ valorReceitaInterna: 10000 })
+        : await gerarDasTrial();
+      setTrialResult(result);
+      setActionMessage({
+        type: 'success',
+        text: kind === 'declarar'
+          ? 'Declaração fictícia aceita pelo Trial da SERPRO.'
+          : 'Geração fictícia de DAS executada no Trial da SERPRO.',
+      });
+    } catch (err) {
+      setActionMessage({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Falha no Trial da SERPRO.',
+      });
+    } finally {
+      setActingId(null);
+    }
+  };
+
   const integrationOk = integration?.ok !== false && integration?.integrado !== false;
+
+  if (!booting && !canTestDas) {
+    return <ErrorPanel message="DAS Simples está liberado somente para superadmin durante os testes." />;
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -365,6 +466,52 @@ export default function DasPage() {
           <SummaryChip label="Sem débito" value={counts.sem_debito} tone="muted" />
           <SummaryChip label="Falhas" value={counts.erro} tone="danger" />
         </div>
+      </Card>
+
+      <Card className="border border-amber-300 p-5 dark:border-amber-800/60">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+              Laboratório superadmin
+            </p>
+            <h3 className="mt-1 text-sm font-semibold text-[var(--text-primary)]">
+              Trial oficial da SERPRO
+            </h3>
+            <p className="mt-1 max-w-2xl text-xs text-[var(--text-muted)]">
+              Usa somente dados fictícios da SERPRO. Não acessa nem altera a declaração da empresa selecionada.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => handleTrial('declarar')}
+              disabled={Boolean(actingId)}
+              className="inline-flex h-9 items-center gap-2 rounded-[10px] border border-amber-500 px-3 text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-60 dark:text-amber-300 dark:hover:bg-amber-950/30"
+            >
+              {actingId === 'trial-declarar' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              Testar declaração fictícia
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTrial('gerar')}
+              disabled={Boolean(actingId)}
+              className="inline-flex h-9 items-center gap-2 rounded-[10px] border border-amber-500 px-3 text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-60 dark:text-amber-300 dark:hover:bg-amber-950/30"
+            >
+              {actingId === 'trial-gerar' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              Testar DAS fictício
+            </button>
+          </div>
+        </div>
+        {trialResult ? (
+          <details className="mt-4 rounded-[10px] bg-[var(--canvas)] p-3 text-xs text-[var(--text-muted)]">
+            <summary className="cursor-pointer font-semibold text-[var(--text-primary)]">
+              Ver retorno do Trial
+            </summary>
+            <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-all">
+              {JSON.stringify(trialResult.response ?? trialResult, null, 2)}
+            </pre>
+          </details>
+        ) : null}
       </Card>
 
       <Card className="overflow-hidden p-0">
@@ -469,6 +616,29 @@ export default function DasPage() {
         Os valores e vencimentos refletem o que foi retornado pela Receita. Em caso de divergência,
         consulte diretamente o portal PGDAS-D.
       </p>
+
+      <DeclararDasModal
+        open={Boolean(declareDraft)}
+        periodoLabel={declareDraft?.periodoLabel || ''}
+        sugerido={declareDraft?.valorOk || 0}
+        notasCount={declareDraft?.count || 0}
+        loading={
+          String(actingId || '').startsWith('declare-')
+          || String(actingId || '').startsWith('simulate-')
+        }
+        simulationResult={simulationResult}
+        onCancel={() => {
+          if (
+            String(actingId || '').startsWith('declare-')
+            || String(actingId || '').startsWith('simulate-')
+          ) return;
+          setDeclareDraft(null);
+          setSimulationResult(null);
+          setSimulatedPayloadKey(null);
+        }}
+        onSimulate={handleSimular}
+        onConfirm={handleConfirmDeclarar}
+      />
     </div>
   );
 }

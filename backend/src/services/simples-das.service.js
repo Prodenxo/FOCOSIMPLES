@@ -34,6 +34,12 @@ import {
   sumNfseFaturamentoPeriodo,
   transmitirDeclaracaoMensal,
 } from './pgdasd/transmitir-declaracao.js'
+import {
+  declararPgdasdTrial,
+  gerarDasPgdasdTrial,
+  PGDASD_TRIAL_DECLARACAO_CNPJ,
+  PGDASD_TRIAL_DECLARACAO_PA,
+} from './pgdasd/trial.js'
 import { recordFiscalAudit } from './fiscal-audit.service.js'
 import { resolveUserEmpresaContext } from './certificate-repository.js'
 
@@ -636,6 +642,8 @@ export const getSimplesDasFaturamento = async (userId, periodoApuracao) => {
     cnpj,
     periodoApuracao: periodo,
     valorReceitaInterna: fat.total,
+    valorServicos: fat.valorServicos,
+    valorMercadorias: fat.valorMercadorias,
     indicadorTransmissao: false,
   })
   return {
@@ -643,15 +651,123 @@ export const getSimplesDasFaturamento = async (userId, periodoApuracao) => {
     ...fat,
     draftPreview: draft,
     aviso:
-      'Confira o valor das notas concluídas neste app antes de enviar. A Receita recebe esse faturamento.',
+      'Confira o faturamento. O app preenche o resto (CNPJ e tipo de atividade pelas notas). A Receita recebe esse valor.',
   }
 }
+
+const buildDeclaracaoFromInput = async ({
+  userId,
+  cnpj,
+  periodo,
+  payload,
+  indicadorTransmissao,
+}) => {
+  if (payload.declaracao && typeof payload.declaracao === 'object') {
+    return {
+      ...payload.declaracao,
+      cnpjCompleto: cnpj,
+      pa: Number(periodo),
+      indicadorTransmissao,
+    }
+  }
+
+  let valor = Number(payload.valorReceitaInterna)
+  let valorServicos = Number(payload.valorServicos)
+  let valorMercadorias = Number(payload.valorMercadorias)
+  if (
+    userId
+    && (!Number.isFinite(valor)
+      || !Number.isFinite(valorServicos)
+      || !Number.isFinite(valorMercadorias))
+  ) {
+    const fat = await sumNfseFaturamentoPeriodo(userId, periodo)
+    if (!Number.isFinite(valor)) valor = fat.total
+    if (!Number.isFinite(valorServicos)) valorServicos = fat.valorServicos
+    if (!Number.isFinite(valorMercadorias)) valorMercadorias = fat.valorMercadorias
+  }
+  if (!Number.isFinite(valor)) valor = 0
+
+  return buildDeclaracaoMensalPayload({
+    cnpj,
+    periodoApuracao: periodo,
+    valorReceitaInterna: valor,
+    valorReceitaExterna: payload.valorReceitaExterna,
+    valorServicos,
+    valorMercadorias,
+    tipoDeclaracao: payload.tipoDeclaracao,
+    idAtividadeServico: payload.idAtividadeServico,
+    idAtividadeMercadoria: payload.idAtividadeMercadoria,
+    codigoOutroMunicipio: payload.codigoOutroMunicipio,
+    outraUf: payload.outraUf,
+    valorFolha: payload.valorFolha,
+    cnpjsFiliais: payload.cnpjsFiliais,
+    indicadorTransmissao,
+  })
+}
+
+/**
+ * Calcula na Receita sem gravar declaração. Usa ambiente oficial e A1 real,
+ * mas `indicadorTransmissao=false`.
+ */
+export const simularSimplesDas = async (userId, payload = {}) => {
+  assertPgdasdSerproConfigured()
+  await assertCompanyCertReady(userId)
+  const cnpj = await resolveContribuinteCnpj(userId, payload.cnpj)
+  const periodo = normalizePeriodo(payload.periodoApuracao)
+  if (!periodo) throw badRequest('Informe periodoApuracao.')
+
+  const declaracao = await buildDeclaracaoFromInput({
+    userId,
+    cnpj,
+    periodo,
+    payload,
+    indicadorTransmissao: false,
+  })
+  const { response } = await transmitirDeclaracaoMensal({
+    contribuinteCnpj: cnpj,
+    declaracao,
+    userId,
+  })
+
+  return {
+    ok: true,
+    ambiente: 'oficial_sem_transmissao',
+    transmitido: false,
+    periodoApuracao: periodo,
+    cnpj,
+    declaracao,
+    responseStatus: response?.status || null,
+    dados: response?.dados || null,
+    mensagens: response?.raw?.mensagens || [],
+  }
+}
+
+/** Declaração fictícia no Trial SERPRO; nunca usa CNPJ/certificado do cliente. */
+export const declararSimplesDasTrial = async (payload = {}) => {
+  const declaracao = await buildDeclaracaoFromInput({
+    userId: null,
+    cnpj: PGDASD_TRIAL_DECLARACAO_CNPJ,
+    periodo: PGDASD_TRIAL_DECLARACAO_PA,
+    payload: {
+      ...payload,
+      valorReceitaInterna: Number.isFinite(Number(payload.valorReceitaInterna))
+        ? Number(payload.valorReceitaInterna)
+        : 10000,
+    },
+    indicadorTransmissao: true,
+  })
+  return declararPgdasdTrial(declaracao)
+}
+
+/** DAS fictício do período fixo disponibilizado pela SERPRO no Trial. */
+export const gerarSimplesDasTrial = async () => gerarDasPgdasdTrial()
 
 /**
  * Transmite declaração PGDAS-D (Fase 2).
  */
 export const declararSimplesDas = async (userId, payload = {}) => {
   assertPgdasdSerproConfigured()
+  await assertCompanyCertReady(userId)
   if (payload.confirm !== true) {
     throw badRequest(
       'Confirme a transmissão com confirm=true após revisar o rascunho (risco fiscal).',
@@ -662,21 +778,13 @@ export const declararSimplesDas = async (userId, payload = {}) => {
   const periodo = normalizePeriodo(payload.periodoApuracao)
   if (!periodo) throw badRequest('Informe periodoApuracao.')
 
-  let declaracao = payload.declaracao
-  if (!declaracao) {
-    let valor = Number(payload.valorReceitaInterna)
-    if (!Number.isFinite(valor)) {
-      const fat = await sumNfseFaturamentoPeriodo(userId, periodo)
-      valor = fat.total
-    }
-    declaracao = buildDeclaracaoMensalPayload({
-      cnpj,
-      periodoApuracao: periodo,
-      valorReceitaInterna: valor,
-      valorReceitaExterna: payload.valorReceitaExterna,
-      indicadorTransmissao: true,
-    })
-  }
+  const declaracao = await buildDeclaracaoFromInput({
+    userId,
+    cnpj,
+    periodo,
+    payload,
+    indicadorTransmissao: true,
+  })
 
   const { response } = await transmitirDeclaracaoMensal({
     contribuinteCnpj: cnpj,

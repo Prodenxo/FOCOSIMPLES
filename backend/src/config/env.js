@@ -147,6 +147,11 @@ export const env = {
   SERPRO_OAUTH_TOKEN_URL: process.env.SERPRO_OAUTH_TOKEN_URL || "",
   SERPRO_OAUTH_TOKEN_NO_MTLS: process.env.SERPRO_OAUTH_TOKEN_NO_MTLS || "false",
   SERPRO_API_BASE_URL: process.env.SERPRO_API_BASE_URL || "",
+  /**
+   * Bearer público/opcional do ambiente de demonstração Integra Contador.
+   * Não é credencial de produção e nunca autoriza dados reais.
+   */
+  SERPRO_TRIAL_BEARER_TOKEN: process.env.SERPRO_TRIAL_BEARER_TOKEN || "",
   SERPRO_CONSUMER_KEY: process.env.SERPRO_CONSUMER_KEY || "",
   SERPRO_CONSUMER_SECRET: process.env.SERPRO_CONSUMER_SECRET || "",
   SERPRO_ROLE_TYPE: process.env.SERPRO_ROLE_TYPE || "TERCEIROS",

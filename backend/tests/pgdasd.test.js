@@ -194,11 +194,13 @@ describe('pgdasd faturamento notas', () => {
     assert.equal(fat.total, 101.13)
     assert.equal(fat.porTipo.NFSE, 1)
     assert.equal(fat.porTipo.NFE, 1)
+    assert.equal(fat.valorServicos, 1.13)
+    assert.equal(fat.valorMercadorias, 100)
   })
 })
 
 describe('pgdasd declaracao draft', () => {
-  it('monta payload mínimo TRANSDECLARACAO', () => {
+  it('monta payload TRANSDECLARACAO no formato SERPRO, só com o faturamento', () => {
     const draft = buildDeclaracaoMensalPayload({
       cnpj: '49453916000196',
       periodoApuracao: '202606',
@@ -206,8 +208,56 @@ describe('pgdasd declaracao draft', () => {
     })
     assert.equal(draft.cnpjCompleto, '49453916000196')
     assert.equal(draft.pa, 202606)
-    assert.equal(draft.declaracao.receitaBrutaPa.valorCaixaInterno, 1500.5)
-    assert.equal(draft.declaracao.receitasBrutasAnteriores.length, 12)
+    assert.equal(draft.indicadorComparacao, false)
+    assert.equal(draft.declaracao.tipoDeclaracao, 1)
+    assert.equal(draft.declaracao.receitaPaCompetenciaInterno, 1500.5)
+    assert.equal(draft.declaracao.receitaPaCompetenciaExterno, 0)
+    assert.equal(draft.declaracao.estabelecimentos[0].cnpjCompleto, '49453916000196')
+    assert.equal(draft.declaracao.estabelecimentos[0].atividades[0].idAtividade, 14)
+    assert.equal(draft.declaracao.estabelecimentos[0].atividades[0].valorAtividade, 1500.5)
+    assert.equal(draft.declaracao.receitaBrutaPa, undefined)
+  })
+
+  it('parte serviço e mercadoria pelas notas e marca retificadora', () => {
+    const draft = buildDeclaracaoMensalPayload({
+      cnpj: '49453916000196',
+      periodoApuracao: '202606',
+      valorReceitaInterna: 101.13,
+      valorServicos: 1.13,
+      valorMercadorias: 100,
+      tipoDeclaracao: 2,
+    })
+    const ids = draft.declaracao.estabelecimentos[0].atividades.map((a) => a.idAtividade)
+    assert.deepEqual(ids, [14, 1])
+    assert.equal(draft.declaracao.tipoDeclaracao, 2)
+  })
+
+  it('mês zerado envia estabelecimento sem atividade', () => {
+    const draft = buildDeclaracaoMensalPayload({
+      cnpj: '49453916000196',
+      periodoApuracao: '202606',
+      valorReceitaInterna: 0,
+    })
+    assert.equal(draft.declaracao.estabelecimentos[0].atividades, undefined)
+  })
+
+  it('caso especial preenche ISS outro município, folha e filial', () => {
+    const draft = buildDeclaracaoMensalPayload({
+      cnpj: '49453916000196',
+      periodoApuracao: '202606',
+      valorReceitaInterna: 2000,
+      idAtividadeServico: 13,
+      codigoOutroMunicipio: '3550308',
+      outraUf: 'SP',
+      valorFolha: 800,
+      cnpjsFiliais: '11222333000181',
+    })
+    const atividade = draft.declaracao.estabelecimentos[0].atividades[0]
+    assert.equal(atividade.idAtividade, 13)
+    assert.equal(atividade.receitasAtividade[0].codigoOutroMunicipio, '3550308')
+    assert.equal(atividade.receitasAtividade[0].outraUf, 'SP')
+    assert.equal(draft.declaracao.folhasSalario[0].valor, 800)
+    assert.equal(draft.declaracao.estabelecimentos[1].cnpjCompleto, '11222333000181')
   })
 })
 

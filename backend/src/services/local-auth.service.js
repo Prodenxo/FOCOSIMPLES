@@ -651,7 +651,11 @@ export const localImpersonate = async (accessToken, targetUserId) => {
     email: targetRow.email,
     role: 'authenticated',
     user_metadata: meta,
-    app_metadata: { provider: 'email' },
+    app_metadata: {
+      provider: 'email',
+      impersonated_by: requesterId,
+      impersonator_role: role,
+    },
   });
 
   const { role: resolvedRole, empresaId: resolvedEmpresaId, mei } = await getRoleAndCompany(targetUserId);
