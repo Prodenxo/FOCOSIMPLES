@@ -41,7 +41,12 @@ export const normalizeDasSimplesDraft = (value = {}) => ({
   idAtividadeServico: Math.min(Math.max(Number(value.idAtividadeServico) || 14, 1), 43),
   idAtividadeMercadoria: Math.min(Math.max(Number(value.idAtividadeMercadoria) || 1, 1), 43),
   valorReceitaExterna: finiteNonNegative(value.valorReceitaExterna),
-  valorFolha: finiteNonNegative(value.valorFolha),
+  folhasSalario: (Array.isArray(value.folhasSalario) ? value.folhasSalario : [])
+    .map((item) => ({
+      pa: normalizePeriodo(item?.pa),
+      valor: finiteNonNegative(item?.valor),
+    }))
+    .filter((item) => item.pa),
   codigoOutroMunicipio: String(value.codigoOutroMunicipio || '').replace(/\D/g, '').slice(0, 7),
   outraUf: String(value.outraUf || '').trim().toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2),
   cnpjsFiliais: String(value.cnpjsFiliais || '').slice(0, 1000),
@@ -50,10 +55,26 @@ export const normalizeDasSimplesDraft = (value = {}) => ({
 export const getDasSimplesDraft = async ({ userId, cnpj, periodoApuracao }) => {
   const row = await getDasSimplesByPeriodo({ userId, cnpj, periodoApuracao })
   const draft = row?.detalhamento_json?.rascunho
-  if (!draft || typeof draft !== 'object') return null
+  if (draft && typeof draft === 'object') {
+    return {
+      ...normalizeDasSimplesDraft(draft),
+      updatedAt: draft.updatedAt || row.updated_at || null,
+    }
+  }
+
+  // Reaproveita os 11 meses em comum do rascunho anterior. O contador
+  // precisa preencher apenas o mês novo quando avançar uma competência.
+  const periodo = normalizePeriodo(periodoApuracao)
+  if (!periodo) return null
+  const date = new Date(Date.UTC(Number(periodo.slice(0, 4)), Number(periodo.slice(4, 6)) - 2, 1))
+  const anterior = `${date.getUTCFullYear()}${String(date.getUTCMonth() + 1).padStart(2, '0')}`
+  const previousRow = await getDasSimplesByPeriodo({ userId, cnpj, periodoApuracao: anterior })
+  const previousDraft = previousRow?.detalhamento_json?.rascunho
+  if (!previousDraft || typeof previousDraft !== 'object') return null
   return {
-    ...normalizeDasSimplesDraft(draft),
-    updatedAt: draft.updatedAt || row.updated_at || null,
+    ...normalizeDasSimplesDraft(previousDraft),
+    updatedAt: null,
+    inheritedFrom: anterior,
   }
 }
 
@@ -122,6 +143,16 @@ export const upsertDasSimples = async (row) => {
   }
   const competencia = periodoToCompetencia(periodo)
   const db = getDb()
+  const existing = await getDasSimplesByPeriodo({
+    userId,
+    cnpj,
+    periodoApuracao: periodo,
+  })
+  const existingDraft = existing?.detalhamento_json?.rascunho
+  const detalhamento = {
+    ...(row.detalhamento || {}),
+    ...(existingDraft ? { rascunho: existingDraft } : {}),
+  }
   const payload = {
     user_id: userId,
     cnpj,
@@ -131,7 +162,7 @@ export const upsertDasSimples = async (row) => {
     pdf_base64: row.pdfBase64 || null,
     numero_documento: row.numeroDocumento || null,
     valor_total: row.valorTotal ?? null,
-    detalhamento_json: row.detalhamento || null,
+    detalhamento_json: Object.keys(detalhamento).length ? detalhamento : null,
     error_message: row.errorMessage || null,
     source: 'pgdasd',
     updated_at: new Date().toISOString(),

@@ -20,11 +20,24 @@ const MERCADORIA_OPTIONS = [
 ];
 
 const ISS_OUTRO_MUNICIPIO = new Set(['10', '13', '16', '19', '22', '25', '40']);
+const FATOR_R_ATIVIDADES = new Set(['10', '11', '12', '29']);
 
 const moneyToInput = (value) => {
   const n = Number(value);
   if (!Number.isFinite(n) || n === 0) return '';
   return n.toFixed(2).replace('.', ',');
+};
+
+const folhaPeriodosAnteriores = (periodoApuracao) => {
+  const digits = String(periodoApuracao || '').replace(/\D/g, '');
+  if (digits.length !== 6) return [];
+  const year = Number(digits.slice(0, 4));
+  const month = Number(digits.slice(4, 6));
+  return Array.from({ length: 12 }, (_, index) => {
+    const date = new Date(Date.UTC(year, month - 2 - index, 1));
+    const pa = `${date.getUTCFullYear()}${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+    return { pa, label: `${String(date.getUTCMonth() + 1).padStart(2, '0')}/${date.getUTCFullYear()}` };
+  }).reverse();
 };
 
 /**
@@ -33,6 +46,7 @@ const moneyToInput = (value) => {
  */
 export function DeclararDasModal({
   open,
+  periodoApuracao,
   periodoLabel,
   sugerido = 0,
   notasCount = 0,
@@ -51,7 +65,7 @@ export function DeclararDasModal({
   const [idServico, setIdServico] = useState('14');
   const [idMercadoria, setIdMercadoria] = useState('1');
   const [valorExterno, setValorExterno] = useState('');
-  const [valorFolha, setValorFolha] = useState('');
+  const [folhasSalario, setFolhasSalario] = useState([]);
   const [codigoMunicipio, setCodigoMunicipio] = useState('');
   const [outraUf, setOutraUf] = useState('');
   const [filiais, setFiliais] = useState('');
@@ -59,21 +73,31 @@ export function DeclararDasModal({
 
   useEffect(() => {
     if (!open) return;
-    setFaturamento(moneyToInput(initialDraft?.valorReceitaInterna ?? sugerido) || '0,00');
+    const inherited = Boolean(initialDraft?.inheritedFrom);
+    setFaturamento(
+      moneyToInput(inherited ? sugerido : (initialDraft?.valorReceitaInterna ?? sugerido)) || '0,00',
+    );
     setCasoEspecial(initialDraft?.casoEspecial === true);
     setIdServico(String(initialDraft?.idAtividadeServico || 14));
     setIdMercadoria(String(initialDraft?.idAtividadeMercadoria || 1));
-    setValorExterno(moneyToInput(initialDraft?.valorReceitaExterna));
-    setValorFolha(moneyToInput(initialDraft?.valorFolha));
+    setValorExterno(inherited ? '' : moneyToInput(initialDraft?.valorReceitaExterna));
+    const savedFolhas = new Map(
+      (initialDraft?.folhasSalario || []).map((item) => [String(item.pa), item.valor]),
+    );
+    setFolhasSalario(folhaPeriodosAnteriores(periodoApuracao).map((item) => ({
+      ...item,
+      valor: moneyToInput(savedFolhas.get(item.pa)),
+    })));
     setCodigoMunicipio(String(initialDraft?.codigoOutroMunicipio || ''));
     setOutraUf(String(initialDraft?.outraUf || ''));
     setFiliais(String(initialDraft?.cnpjsFiliais || ''));
     setError(null);
-  }, [open, sugerido, initialDraft]);
+  }, [open, sugerido, initialDraft, periodoApuracao]);
 
   if (!open) return null;
 
   const precisaMunicipio = casoEspecial && ISS_OUTRO_MUNICIPIO.has(idServico);
+  const precisaFolhasFatorR = casoEspecial && FATOR_R_ATIVIDADES.has(idServico);
 
   const buildPayload = () => {
     const valor = parseDecimal(faturamento);
@@ -86,7 +110,12 @@ export function DeclararDasModal({
           idAtividadeServico: Number(idServico),
           idAtividadeMercadoria: Number(idMercadoria),
           valorReceitaExterna: parseDecimal(valorExterno) || 0,
-          valorFolha: parseDecimal(valorFolha) || 0,
+          folhasSalario: precisaFolhasFatorR
+            ? folhasSalario.map((item) => ({
+                pa: item.pa,
+                valor: parseDecimal(item.valor) || 0,
+              }))
+            : [],
           codigoOutroMunicipio: codigoMunicipio.replace(/\D/g, ''),
           outraUf: outraUf.trim().toUpperCase().slice(0, 2),
           cnpjsFiliais: filiais,
@@ -208,17 +237,36 @@ export function DeclararDasModal({
                 className="mt-1 h-10 w-full rounded-[10px] border border-[var(--card-border)] bg-[var(--canvas)] px-3 text-sm"
               />
             </label>
-            <label className="block text-xs font-medium text-[var(--text-muted)]">
-              Folha de salário do mês (R$)
-              <input
-                type="text"
-                inputMode="decimal"
-                value={valorFolha}
-                onChange={(e) => setValorFolha(e.target.value)}
-                placeholder="0,00"
-                className="mt-1 h-10 w-full rounded-[10px] border border-[var(--card-border)] bg-[var(--canvas)] px-3 text-sm"
-              />
-            </label>
+            {precisaFolhasFatorR ? (
+              <div>
+                <p className="text-xs font-medium text-[var(--text-muted)]">
+                  Folha de salário dos 12 meses anteriores (Fator R)
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-[var(--text-muted)]">
+                  Informe salário, pró-labore, 13º, INSS patronal e FGTS de cada mês. Use 0,00 quando não houve folha.
+                </p>
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {folhasSalario.map((item, index) => (
+                    <label key={item.pa} className="text-xs font-medium text-[var(--text-muted)]">
+                      {item.label}
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={item.valor}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setFolhasSalario((current) => current.map((row, rowIndex) => (
+                            rowIndex === index ? { ...row, valor: value } : row
+                          )));
+                        }}
+                        placeholder="0,00"
+                        className="mt-1 h-10 w-full rounded-[10px] border border-[var(--card-border)] bg-[var(--canvas)] px-3 text-sm"
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <label className="block text-xs font-medium text-[var(--text-muted)]">
               CNPJ de filial sem movimento (opcional)
               <input

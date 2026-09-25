@@ -19,7 +19,7 @@ describe('pgdasd rascunho', () => {
       idAtividadeServico: 13,
       idAtividadeMercadoria: 2,
       valorReceitaExterna: -10,
-      valorFolha: '800',
+      folhasSalario: [{ pa: '202507', valor: '800' }],
       codigoOutroMunicipio: '35.503-08',
       outraUf: 'sp!',
       cnpjsFiliais: '11.222.333/0001-81',
@@ -30,7 +30,7 @@ describe('pgdasd rascunho', () => {
       idAtividadeServico: 13,
       idAtividadeMercadoria: 2,
       valorReceitaExterna: 0,
-      valorFolha: 800,
+      folhasSalario: [{ pa: '202507', valor: 800 }],
       codigoOutroMunicipio: '3550308',
       outraUf: 'SP',
       cnpjsFiliais: '11.222.333/0001-81',
@@ -287,7 +287,7 @@ describe('pgdasd declaracao draft', () => {
     assert.equal(draft.declaracao.estabelecimentos[0].atividades, undefined)
   })
 
-  it('caso especial preenche ISS outro município, folha e filial', () => {
+  it('caso especial preenche ISS outro município e filial sem mandar folha indevida', () => {
     const draft = buildDeclaracaoMensalPayload({
       cnpj: '49453916000196',
       periodoApuracao: '202606',
@@ -295,15 +295,43 @@ describe('pgdasd declaracao draft', () => {
       idAtividadeServico: 13,
       codigoOutroMunicipio: '3550308',
       outraUf: 'SP',
-      valorFolha: 800,
+      folhasSalario: [{ pa: 202507, valor: 800 }],
       cnpjsFiliais: '11222333000181',
     })
     const atividade = draft.declaracao.estabelecimentos[0].atividades[0]
     assert.equal(atividade.idAtividade, 13)
     assert.equal(atividade.receitasAtividade[0].codigoOutroMunicipio, '3550308')
     assert.equal(atividade.receitasAtividade[0].outraUf, 'SP')
-    assert.equal(draft.declaracao.folhasSalario[0].valor, 800)
+    assert.equal(draft.declaracao.folhasSalario, undefined)
     assert.equal(draft.declaracao.estabelecimentos[1].cnpjCompleto, '11222333000181')
+  })
+
+  it('atividade de Fator R exige e envia os 12 meses anteriores de folha', () => {
+    const folhasSalario = [
+      202507, 202508, 202509, 202510, 202511, 202512,
+      202601, 202602, 202603, 202604, 202605, 202606,
+    ].map((pa, index) => ({ pa, valor: index * 100 }))
+    const draft = buildDeclaracaoMensalPayload({
+      cnpj: '49453916000196',
+      periodoApuracao: '202607',
+      valorReceitaInterna: 2000,
+      idAtividadeServico: 11,
+      folhasSalario,
+    })
+    assert.deepEqual(draft.declaracao.folhasSalario, folhasSalario)
+  })
+
+  it('atividade de Fator R recusa folha incompleta', () => {
+    assert.throws(
+      () => buildDeclaracaoMensalPayload({
+        cnpj: '49453916000196',
+        periodoApuracao: '202607',
+        valorReceitaInterna: 2000,
+        idAtividadeServico: 11,
+        folhasSalario: [{ pa: 202606, valor: 800 }],
+      }),
+      /12 meses anteriores/,
+    )
   })
 })
 

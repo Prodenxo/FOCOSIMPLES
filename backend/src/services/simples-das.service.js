@@ -721,7 +721,7 @@ const buildDeclaracaoFromInput = async ({
     idAtividadeMercadoria: payload.idAtividadeMercadoria,
     codigoOutroMunicipio: payload.codigoOutroMunicipio,
     outraUf: payload.outraUf,
-    valorFolha: payload.valorFolha,
+    folhasSalario: payload.folhasSalario,
     cnpjsFiliais: payload.cnpjsFiliais,
     indicadorTransmissao,
   })

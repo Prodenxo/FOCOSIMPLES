@@ -233,7 +233,7 @@ export default function DasPage() {
       idAtividadeServico: form.idAtividadeServico,
       idAtividadeMercadoria: form.idAtividadeMercadoria,
       valorReceitaExterna: form.valorReceitaExterna,
-      valorFolha: form.valorFolha,
+      folhasSalario: form.folhasSalario,
       codigoOutroMunicipio: form.codigoOutroMunicipio,
       outraUf: form.outraUf,
       cnpjsFiliais: form.cnpjsFiliais,
@@ -662,6 +662,7 @@ export default function DasPage() {
 
       <DeclararDasModal
         open={Boolean(declareDraft)}
+        periodoApuracao={declareDraft?.periodoApuracao || ''}
         periodoLabel={declareDraft?.periodoLabel || ''}
         sugerido={declareDraft?.valorOk || 0}
         notasCount={declareDraft?.count || 0}

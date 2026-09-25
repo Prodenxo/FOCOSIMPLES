@@ -34,6 +34,7 @@ export const PGDASD_ATIVIDADE_SERVICO_ANEXO_III = 14
 export const PGDASD_ATIVIDADE_REVENDA_SEM_ST = 1
 
 const ISS_OUTRO_MUNICIPIO_IDS = new Set([10, 13, 16, 19, 22, 25, 40])
+const FATOR_R_ATIVIDADE_IDS = new Set([10, 11, 12, 29])
 
 const toAtividadeId = (value, fallback) => {
   const n = Number(value)
@@ -62,6 +63,32 @@ const parseCnpjList = (value) => {
     if (digits.length === 14 && !out.includes(digits)) out.push(digits)
   }
   return out
+}
+
+export const getFolhaPeriodosFatorR = (periodoApuracao) => {
+  const pa = normalizePeriodo(periodoApuracao)
+  if (!pa) return []
+  const year = Number(pa.slice(0, 4))
+  const month = Number(pa.slice(4, 6))
+  return Array.from({ length: 12 }, (_, index) => {
+    const date = new Date(Date.UTC(year, month - 2 - index, 1))
+    return Number(`${date.getUTCFullYear()}${String(date.getUTCMonth() + 1).padStart(2, '0')}`)
+  }).reverse()
+}
+
+const buildFolhasSalarioFatorR = (periodoApuracao, values) => {
+  const required = getFolhaPeriodosFatorR(periodoApuracao)
+  const byPeriodo = new Map(
+    (Array.isArray(values) ? values : []).map((item) => [
+      Number(normalizePeriodo(item?.pa)),
+      roundMoney(item?.valor),
+    ]),
+  )
+  const missing = required.filter((pa) => !byPeriodo.has(pa))
+  if (missing.length) {
+    throw badRequest('Informe a folha de salário dos 12 meses anteriores para calcular o Fator R.')
+  }
+  return required.map((pa) => ({ pa, valor: byPeriodo.get(pa) }))
 }
 
 /**
@@ -109,7 +136,7 @@ export const splitFaturamentoAtividades = ({
  *   idAtividadeMercadoria?: number,
  *   codigoOutroMunicipio?: string,
  *   outraUf?: string,
- *   valorFolha?: number,
+ *   folhasSalario?: Array<{pa: number|string, valor: number}>,
  *   cnpjsFiliais?: string[]|string,
  *   tipoDeclaracao?: number,
  *   indicadorTransmissao?: boolean,
@@ -170,7 +197,6 @@ export const buildDeclaracaoMensalPayload = (input = {}) => {
     ...filiais.map((doc) => ({ cnpjCompleto: doc })),
   ]
 
-  const valorFolha = roundMoney(input.valorFolha)
   const declaracao = {
     tipoDeclaracao,
     receitaPaCompetenciaInterno: valorInterno,
@@ -179,8 +205,8 @@ export const buildDeclaracaoMensalPayload = (input = {}) => {
     receitaPaCaixaExterno: null,
     estabelecimentos,
   }
-  if (valorFolha > 0) {
-    declaracao.folhasSalario = [{ pa: Number(pa), valor: valorFolha }]
+  if (servicos > 0 && FATOR_R_ATIVIDADE_IDS.has(idServico)) {
+    declaracao.folhasSalario = buildFolhasSalarioFatorR(pa, input.folhasSalario)
   }
 
   return {
