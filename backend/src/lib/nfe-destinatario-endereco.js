@@ -1,7 +1,7 @@
 /**
  * Enriquece endereço do destinatário NF-e via CEP (IBGE/UF/cidade corretos).
  */
-import { lookupCepBrasilApi, lookupCepViaCep } from '../services/cnpj-lookup.service.js';
+import { lookupCepBrasilApi, lookupCepViaCep, readCityIbgeCode } from '../services/cnpj-lookup.service.js';
 
 const onlyDigits = (value, max) => String(value ?? '').replace(/\D/g, '').slice(0, max);
 
@@ -25,8 +25,8 @@ export const enrichDestinatarioEnderecoForNfeEmit = async (endereco) => {
   const brasil = await lookupCepBrasilApi(cep);
   const via = brasil ? null : await lookupCepViaCep(cep);
 
-  const ibge = padIbge(brasil?.city_ibge_code)
-    || padIbge(via?.ibge)
+  const ibge = readCityIbgeCode(brasil)
+    || readCityIbgeCode(via)
     || padIbge(base.codigoCidade);
 
   return {

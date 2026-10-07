@@ -143,6 +143,23 @@ export const lookupCepBrasilApi = async (cepInput) => {
   }
 };
 
+/**
+ * IBGE do município no retorno de CEP.
+ * BrasilAPI antiga: `city_ibge_code`. Atual: `ibge.city`. ViaCEP: `ibge` string.
+ * @param {unknown} payload
+ * @returns {string}
+ */
+export const readCityIbgeCode = (payload) => {
+  if (!payload || typeof payload !== 'object') return '';
+  const nested = payload.ibge && typeof payload.ibge === 'object' && !Array.isArray(payload.ibge)
+    ? payload.ibge.city
+    : payload.ibge;
+  const raw = payload.city_ibge_code ?? nested;
+  const digits = String(raw ?? '').replace(/\D/g, '');
+  if (!digits || digits.length > 7) return '';
+  return digits.padStart(7, '0');
+};
+
 /** Fallback quando BrasilAPI CEP v2 não traz IBGE (ex.: 21221300). */
 export const lookupCepViaCep = async (cepInput) => {
   const cep = normalizeDoc(cepInput).slice(0, 8);
@@ -162,16 +179,12 @@ export const lookupCepViaCep = async (cepInput) => {
 };
 
 const ibgeFromCepLookupPayload = async (cep, brasilApiRaw) => {
-  const fromBrasilApi =
-    brasilApiRaw?.city_ibge_code != null && String(brasilApiRaw.city_ibge_code).trim()
-      ? padZeros(brasilApiRaw.city_ibge_code, 7)
-      : null;
+  const fromBrasilApi = readCityIbgeCode(brasilApiRaw);
   if (fromBrasilApi) return fromBrasilApi;
 
   const viaCep = await lookupCepViaCep(cep);
-  if (viaCep?.ibge != null && String(viaCep.ibge).trim()) {
-    return padZeros(viaCep.ibge, 7);
-  }
+  const fromViaCep = readCityIbgeCode(viaCep);
+  if (fromViaCep) return fromViaCep;
 
   const cidade = brasilApiRaw?.city || viaCep?.localidade || null;
   const uf = brasilApiRaw?.state || viaCep?.uf || null;

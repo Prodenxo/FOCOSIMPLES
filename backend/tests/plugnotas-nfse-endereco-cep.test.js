@@ -163,6 +163,46 @@ test('enderecoFromCepLookupNfse usa tabela IBGE local quando APIs não trazem c�
   assert.ok(hasCompleteTomadorEndereco(endereco));
 });
 
+test('enderecoFromCepLookupNfse lê IBGE em ibge.city da BrasilAPI', async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => {
+    global.fetch = originalFetch;
+  });
+
+  global.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes('/cep/v2/77600000')) {
+      return {
+        ok: true,
+        async json() {
+          return {
+            cep: '77600000',
+            state: 'TO',
+            city: 'Paraíso do Tocantins',
+            neighborhood: null,
+            street: null,
+            ibge: { city: '1716109', state: '17' },
+          };
+        },
+      };
+    }
+    if (u.includes('viacep.com.br/ws/77600000')) {
+      return {
+        ok: true,
+        async json() {
+          return { erro: 'true' };
+        },
+      };
+    }
+    throw new Error(`fetch inesperado: ${url}`);
+  };
+
+  const endereco = await enderecoFromCepLookupNfse('77600000');
+  assert.equal(endereco?.descricaoCidade, 'Paraíso do Tocantins');
+  assert.equal(endereco?.estado, 'TO');
+  assert.equal(endereco?.codigoCidade, '1716109');
+});
+
 test('pruneEndereco aceita cidade como descricaoCidade', () => {
   const endereco = pruneEndereco({
     cep: '59082095',

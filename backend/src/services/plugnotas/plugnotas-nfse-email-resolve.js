@@ -1,6 +1,6 @@
 import { createSupabaseClient } from '../../config/supabase.js';
 import { badRequest } from '../../utils/errors.js';
-import { lookupCepBrasilApi, lookupCepViaCep, lookupCnpjCascade } from '../cnpj-lookup.service.js';
+import { lookupCepBrasilApi, lookupCepViaCep, lookupCnpjCascade, readCityIbgeCode } from '../cnpj-lookup.service.js';
 import { resolveIbgeCodigoFromMunicipio } from '../ibge-municipios-lookup.service.js';
 import { getEmitenteNfseSnapshot } from '../mei-certificate-store.js';
 import { unwrapPlugnotasEmpresaRecord } from '../mei-emitente-empresa-sync.js';
@@ -341,7 +341,7 @@ export const enderecoFromCepLookupNfse = async (cepInput, partialEndereco = null
         descricaoCidade,
         estado,
         null,
-        viaOnly.ibge,
+        readCityIbgeCode(viaOnly),
       ),
       descricaoCidade,
       estado,
@@ -355,8 +355,8 @@ export const enderecoFromCepLookupNfse = async (cepInput, partialEndereco = null
   const ibgeFromCep = resolveIbgeFromCepPayload(
     descricaoCidade,
     estado,
-    cepRaw.city_ibge_code,
-    viaCep?.ibge,
+    readCityIbgeCode(cepRaw),
+    readCityIbgeCode(viaCep),
   );
 
   return pruneEndereco({

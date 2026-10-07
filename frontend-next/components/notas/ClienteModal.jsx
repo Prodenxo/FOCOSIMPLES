@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
@@ -125,6 +125,15 @@ export function ClienteModal({ cliente, onClose, onSuccess }) {
       setLookingUp(false);
     }
   };
+
+  useEffect(() => {
+    const cep = onlyDigits(form.endereco.cep);
+    if (cep.length === 8 && onlyDigits(form.endereco.codigoCidade).length !== 7) {
+      handleLookupCep();
+    }
+    // Preenche o IBGE ao abrir um cadastro que já tem CEP e ainda não tem o código.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSubmit = async () => {
     const doc = onlyDigits(form.documento);
