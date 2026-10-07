@@ -48,11 +48,12 @@ import { badRequest, unauthorized } from '../utils/errors.js';
 import { parseCatalogLimit } from '../utils/mei-catalog-query.js';
 import { sendSuccess } from '../utils/response.js';
 
-/** Empresa ativa da sessão — isola catálogo por tenant no app. */
-const catalogHttpOpts = (req) => {
-  const empresaId = String(req.requesterContext?.empresaId || '').trim();
-  return empresaId ? { empresaId } : {};
-};
+/**
+ * O app grava e lista o catálogo no usuário da sessão.
+ * `empresas_id` aqui é o escritório, não o CNPJ emissor. Passar esse id
+ * jogava clientes e serviços de todos os CNPJs no mesmo cadastro.
+ */
+const catalogHttpOpts = (_req) => ({});
 
 const firstValue = (value) => (Array.isArray(value) ? value[0] : value);
 const toToken = (value) => String(firstValue(value) || '').trim();
