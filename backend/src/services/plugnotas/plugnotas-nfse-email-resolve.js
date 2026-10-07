@@ -35,7 +35,7 @@ export const pruneEndereco = (endereco) => {
   const logradouro = String(endereco.logradouro || '').trim();
   const numero = String(endereco.numero || '').trim();
   const bairro = String(endereco.bairro || '').trim();
-  const descricaoCidade = String(endereco.descricaoCidade || '').trim();
+  const descricaoCidade = String(endereco.descricaoCidade || endereco.cidade || '').trim();
   const estado = String(endereco.estado || '').trim().toUpperCase().slice(0, 2);
   const complemento = String(endereco.complemento || '').trim();
   const next = {
@@ -371,6 +371,13 @@ export const enderecoFromCepLookupNfse = async (cepInput, partialEndereco = null
   });
 };
 
+const withDescricaoCidadeAlias = (endereco) => {
+  if (!isPlainObject(endereco)) return endereco;
+  const descricaoCidade = String(endereco.descricaoCidade || endereco.cidade || '').trim();
+  if (!descricaoCidade || String(endereco.descricaoCidade || '').trim()) return endereco;
+  return { ...endereco, descricaoCidade };
+};
+
 /**
  * Completa metadata_json.endereco via CEP (BrasilAPI/ViaCEP + tabela IBGE local).
  * @param {Record<string, unknown>|null|undefined} metadata
@@ -378,8 +385,11 @@ export const enderecoFromCepLookupNfse = async (cepInput, partialEndereco = null
  */
 export const enrichCatalogClienteMetadataFromCep = async (metadata) => {
   if (!isPlainObject(metadata)) return metadata;
-  const endereco = metadata.endereco;
+  const endereco = withDescricaoCidadeAlias(metadata.endereco);
   if (!isPlainObject(endereco)) return metadata;
+  if (endereco !== metadata.endereco) {
+    metadata = { ...metadata, endereco };
+  }
 
   const cep = normalizeDoc(endereco.cep).slice(0, 8);
   if (cep.length !== 8) return metadata;

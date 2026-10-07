@@ -3,8 +3,10 @@ import test from 'node:test';
 import {
   buildTomadorEnderecoMissingUserMessage,
   enderecoFromCepLookupNfse,
+  enrichCatalogClienteMetadataFromCep,
   hasCompleteTomadorEndereco,
   listMissingTomadorEnderecoFields,
+  pruneEndereco,
   resolveTomadorEmitEndereco,
 } from '../src/services/plugnotas/plugnotas-nfse-email-resolve.js';
 
@@ -159,6 +161,34 @@ test('enderecoFromCepLookupNfse usa tabela IBGE local quando APIs não trazem c�
   const endereco = await enderecoFromCepLookupNfse('21221300', { numero: '94 apt 101' });
   assert.equal(endereco?.codigoCidade, '3304557');
   assert.ok(hasCompleteTomadorEndereco(endereco));
+});
+
+test('pruneEndereco aceita cidade como descricaoCidade', () => {
+  const endereco = pruneEndereco({
+    cep: '59082095',
+    logradouro: 'Avenida Engenheiro Roberto Freire',
+    numero: '1962',
+    bairro: 'Capim Macio',
+    cidade: 'Natal',
+    estado: 'RN',
+    codigoCidade: '2408102',
+  });
+  assert.equal(endereco?.descricaoCidade, 'Natal');
+  assert.equal(endereco?.codigoCidade, '2408102');
+  assert.ok(hasCompleteTomadorEndereco(endereco));
+});
+
+test('enrichCatalogClienteMetadataFromCep grava cidade mesmo com IBGE já preenchido', async () => {
+  const metadata = await enrichCatalogClienteMetadataFromCep({
+    endereco: {
+      cep: '59082095',
+      cidade: 'Natal',
+      estado: 'RN',
+      codigoCidade: '2408102',
+    },
+  });
+  assert.equal(metadata?.endereco?.descricaoCidade, 'Natal');
+  assert.equal(metadata?.endereco?.codigoCidade, '2408102');
 });
 
 test('listMissingTomadorEnderecoFields detecta só IBGE em falta', () => {

@@ -44,8 +44,12 @@ export function ClienteModal({ cliente, onClose, onSuccess }) {
       complemento: cliente?.metadata_json?.endereco?.complemento || '',
       bairro: cliente?.metadata_json?.endereco?.bairro || '',
       cep: cliente?.metadata_json?.endereco?.cep || '',
-      cidade: cliente?.metadata_json?.endereco?.cidade || '',
-      estado: cliente?.metadata_json?.endereco?.estado || '',
+      cidade: cliente?.metadata_json?.endereco?.descricaoCidade
+        || cliente?.metadata_json?.endereco?.cidade
+        || '',
+      estado: cliente?.metadata_json?.endereco?.estado
+        || cliente?.metadata_json?.endereco?.uf
+        || '',
       codigoCidade: cliente?.metadata_json?.endereco?.codigoCidade || '',
     },
     indIEDest: cliente?.metadata_json?.indIEDest || '9',
@@ -79,8 +83,12 @@ export function ClienteModal({ cliente, onClose, onSuccess }) {
             complemento: data.endereco?.complemento || prev.endereco.complemento,
             bairro: data.endereco?.bairro || prev.endereco.bairro,
             cep: data.endereco?.cep || prev.endereco.cep,
-            cidade: data.endereco?.cidade || data.endereco?.localidade || prev.endereco.cidade,
-            estado: data.endereco?.uf || prev.endereco.estado,
+            cidade: data.endereco?.descricaoCidade
+              || data.endereco?.cidade
+              || data.endereco?.localidade
+              || prev.endereco.cidade,
+            estado: data.endereco?.uf || data.endereco?.estado || prev.endereco.estado,
+            codigoCidade: data.endereco?.codigoCidade || prev.endereco.codigoCidade,
           },
         }));
       }
@@ -105,9 +113,9 @@ export function ClienteModal({ cliente, onClose, onSuccess }) {
             logradouro: data.logradouro || prev.endereco.logradouro,
             bairro: data.bairro || prev.endereco.bairro,
             cep: cep,
-            cidade: data.cidade || data.localidade || prev.endereco.cidade,
-            estado: data.uf || prev.endereco.estado,
-            codigoCidade: data.ibge || prev.endereco.codigoCidade,
+            cidade: data.descricaoCidade || data.cidade || data.localidade || prev.endereco.cidade,
+            estado: data.uf || data.estado || prev.endereco.estado,
+            codigoCidade: data.codigoCidade || data.ibge || prev.endereco.codigoCidade,
           },
         }));
       }
@@ -144,6 +152,7 @@ export function ClienteModal({ cliente, onClose, onSuccess }) {
             complemento: form.endereco.complemento?.trim(),
             bairro: form.endereco.bairro?.trim(),
             cep: onlyDigits(form.endereco.cep),
+            descricaoCidade: form.endereco.cidade?.trim(),
             cidade: form.endereco.cidade?.trim(),
             estado: form.endereco.estado?.trim()?.toUpperCase(),
             codigoCidade: onlyDigits(form.endereco.codigoCidade),
@@ -340,6 +349,17 @@ export function ClienteModal({ cliente, onClose, onSuccess }) {
                     onChange={(e) => handleEnderecoChange('cidade', e.target.value)}
                     placeholder="Cidade"
                     className="w-full rounded-[8px] border border-[var(--card-border)] bg-[var(--card-bg)] px-2 py-1.5 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] font-medium text-[var(--text-muted)]">IBGE</label>
+                  <input
+                    type="text"
+                    value={form.endereco.codigoCidade}
+                    readOnly
+                    placeholder="Pelo CEP"
+                    title="Preenchido automaticamente pelo CEP"
+                    className="w-full rounded-[8px] border border-[var(--card-border)] bg-[var(--canvas)] px-2 py-1.5 text-sm text-[var(--text-muted)]"
                   />
                 </div>
               </div>
