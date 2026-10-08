@@ -43,6 +43,7 @@ import {
   DESTINATARIO_IE_OPTIONS,
   NFSE_SERVICO_CODIGO_MIN_LENGTH,
 } from '@/lib/fiscalEmit';
+import { catalogProdutoTitle } from '@/lib/catalogProdutoDisplay';
 import { catalogProdutoNeedsNfseReformaCompletion } from '@/lib/nfseCatalogProdutoMetadata';
 import { isCatalogProdutoUsableForNfeLike } from '@/lib/nfeCatalogProdutoMetadata';
 import { recalculateNfeItemsTax } from '@/lib/recalculateNfeItemsTax';
@@ -54,6 +55,7 @@ import {
   fetchFiscalCompany,
   fetchNfsePrestadorPrefill,
   lookupCep,
+  lookupCnae,
   lookupCnpj,
 } from '@/lib/fiscalApi';
 import {
@@ -1213,9 +1215,34 @@ function NfeDestinatarioForm({
 }
 
 function NfseServicoForm({ form, setForm, showProdutoList, setShowProdutoList, produtoSearch, setProdutoSearch, produtos, produtosLoading, onApplyProduto, loadProdutos }) {
+  const cnaeDescricaoAplicada = useRef('');
   const handleChange = (field, value) => {
     setForm((prev) => ({ ...prev, servico: { ...prev.servico, [field]: value } }));
   };
+
+  const cnaeDigits = String(form.servico?.cnae || '').replace(/\D/g, '').slice(0, 7);
+  useEffect(() => {
+    if (cnaeDigits.length !== 7) return undefined;
+    let cancelled = false;
+    lookupCnae(cnaeDigits)
+      .then((data) => {
+        const descricao = String(data?.descricao || '').trim();
+        if (cancelled || !descricao) return;
+        setForm((prev) => {
+          const atual = String(prev.servico?.descricaoServico || '').trim();
+          if (atual && atual !== cnaeDescricaoAplicada.current) return prev;
+          cnaeDescricaoAplicada.current = descricao;
+          return {
+            ...prev,
+            servico: { ...prev.servico, descricaoServico: descricao },
+          };
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [cnaeDigits, setForm]);
 
   const needsObra = requiresNfseObraForServicoCodigo(form.servico?.codigo);
   const obra = form.servico?.obra || getDefaultNfseObraForm();
@@ -1286,7 +1313,7 @@ function NfseServicoForm({ form, setForm, showProdutoList, setShowProdutoList, p
                       onClick={() => onApplyProduto(p)}
                       className="w-full truncate px-2 py-1 text-left text-xs hover:bg-[var(--card-bg)]"
                     >
-                      <span className="font-medium">{p.discriminacao || p.nome}</span>
+                      <span className="font-medium">{catalogProdutoTitle(p)}</span>
                       <span className="text-[var(--text-muted)]"> - {p.codigo}</span>
                     </button>
                   </li>
@@ -1302,12 +1329,25 @@ function NfseServicoForm({ form, setForm, showProdutoList, setShowProdutoList, p
           <Input label="Código do Serviço (LC 116)" value={form.servico.codigo} onChange={(v) => handleChange('codigo', v)} placeholder="171901" hint="Código sem pontos (mín. 6 dígitos)" />
           <Input label="CNAE" value={form.servico.cnae} onChange={(v) => handleChange('cnae', v.replace(/\D/g, ''))} placeholder="4530701" />
           <div className="sm:col-span-2">
-            <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">Discriminação do Serviço *</label>
+            <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">Descrição do serviço</label>
+            <input
+              type="text"
+              value={form.servico.descricaoServico || ''}
+              onChange={(e) => handleChange('descricaoServico', e.target.value)}
+              placeholder="Descrição do CNAE"
+              className="w-full rounded-[10px] border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-sm"
+            />
+            <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+              Descrição do CNAE. Não usa o texto do corpo da nota.
+            </p>
+          </div>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">Descrição no corpo da nota *</label>
             <textarea
               value={form.servico.discriminacao}
               onChange={(e) => handleChange('discriminacao', e.target.value)}
               rows={3}
-              placeholder="Descreva o serviço prestado..."
+              placeholder="Texto desta nota: evento, vencimento, dados bancários..."
               className="w-full rounded-[10px] border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-sm"
             />
           </div>
@@ -1565,7 +1605,7 @@ function ReviewStep({ documentType, nfseForm, nfeForm }) {
             </div>
             <div className="flex justify-between">
               <span className="text-[var(--text-muted)]">Serviço:</span>
-              <span className="font-medium text-[var(--text-primary)]">{nfseForm.servico.codigo} - {nfseForm.servico.discriminacao?.slice(0, 40)}...</span>
+              <span className="font-medium text-[var(--text-primary)]">{nfseForm.servico.codigo} - {(nfseForm.servico.descricaoServico || nfseForm.servico.discriminacao || '').slice(0, 40)}</span>
             </div>
             <div className="flex justify-between border-t border-[var(--card-border)] pt-2">
               <span className="text-[var(--text-muted)]">Valor:</span>

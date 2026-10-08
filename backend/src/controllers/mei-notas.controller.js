@@ -42,7 +42,7 @@ import {
   loadCertificate,
   decryptPassphrase
 } from '../services/mei-certificate-store.js';
-import { lookupCnpjCascade } from '../services/cnpj-lookup.service.js';
+import { lookupCnaeDescricao, lookupCnpjCascade } from '../services/cnpj-lookup.service.js';
 import { enderecoFromCepLookupNfse } from '../services/plugnotas/plugnotas-nfse-email-resolve.js';
 import { badRequest, unauthorized } from '../utils/errors.js';
 import { parseCatalogLimit } from '../utils/mei-catalog-query.js';
@@ -389,6 +389,23 @@ export const lookupCnpj = async (req, res, next) => {
     const cnpj = String(req.params?.cnpj || req.query?.cnpj || '').trim();
     const data = await lookupCnpjCascade(cnpj);
     return sendSuccess(res, data, 'Dados do CNPJ consultados');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+/** Descrição oficial do CNAE (7 dígitos) para o nome do serviço. */
+export const lookupCnae = async (req, res, next) => {
+  try {
+    const codigo = String(req.params?.cnae || '').replace(/\D/g, '').slice(0, 7);
+    if (codigo.length !== 7) {
+      return next(badRequest('CNAE deve ter 7 dígitos.'));
+    }
+    const descricao = await lookupCnaeDescricao(codigo);
+    if (!descricao) {
+      return next(badRequest('CNAE não encontrado.'));
+    }
+    return sendSuccess(res, { codigo, descricao }, 'CNAE consultado');
   } catch (error) {
     return next(error);
   }

@@ -141,9 +141,12 @@ const formatNfPreviewItensBlock = (preview = {}) => {
     });
     return [`• Serviços:`, ...lines].join('\n');
   }
-  const item = String(
-    preview.discriminacao || preview.produtoDescricao || preview.codigoServico || 'Item',
-  ).trim();
+  const servico = String(preview.descricaoServico || '').trim();
+  const corpo = String(preview.discriminacao || preview.produtoDescricao || '').trim();
+  if (servico && corpo && servico !== corpo) {
+    return `• Serviço: ${servico}\n• Corpo da nota: ${corpo}`;
+  }
+  const item = String(servico || corpo || preview.codigoServico || 'Item').trim();
   return `• Serviço: ${item}`;
 };
 
@@ -376,6 +379,16 @@ export const isVagueNfItemLabel = (value) => {
   return VAGUE_NF_ITEM_REGEX.some((re) => re.test(s));
 };
 
+/** Nome do serviço no catálogo. O texto do corpo da nota não entra aqui. */
+export const catalogNfseServicoLabel = (produto) => {
+  const meta = produto?.metadata_json && typeof produto.metadata_json === 'object' && !Array.isArray(produto.metadata_json)
+    ? produto.metadata_json
+    : {};
+  const nome = String(meta.nome || meta.cnaeDescricao || '').trim();
+  if (nome) return nome;
+  return String(produto?.discriminacao || '—').trim() || '—';
+};
+
 export const formatNfseCatalogChoiceMessage = (produtos = [], options = {}) => {
   const list = Array.isArray(produtos) ? produtos : [];
   if (!list.length) {
@@ -383,7 +396,7 @@ export const formatNfseCatalogChoiceMessage = (produtos = [], options = {}) => {
   }
   const intro = String(options.prefix || '').trim()
     || 'Qual serviço você quer na nota? Responda com o número ou o nome exato:';
-  const lines = list.map((p, i) => `${i + 1}. ${String(p.discriminacao || '—').trim()}`);
+  const lines = list.map((p, i) => `${i + 1}. ${catalogNfseServicoLabel(p)}`);
   return `${intro}\n${lines.join('\n')}`;
 };
 
@@ -399,7 +412,11 @@ export const formatNfeCatalogChoiceMessage = (produtos = []) => {
 export const formatNfCatalogAmbiguousMessage = (label, matches = [], documentType = 'NFSE') => {
   const tipo = documentType === 'NFE' ? 'produto' : 'serviço';
   const list = Array.isArray(matches) ? matches : [];
-  const lines = list.map((p, i) => `${i + 1}. ${String(p.discriminacao || '—').trim()}`);
+  const lines = list.map((p, i) => `${i + 1}. ${
+    documentType === 'NFE'
+      ? (String(p.discriminacao || '—').trim() || '—')
+      : catalogNfseServicoLabel(p)
+  }`);
   return `Encontrei vários ${tipo}s parecidos com "${label}". Qual é?\n${lines.join('\n')}`;
 };
 

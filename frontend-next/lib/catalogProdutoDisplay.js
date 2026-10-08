@@ -1,18 +1,24 @@
-/**
- * Rótulos de listagem do catálogo fiscal (API usa `discriminacao`, não `nome`).
- * @param {Record<string, unknown>|null|undefined} item
- */
-export function catalogProdutoTitle(item) {
-  if (!item || typeof item !== 'object') return '—';
+/** Descrição do serviço (CNAE / nome). Não usa o texto do corpo da nota.
+export function catalogProdutoServicoDescricao(item) {
+  if (!item || typeof item !== 'object') return '';
   const meta = item.metadata_json && typeof item.metadata_json === 'object'
     ? item.metadata_json
     : {};
+  return [
+    meta.nome,
+    meta.cnaeDescricao,
+    item.nome,
+    item.titulo,
+  ].map((v) => String(v ?? '').trim()).find(Boolean) || '';
+}
+
+export function catalogProdutoTitle(item) {
+  if (!item || typeof item !== 'object') return '—';
+  const servico = catalogProdutoServicoDescricao(item);
+  if (servico) return servico;
   const text = [
     item.discriminacao,
     item.descricao,
-    item.nome,
-    item.titulo,
-    meta.cnaeDescricao,
   ].map((v) => String(v ?? '').trim()).find(Boolean);
   if (text) return text;
   const cnae = String(item.cnae ?? '').replace(/\D/g, '');

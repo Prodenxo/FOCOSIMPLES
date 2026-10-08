@@ -435,6 +435,12 @@ export async function lookupCnpj(cnpj) {
   return apiClient.get(`/mei-notas/cnpj-lookup/${encodeURIComponent(String(cnpj || '').replace(/\D/g, ''))}`);
 }
 
+/** Descrição oficial do CNAE (7 dígitos). */
+export async function lookupCnae(cnae) {
+  const clean = String(cnae || '').replace(/\D/g, '').slice(0, 7);
+  return apiClient.get(`/mei-notas/cnae-lookup/${clean}`);
+}
+
 /** Lookup de CEP para preenchimento de endereço fiscal. */
 export async function lookupCep(cep) {
   const clean = String(cep || '').replace(/\D/g, '').slice(0, 8);

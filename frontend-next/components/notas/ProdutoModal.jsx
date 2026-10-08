@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
   Database,
@@ -14,6 +14,7 @@ import {
   atualizarCatalogoProduto,
   excluirCatalogoProduto,
   importCnaesProdutos,
+  lookupCnae,
 } from '@/lib/fiscalApi';
 import { formatValorSugeridoBR } from '@/lib/catalogProdutoDisplay';
 import { maskMoney, parseMoney } from '@/lib/fiscalEmit';
@@ -44,11 +45,15 @@ export function ProdutoModal({ produto, catalogKind = 'nfse', onClose, onSuccess
   const [error, setError] = useState(null);
 
   const initialNfseReforma = nfseCatalogProdutoFormFieldsFromMetadata(produto?.metadata_json);
+  const catalogMeta = produto?.metadata_json && typeof produto.metadata_json === 'object'
+    ? produto.metadata_json
+    : {};
+  const cnaeNomeAplicado = useRef('');
 
   const [form, setForm] = useState({
     codigo: produto?.codigo || '',
-    nome: produto?.nome || produto?.discriminacao || '',
-    discriminacao: produto?.discriminacao || produto?.nome || '',
+    nome: catalogMeta.nome || catalogMeta.cnaeDescricao || produto?.nome || '',
+    discriminacao: produto?.discriminacao || '',
     descricao: produto?.descricao || '',
     ncm: produto?.ncm || '',
     cnae: produto?.cnae || '',
@@ -61,6 +66,27 @@ export function ProdutoModal({ produto, catalogKind = 'nfse', onClose, onSuccess
   const handleChange = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
+
+  const cnaeDigits = String(form.cnae || '').replace(/\D/g, '').slice(0, 7);
+  useEffect(() => {
+    if (!isNfse || cnaeDigits.length !== 7) return undefined;
+    let cancelled = false;
+    lookupCnae(cnaeDigits)
+      .then((data) => {
+        const descricao = String(data?.descricao || '').trim();
+        if (cancelled || !descricao) return;
+        setForm((prev) => {
+          const atual = String(prev.nome || '').trim();
+          if (atual && atual !== cnaeNomeAplicado.current) return prev;
+          cnaeNomeAplicado.current = descricao;
+          return { ...prev, nome: descricao };
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [cnaeDigits, isNfse]);
 
   const handleSubmit = async () => {
     if (!form.codigo?.trim()) {
@@ -92,9 +118,19 @@ export function ProdutoModal({ produto, catalogKind = 'nfse', onClose, onSuccess
           form.nfseReforma || emptyNfseCatalogProdutoFormFields(),
         )
         : {};
+      if (isNfse) {
+        const nomeServico = form.nome?.trim() || '';
+        if (nomeServico) {
+          metadata_json.nome = nomeServico;
+          metadata_json.cnaeDescricao = nomeServico;
+        } else {
+          delete metadata_json.nome;
+          delete metadata_json.cnaeDescricao;
+        }
+      }
       const baseFields = {
         codigo: form.codigo.trim(),
-        nome: form.nome?.trim() || form.discriminacao?.trim(),
+        nome: form.nome?.trim() || undefined,
         discriminacao: form.discriminacao?.trim() || form.nome?.trim(),
         descricao: form.descricao?.trim() || form.discriminacao?.trim() || form.nome?.trim(),
         ...(isNfse
@@ -218,28 +254,37 @@ export function ProdutoModal({ produto, catalogKind = 'nfse', onClose, onSuccess
               />
             </div>
 
-            {/* Nome / Discriminação */}
             <div>
-              <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">Nome / Descrição *</label>
+              <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">
+                {isNfse ? 'Descrição do serviço *' : 'Nome / Descrição *'}
+              </label>
               <input
                 type="text"
-                value={form.nome || form.discriminacao}
+                value={form.nome}
                 onChange={(e) => handleChange('nome', e.target.value)}
-                placeholder={isNfse ? 'Nome do serviço' : 'Nome do produto'}
+                placeholder={isNfse ? 'Descrição do CNAE' : 'Nome do produto'}
                 className="w-full rounded-[10px] border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-sm"
               />
+              {isNfse ? (
+                <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                  Vem da descrição do CNAE. Não usa o texto do corpo da nota.
+                </p>
+              ) : null}
             </div>
 
             {isNfse ? (
               <div>
-                <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">Discriminação (detalhamento)</label>
+                <label className="mb-1 block text-xs font-medium text-[var(--text-muted)]">Descrição no corpo da nota</label>
                 <textarea
                   value={form.discriminacao}
                   onChange={(e) => handleChange('discriminacao', e.target.value)}
-                  placeholder="Descrição detalhada do serviço..."
-                  rows={2}
+                  placeholder="Texto desta nota: evento, vencimento, dados bancários..."
+                  rows={3}
                   className="w-full rounded-[10px] border border-[var(--card-border)] bg-[var(--card-bg)] px-3 py-2 text-sm"
                 />
+                <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                  Só entra na nota. Não altera a descrição do serviço.
+                </p>
               </div>
             ) : null}
 

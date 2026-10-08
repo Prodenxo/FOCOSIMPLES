@@ -128,6 +128,24 @@ export const attachNormalizedCnaes = (data) => {
 };
 
 
+/** Descrição oficial da subclasse CNAE (7 dígitos) na tabela do IBGE. */
+export const lookupCnaeDescricao = async (codigo) => {
+  const digits = normalizeDoc(codigo).slice(0, 7);
+  if (digits.length !== 7) return null;
+  try {
+    const response = await fetch(
+      `https://servicodados.ibge.gov.br/api/v2/cnae/subclasses/${digits}`,
+      { method: 'GET', headers: BRASILAPI_HEADERS },
+    );
+    if (!response.ok) return null;
+    const data = await response.json();
+    const descricao = String(data?.descricao || '').trim();
+    return descricao || null;
+  } catch {
+    return null;
+  }
+};
+
 export const lookupCepBrasilApi = async (cepInput) => {
   const cep = normalizeDoc(cepInput).slice(0, 8);
   if (cep.length !== 8) return null;

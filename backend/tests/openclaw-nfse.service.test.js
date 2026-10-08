@@ -217,6 +217,19 @@ test('formatOpenclawNfseProdutosMessage — lista formatada', () => {
   assert.match(msg, /CNAE 4330404/);
 });
 
+test('formatOpenclawNfseProdutosMessage — descrição do serviço não usa o corpo da nota', () => {
+  const msg = formatOpenclawNfseProdutosMessage([
+    {
+      discriminacao: 'DADOS BANCÁRIOS Banco CORA',
+      codigo: '370101003',
+      cnae: '9001901',
+      metadata_json: { nome: 'PRODUÇÃO TEATRAL' },
+    },
+  ]);
+  assert.match(msg, /PRODUÇÃO TEATRAL/);
+  assert.doesNotMatch(msg, /DADOS BANCÁRIOS/);
+});
+
 test('pickClienteCatalogoByIndexResult — número escolhido na lista de homónimos', () => {
   const matches = [
     { id: 'c1', nome: 'CF Carneiro', documento: '60511506000197' },

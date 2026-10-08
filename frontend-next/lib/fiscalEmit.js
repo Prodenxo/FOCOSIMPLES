@@ -152,6 +152,7 @@ export function getDefaultNfseForm() {
     servico: {
       codigo: '',
       cnae: '',
+      descricaoServico: '',
       discriminacao: '',
       aliquota: '',
       valorServico: '',
@@ -514,7 +515,8 @@ export function applyProdutoToNfseServico(produto) {
   const fromCatalog = applyCatalogProdutoToNfseServico(produto);
   return {
     ...fromCatalog,
-    discriminacao: String(fromCatalog.discriminacao || produto.nome || '').trim(),
+    descricaoServico: String(fromCatalog.descricaoServico || '').trim(),
+    discriminacao: String(fromCatalog.discriminacao || '').trim(),
     aliquota: fromCatalog.aliquota
       ? String(fromCatalog.aliquota).replace('.', ',')
       : '',

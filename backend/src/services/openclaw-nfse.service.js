@@ -38,6 +38,7 @@ import {
 } from './plugnotas/plugnotas-nfse-email-resolve.js';
 import {
   isVagueNfItemLabel,
+  catalogNfseServicoLabel,
   formatNfseCatalogChoiceMessage,
   formatNfCatalogAmbiguousMessage,
   formatNfseClienteAmbiguousMessage,
@@ -388,6 +389,7 @@ const resolveServicoDefaults = async (userId, payload, emitente) => {
     payload?.cTribMun,
   );
   let aliquotaRaw = payload?.aliquota ?? payload?.aliquotaIss;
+  let descricaoServico = '';
 
   const catalogNfse = await listarCatalogoProdutos(userId, { limit: 50, documentType: 'NFSE' });
 
@@ -414,11 +416,16 @@ const resolveServicoDefaults = async (userId, payload, emitente) => {
     codigoNbs = merged.codigoNbs || codigoNbs;
     codigoTributacaoRaw = merged.codigoTributacao || codigoTributacaoRaw;
     aliquotaRaw = merged.aliquotaRaw ?? aliquotaRaw;
-    if (produto?.discriminacao) {
-      discriminacao = String(produto.discriminacao).trim();
-    } else if (merged.discriminacao) {
+    // Corpo da nota escrito pelo usuário permanece. A discriminação do
+    // catálogo só preenche quando ele não mandou texto nesta nota.
+    if (!discriminacao && merged.discriminacao) {
       discriminacao = merged.discriminacao;
     }
+    const meta = produto?.metadata_json && typeof produto.metadata_json === 'object' && !Array.isArray(produto.metadata_json)
+      ? produto.metadata_json
+      : {};
+    const nomeServico = String(meta.nome || meta.cnaeDescricao || '').trim();
+    if (nomeServico) descricaoServico = nomeServico;
   };
 
   const produtoId = firstNonEmpty(payload?.produtoId, payload?.servicoId, payload?.catalogoProdutoId);
@@ -606,6 +613,7 @@ const resolveServicoDefaults = async (userId, payload, emitente) => {
   const servico = {
     codigo: codigoFinal,
     discriminacao,
+    ...(descricaoServico ? { descricaoServico } : {}),
     cnae: cnaeNorm,
     ...(codigoTributacao ? { codigoTributacao } : {}),
     ...(codigoNbsResolved ? { codigoNbs: codigoNbsResolved } : {}),
@@ -1388,6 +1396,7 @@ export const previewOpenclawNfseEmit = async (userId, payload = {}) => {
     tomadorCpfCnpj: input.tomadorCpfCnpj,
     tomadorRazaoSocial: input.tomadorRazaoSocial,
     valorServico: input.servico.valorServico,
+    descricaoServico: input.servico.descricaoServico,
     discriminacao: input.servico.discriminacao,
     codigoServico: input.servico.codigo,
     cnae: input.servico.cnae,
@@ -1407,6 +1416,7 @@ export const emitOpenclawNfse = async (userId, payload = {}) => {
       tomadorCpfCnpj: input.tomadorCpfCnpj,
       tomadorRazaoSocial: input.tomadorRazaoSocial,
       valorServico: input.servico.valorServico,
+      descricaoServico: input.servico.descricaoServico,
       discriminacao: input.servico.discriminacao,
       codigoServico: input.servico.codigo,
       cnae: input.servico.cnae,
@@ -1429,6 +1439,7 @@ export const emitOpenclawNfse = async (userId, payload = {}) => {
     tomadorRazaoSocial: input.tomadorRazaoSocial,
     tomadorCpfCnpj: input.tomadorCpfCnpj,
     valorServico: input.servico.valorServico,
+    descricaoServico: input.servico.descricaoServico,
     discriminacao: input.servico.discriminacao,
     codigoServico: input.servico.codigo,
   };
@@ -1548,7 +1559,7 @@ export const formatOpenclawNfseProdutosMessage = (produtos) => {
     return 'Nenhum serviço/produto no catálogo NFSe. Cadastre na app (MEI → Notas) ou use register_nfse_produto.';
   }
   const lines = list.map((p, i) => {
-    const nome = String(p.discriminacao || '—').trim();
+    const nome = catalogNfseServicoLabel(p);
     const codigo = p.codigo ? `cód. ${p.codigo}` : 'sem código';
     const cnae = p.cnae ? `CNAE ${p.cnae}` : 'sem CNAE';
     const ali = p.aliquota != null ? `ISS ${p.aliquota}%` : '';

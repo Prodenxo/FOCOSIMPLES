@@ -116,9 +116,13 @@ export function catalogProdutoNeedsNfseReformaCompletion(produto) {
 
 export function applyCatalogProdutoToNfseServico(produto) {
   const reforma = nfseCatalogProdutoFormFieldsFromMetadata(produto?.metadata_json);
+  const meta = produto?.metadata_json && typeof produto.metadata_json === 'object'
+    ? produto.metadata_json
+    : {};
   return {
     codigo: String(produto?.codigo ?? '').trim(),
     cnae: produto?.cnae ?? '',
+    descricaoServico: String(meta.nome || meta.cnaeDescricao || '').trim(),
     discriminacao: produto?.discriminacao ?? '',
     aliquota: produto?.aliquota != null ? String(produto.aliquota) : '',
     valorServico: produto?.valor_sugerido != null ? String(produto.valor_sugerido) : '',

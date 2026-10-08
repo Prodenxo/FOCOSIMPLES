@@ -165,3 +165,26 @@ test('formatNfseCatalogChoiceMessage lista catálogo numerado', () => {
   assert.match(msg, /2\. Manutenção/);
   assert.match(msg, /número ou o nome exato/i);
 });
+
+test('formatNfseCatalogChoiceMessage usa a descrição do serviço e não o corpo da nota', () => {
+  const msg = formatNfseCatalogChoiceMessage([
+    {
+      discriminacao: 'DADOS BANCÁRIOS Banco CORA',
+      metadata_json: { nome: 'PRODUÇÃO TEATRAL', cnaeDescricao: 'PRODUÇÃO TEATRAL' },
+    },
+  ]);
+  assert.match(msg, /PRODUÇÃO TEATRAL/);
+  assert.doesNotMatch(msg, /DADOS BANCÁRIOS/);
+});
+
+test('buildNfConfirmRequestUserMessage separa descrição do serviço e corpo da nota', () => {
+  const msg = buildNfConfirmRequestUserMessage({
+    documentType: 'NFSE',
+    tomadorRazaoSocial: 'Cliente',
+    descricaoServico: 'PRODUÇÃO TEATRAL',
+    discriminacao: 'DADOS BANCÁRIOS Banco CORA',
+    valorServico: 100,
+  });
+  assert.match(msg, /Serviço: PRODUÇÃO TEATRAL/);
+  assert.match(msg, /Corpo da nota: DADOS BANCÁRIOS Banco CORA/);
+});
