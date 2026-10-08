@@ -1,4 +1,4 @@
-/** Descrição do serviço (CNAE / nome). Não usa o texto do corpo da nota.
+/** Descrição do serviço (CNAE / nome). Não usa o texto do corpo da nota. */
 export function catalogProdutoServicoDescricao(item) {
   if (!item || typeof item !== 'object') return '';
   const meta = item.metadata_json && typeof item.metadata_json === 'object'
