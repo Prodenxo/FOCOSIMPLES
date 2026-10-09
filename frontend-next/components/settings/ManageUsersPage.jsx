@@ -676,7 +676,7 @@ export function ManageUsersPage() {
                           disabled={acting === u.id}
                         />
                       ) : null}
-                      {actions.canDelete && isSuperadmin ? (
+                      {actions.canDelete ? (
                         <IconBtn label="Excluir" onClick={() => setConfirmDeleteUser(u)} icon={Trash2} destructive />
                       ) : null}
                     </div>
